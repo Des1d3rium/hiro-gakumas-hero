@@ -193,7 +193,7 @@
 
 ## 8. 分工与验收
 
-| 会话 | 任务 | 交付 | 验收（三局 trace 离线回放：`lead35-qualify-20261031-094425*`、`lead35-qualify2-20261031-115639*`、`lead35-qualify3-20261031-142043*`） |
+| 会话 | 任务 | 交付 | 验收（三局实机 trace 离线回放） |
 |---|---|---|---|
 | 总控 | 契约 1.2（Event / Prediction / Check、GameState / Step 新增字段 + schema + contracts.md）；`apply_event` / `check` / reduce 扩展；`hif.py` 由动作发事件；主动查看触发；调试模式开关、trace 与一致率报告；离线回放脚本 `python -m hiro.loop.replay --events` | 代码 + 测试 | 回放三局：每个 Step 都有 events / checks；`read_error` 能抓出 3771（局2）、1403 / 2231（局3）、Da=73（局2 d12） |
 | 决策 | 预测器 `hiro.state.events`：§3 每个事件的 `predict(state, event)`，依据主数据、`community_rules`、模拟器；初始牌组（偶像初始卡组 + 固有卡 + 支援卡带来的卡）；考试结算星星 / 属性区间 | 代码 + 单测（每个事件至少 1 个） | 三局选拔① 之前的 LESSON / STUDY / OUTING / GIFT 预测与实际属性、体力、P 点一致率 ≥ 90%（区间内即算一致）；初始牌组与开局确认页一致 |
