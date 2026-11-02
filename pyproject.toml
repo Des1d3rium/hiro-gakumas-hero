@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "digital-hiro-framework"
+name = "hiro-gakumas-hero"
 version = "0.1.0"
 description = "让大模型稳定玩卡牌养成游戏的工程框架：数据契约、可重放主循环、状态记账与互验、模型无关的 LLM 适配、逐回合复盘页与标注系统"
 requires-python = ">=3.10"
