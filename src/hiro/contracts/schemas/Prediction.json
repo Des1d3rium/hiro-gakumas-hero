@@ -1,0 +1,82 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Prediction",
+ "type": "object",
+ "properties": {
+  "seq": {
+   "type": "integer"
+  },
+  "event_seq": {
+   "type": "integer"
+  },
+  "fields": {
+   "type": "object",
+   "additionalProperties": {
+    "title": "Expect",
+    "type": "object",
+    "properties": {
+     "value": {},
+     "min": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "max": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "exact": {
+      "type": "boolean"
+     },
+     "tolerance": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "value",
+     "min",
+     "max",
+     "exact",
+     "tolerance",
+     "note"
+    ],
+    "additionalProperties": false,
+    "description": "一个字段的期望：精确值（exact=True）或区间 [min, max]；牌组等多重集用 value + exact。"
+   }
+  },
+  "due": {
+   "type": "string"
+  },
+  "expires_after": {
+   "type": [
+    "integer",
+    "null"
+   ]
+  },
+  "version": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "seq",
+  "event_seq",
+  "fields",
+  "due",
+  "expires_after",
+  "version"
+ ],
+ "additionalProperties": false,
+ "description": "Prediction(seq: int, event_seq: int, fields: dict[str, hiro.contracts.events.Expect] = <factory>, due: str = 'any', expires_after: int | None = None, version: str = '1.2')"
+}

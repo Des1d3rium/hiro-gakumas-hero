@@ -1,0 +1,124 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "ExecutionResult",
+ "type": "object",
+ "properties": {
+  "action": {
+   "title": "Action",
+   "type": "object",
+   "properties": {
+    "kind": {
+     "type": "string",
+     "enum": [
+      "ProduceNext",
+      "ActivateEffect",
+      "ExcludeCard",
+      "Reroll",
+      "ShopBuy",
+      "ShopUpgradeCard",
+      "ShopEnd",
+      "EventSelect",
+      "PresentReceive",
+      "IntervalBuy",
+      "IntervalUpgradeCard",
+      "IntervalChangeCard",
+      "IntervalEnd",
+      "CustomizeCard",
+      "CustomizeEnd",
+      "SelectFormation",
+      "ChangeCard",
+      "RemoveCard",
+      "EnhanceCard",
+      "Dialog",
+      "SelectQualifyMemory",
+      "DiscardDrink",
+      "PlayCard",
+      "UseDrink",
+      "Skip",
+      "Continue",
+      "Wait",
+      "Recover",
+      "Noop"
+     ]
+    },
+    "args": {
+     "type": "object",
+     "additionalProperties": {}
+    },
+    "version": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "kind",
+    "args",
+    "version"
+   ],
+   "additionalProperties": false,
+   "description": "一个要执行的动作。args 的键按 kind 固定（见各工厂方法），全部是 JSON 标量或列表。"
+  },
+  "ok": {
+   "type": "boolean"
+  },
+  "taps": {
+   "type": "array",
+   "items": {
+    "type": "array",
+    "items": {
+     "type": "integer"
+    }
+   }
+  },
+  "waited_s": {
+   "type": "number"
+  },
+  "page_before": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "page_after": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "expected_transition": {
+   "type": [
+    "boolean",
+    "null"
+   ]
+  },
+  "retries": {
+   "type": "integer"
+  },
+  "error": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "seconds": {
+   "type": "number"
+  },
+  "version": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "action",
+  "ok",
+  "taps",
+  "waited_s",
+  "page_before",
+  "page_after",
+  "expected_transition",
+  "retries",
+  "error",
+  "seconds",
+  "version"
+ ],
+ "additionalProperties": false,
+ "description": "一次动作执行的结果。"
+}

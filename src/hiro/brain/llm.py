@@ -1,0 +1,271 @@
+"""LLM 适配层：决策层只依赖 LLMAdapter 协议（ask_json），换模型只改适配器 / 配置。
+
+- ClaudeCLI：本机 Claude Code CLI（claude -p），走用户订阅额度，无需 API key。
+- OpenAICompatible：任何 OpenAI Chat Completions 兼容接口（OpenAI / DeepSeek / OpenRouter / Ollama / vLLM…），只用标准库 urllib。
+- MockLLM：测试与离线回放用，按序返回预设回复。
+
+配置：from_spec("claude:sonnet") / from_spec("openai:gpt-4o-mini")；环境变量 HIRO_LLM 为默认 spec，
+OpenAI 兼容端点读 OPENAI_BASE_URL（默认 https://api.openai.com/v1）与 OPENAI_API_KEY。
+提示词版本：prompts/*.md 首行 <!-- version: x.y -->，由 prompt_version() 读出并写进每次调用记录。
+"""
+
+import json
+import logging
+import os
+import re
+import subprocess
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Protocol, runtime_checkable
+
+PROMPTS = Path(__file__).parent / "prompts"
+REPO = Path(__file__).resolve().parents[3]
+_VERSION = re.compile(r"<!--\s*version:\s*([\w.\-]+)\s*-->")
+
+logger = logging.getLogger(__name__)
+
+
+def load_prompt(*names: str) -> str:
+    return "\n\n".join((PROMPTS / n).read_text(encoding="utf-8") for n in names)
+
+
+def prompt_version(*names: str) -> str:
+    """各提示词文件首行 <!-- version: x --> 拼成 "exam@1.0+idols/campus_hiro@1.2"；没标版本的记 "?"。"""
+    parts = []
+    for n in names:
+        head = (PROMPTS / n).read_text(encoding="utf-8").split("\n", 1)[0]
+        m = _VERSION.search(head)
+        parts.append(f"{n.removesuffix('.md')}@{m.group(1) if m else '?'}")
+    return "+".join(parts)
+
+
+@dataclass
+class LLMResult:
+    data: dict | None
+    raw: str
+    seconds: float
+    error: str | None = None
+    adapter: str = "unknown"
+    model: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+    def record(self, **extra) -> dict:
+        """写进 BattleBrain.calls / PickDecision.calls 的一条记录（hiro.contracts.llm_trace_from_call 能读）。"""
+        return {
+            "seconds": round(self.seconds, 2), "error": self.error, "reply": self.data or self.raw[:500],
+            "adapter": self.adapter, "model": self.model, "input_tokens": self.input_tokens, "output_tokens": self.output_tokens,
+            **extra,
+        }  # fmt: skip
+
+
+@runtime_checkable
+class LLMAdapter(Protocol):
+    name: str
+    model: str | None
+
+    def ask_json(self, system: str, user: str) -> LLMResult: ...
+
+
+class ClaudeCLI:
+    """本机 Claude Code CLI。--setting-sources project 不加载用户级 CLAUDE.md，--tools "" 关掉工具，单次约 4–7 秒。"""
+
+    name = "claude-cli"
+
+    def __init__(self, model: str = "sonnet", timeout: float = 60, cwd: Path = REPO, retries: int = 1):
+        self.model = model
+        self.timeout = timeout
+        self.cwd = cwd
+        self.retries = retries  # returncode≠0 时的重试次数（超时不重试，避免一步卡两分钟）
+
+    USAGE_LIMIT_WAIT = 300.0  # 用量上限时每次等待的秒数（游戏没有计时，停在原地等是安全的）
+    USAGE_LIMIT_MAX_WAIT = 6 * 3600.0  # 最长等这么久，之后才退回规则兜底
+    usage_limit_hits = 0  # 本进程内检测到用量上限的次数（报告单独统计）
+
+    @staticmethod
+    def _usage_limited(stdout: str) -> str | None:
+        """claude -p 因账号用量上限失败时：stdout 是 duration_api_ms=0、无 token 的结果 JSON（result 里可能有 limit 字样）。"""
+        out = None
+        for line in (stdout or "").strip().splitlines():
+            try:
+                cand = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(cand, dict):
+                out = cand
+        if out is None:
+            return None
+        text = str(out.get("result") or "")
+        if out.get("duration_api_ms") == 0 or "limit" in text.lower() or "上限" in text:
+            return text[:200] or "duration_api_ms=0（未发出请求）"
+        return None
+
+    def ask_json(self, system: str, user: str) -> LLMResult:
+        """用量上限时不静默兜底：打 ERROR、每 5 分钟重试，直到恢复（最长 6 小时）。用户 2026-10-31 要求。"""
+        waited = 0.0
+        while True:
+            res = self._ask_once(system, user)
+            reason = self._usage_limited(res.raw) if res.error and res.error.startswith("exit") else None
+            if reason is None:
+                return res
+            ClaudeCLI.usage_limit_hits += 1
+            res.error = f"usage_limit: {reason}"
+            if waited >= self.USAGE_LIMIT_MAX_WAIT:
+                logger.error("Claude 用量上限：已等待 %.0f 分钟仍未恢复，本步退回规则兜底", waited / 60)
+                return res
+            logger.error("Claude 用量上限（%s）：暂停 %.0f 分钟后重试，已等 %.0f 分钟。游戏停在原地等待。", reason, self.USAGE_LIMIT_WAIT / 60, waited / 60)
+            time.sleep(self.USAGE_LIMIT_WAIT)
+            waited += self.USAGE_LIMIT_WAIT
+
+    def _ask_once(self, system: str, user: str) -> LLMResult:
+        env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
+        cmd = [
+            "claude", "-p", user,
+            "--model", self.model,
+            "--system-prompt", system,
+            "--setting-sources", "project",
+            "--tools", "",
+            "--output-format", "json",
+        ]  # fmt: skip
+        t0 = time.monotonic()
+        # 实机 2026-10-31 12:36–12:39：连续 exit 1（stdout 是 output_tokens=0 的空结果），偶发故障重试一次即可
+        for attempt in range(1 + self.retries):
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=self.timeout, env=env, cwd=self.cwd)
+            except subprocess.TimeoutExpired:
+                return LLMResult(None, "", time.monotonic() - t0, "timeout", self.name, self.model)
+            if proc.returncode == 0:
+                break
+        dt = time.monotonic() - t0
+        if proc.returncode != 0:
+            stderr = (proc.stderr or "").strip()[:300]
+            # claude -p 的错误原因常在 stdout JSON 的 result 里（例如用量上限），stderr 为空；一并记下
+            result_text = ""
+            try:
+                out = json.loads((proc.stdout or "").strip().splitlines()[-1])
+                if isinstance(out, dict):
+                    result_text = str(out.get("result") or out.get("error") or "")[:300]
+                    if out.get("duration_api_ms") == 0:
+                        result_text = (result_text + "（未发出 API 请求：多半是账号用量上限或登录失效）").strip()
+            except (ValueError, IndexError):
+                pass
+            detail = "；".join(x for x in (result_text, stderr) if x)
+            error = f"exit {proc.returncode}（已重试 {self.retries} 次）" + (f": {detail}" if detail else "")
+            return LLMResult(None, proc.stdout + proc.stderr, dt, error, self.name, self.model)
+        try:
+            out = json.loads(proc.stdout)
+            text = out["result"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return LLMResult(None, proc.stdout, dt, "bad cli output", self.name, self.model)
+        usage = out.get("usage") or {}
+        data = extract_json(text)
+        return LLMResult(data, text, dt, None if data is not None else "no json in reply", self.name, self.model,
+                         usage.get("input_tokens"), usage.get("output_tokens"))  # fmt: skip
+
+
+class OpenAICompatible:
+    """OpenAI Chat Completions 兼容接口。要求 JSON 回复（response_format json_object，不支持的端点也靠 extract_json 兜底）。"""
+
+    name = "openai"
+
+    def __init__(self, model: str, *, base_url: str | None = None, api_key: str | None = None, timeout: float = 60,
+                 temperature: float = 0.2, json_mode: bool = True, extra_headers: dict | None = None):  # fmt: skip
+        self.model = model
+        self.base_url = (base_url or os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
+        self.api_key = api_key if api_key is not None else os.environ.get("OPENAI_API_KEY", "")
+        self.timeout = timeout
+        self.temperature = temperature
+        self.json_mode = json_mode
+        self.extra_headers = extra_headers or {}
+
+    def ask_json(self, system: str, user: str) -> LLMResult:
+        body = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "temperature": self.temperature,
+        }
+        if self.json_mode:
+            body["response_format"] = {"type": "json_object"}
+        req = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}", **self.extra_headers},
+            method="POST",
+        )
+        t0 = time.monotonic()
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")[:500]
+            return LLMResult(None, detail, time.monotonic() - t0, f"http {e.code}", self.name, self.model)
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            return LLMResult(None, "", time.monotonic() - t0, f"timeout/network: {e}", self.name, self.model)
+        except json.JSONDecodeError:
+            return LLMResult(None, "", time.monotonic() - t0, "bad http body", self.name, self.model)
+        dt = time.monotonic() - t0
+        try:
+            text = payload["choices"][0]["message"]["content"] or ""
+        except (KeyError, IndexError, TypeError):
+            return LLMResult(None, json.dumps(payload)[:500], dt, "bad completion", self.name, self.model)
+        usage = payload.get("usage") or {}
+        data = extract_json(text)
+        return LLMResult(data, text, dt, None if data is not None else "no json in reply", self.name, self.model,
+                         usage.get("prompt_tokens"), usage.get("completion_tokens"))  # fmt: skip
+
+
+@dataclass
+class MockLLM:
+    """按序返回预设回复（dict 或原始字符串）；用完后返回错误。记录收到的提示词便于断言。"""
+
+    replies: list = field(default_factory=list)
+    name: str = "mock"
+    model: str | None = "mock"
+    seconds: float = 0.01
+    calls: list[tuple[str, str]] = field(default_factory=list)
+
+    def ask_json(self, system: str, user: str) -> LLMResult:
+        self.calls.append((system, user))
+        if not self.replies:
+            return LLMResult(None, "", self.seconds, "mock exhausted", self.name, self.model)
+        r = self.replies.pop(0)
+        if isinstance(r, Exception):
+            return LLMResult(None, "", self.seconds, f"{type(r).__name__}: {r}", self.name, self.model)
+        text = r if isinstance(r, str) else json.dumps(r, ensure_ascii=False)
+        data = extract_json(text)
+        return LLMResult(data, text, self.seconds, None if data is not None else "no json in reply", self.name, self.model, 100, 50)
+
+
+def from_spec(spec: str | None = None, **kw) -> LLMAdapter:
+    """"claude[:model]" / "openai:<model>" / "mock" → 适配器。spec 为 None 时读 HIRO_LLM，缺省 claude:sonnet。"""
+    spec = spec or os.environ.get("HIRO_LLM") or "claude:sonnet"
+    kind, _, model = spec.partition(":")
+    if kind in ("claude", "claude-cli"):
+        return ClaudeCLI(model=model or "sonnet", **kw)
+    if kind in ("openai", "openai-compatible"):
+        if not model:
+            raise ValueError("openai 适配器需要模型名：openai:<model>")
+        return OpenAICompatible(model, **kw)
+    if kind == "mock":
+        return MockLLM(**kw)
+    raise ValueError(f"未知的 LLM spec：{spec!r}（支持 claude[:model] / openai:<model> / mock）")
+
+
+def extract_json(text: str) -> dict | None:
+    """取回复里第一个 JSON 对象（容忍 ```json 代码块）。"""
+    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
+    candidates = [m.group(1)] if m else []
+    start = text.find("{")
+    if start >= 0:
+        candidates.append(text[start : text.rfind("}") + 1])
+    for c in candidates:
+        try:
+            obj = json.loads(c)
+            if isinstance(obj, dict):
+                return obj
+        except json.JSONDecodeError:
+            continue
+    return None

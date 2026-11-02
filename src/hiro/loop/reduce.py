@@ -1,0 +1,155 @@
+"""reduce(state, obs) → 新 GameState。纯函数：同样的输入永远得到同样的输出，不读时钟、不读设备。
+
+规则（docs/state-machine.md §3）：
+1. 观测不完整不清空：字段为 None 保留旧值；瞬态页面（unknown / LOADING）不改 page，也不改字段。
+2. 来源优先级 save > screen > infer：低优先级写入不覆盖同一帧或更新帧里高优先级写的值；值不同且来源不同时记入 conflicts。
+3. 页面转移按 transitions.allowed 校验：合法转移立即接受；不合法的、或目标是弱证据页面（IDLE）的，要连续 DEBOUNCE 帧同一页面才接受（pending_page）。
+4. mode 由 page 推出。
+5. 进入考试（从非考试页面到 HIF_EXAM）清空 exam 与 exam_session；remaining_turns 变小视为新回合。
+"""
+
+import copy
+from typing import Any
+
+from hiro.contracts import GameState, Observation, PageState, Source
+from hiro.contracts.game_state import PRIORITY
+from hiro.loop.transitions import EXAM_PAGES, WEAK, allowed, is_transient, mode_of
+
+DEBOUNCE = 3  # 不合法跳变需要连续多少帧才接受
+STABLE = 2  # 连续多少帧算稳定
+
+# 页面局部字段：换页清空，不进 produce / exam
+PAGE_LOCAL = {"options", "complete", "advice", "candidates", "recommended", "cards", "problems"}
+# 哪个页面的字段写进哪个分区
+SECTION = {"ACTION_SELECT": "produce", "DECK_LIST": "produce", "HIF_EXAM": "exam", "SELECT_CARD": None, "SELECT_DRINK": None, "HIF_EXAM_RESULT": None}
+# 考试页面里整段替换（不逐项合并）的列表 / 字典字段
+REPLACE_WHOLE = {"hand", "drinks", "buffs", "pitems", "params", "growth_permil", "deck"}
+MAX_CONFLICTS = 20
+ANY_PAGE_PRODUCE = {"drinks", "drink_capacity"}  # 不在 produce 分区的页面（CONSULT 等）读到也写进 produce
+
+
+def reduce(state: GameState, obs: Observation) -> GameState:
+    s = copy.deepcopy(state)
+    s.seq = obs.seq
+    page = obs.page.name
+    if is_transient(page):
+        return s  # 转场 / 没认出：什么都不改
+    _reduce_page(s, obs)
+    if s.page.name != page:
+        return s  # 还在防抖，不采用这帧的字段
+    _reduce_fields(s, obs)
+    return s
+
+
+def _reduce_page(s: GameState, obs: Observation) -> None:
+    page, area, seq = obs.page.name, obs.page.area, obs.seq
+    if s.page.name == page:
+        s.page.frames += 1
+        s.page.stable = s.page.frames >= STABLE
+        s.pending_page = None
+        return
+    legal = allowed(s.page.name, page)
+    weak = page in WEAK and s.page.name != "unknown"  # 弱证据页面：合法但要连续多帧
+    if legal and not weak:
+        _enter(s, page, area, seq)
+        return
+    if s.pending_page is not None and s.pending_page.name == page:
+        s.pending_page.frames += 1
+        if s.pending_page.frames >= DEBOUNCE:
+            if not legal:
+                _note(s, f"seq {seq}: {s.page.name} → {page} 不在转移图里，连续 {s.pending_page.frames} 帧后接受")
+            _enter(s, page, area, s.pending_page.since_seq, frames=s.pending_page.frames)
+        return
+    s.pending_page = PageState(page, area, seq, False, 1)
+
+
+def _enter(s: GameState, page: str, area: str, seq: int, *, frames: int = 1) -> None:
+    prev = s.page.name
+    s.page = PageState(page, area, seq, frames >= STABLE, frames)
+    s.pending_page = None
+    s.page_fields = {}
+    s.mode = mode_of(page, s.mode)
+    if page in EXAM_PAGES and prev not in EXAM_PAGES and page == "HIF_EXAM":
+        s.exam = {}
+        s.exam_session.turn = 0
+        s.exam_session.last_remaining = None
+        for k in [k for k in s.sources if k.startswith("exam.")]:
+            del s.sources[k]
+    if page == "HIF_EXAM_RESULT":
+        s.exam_session.brief_permil = None  # 一场考试结束：说明页倍率作废（下一场没拍到说明页时不拿旧值比，数据确认 a41939a）
+    if s.mode == "produce" and s.produce is None:
+        s.produce = {}
+
+
+def _reduce_fields(s: GameState, obs: Observation) -> None:
+    section = SECTION.get(obs.page.name)
+    origin = {"save": "save", "screen": "screen", "dataset": "screen", "replay": "screen"}.get(obs.source, "screen")
+    for key, value in obs.fields.items():
+        if value is None:
+            continue
+        if key == "exam_label":
+            s.exam_session.label = str(value)
+            continue
+        if section is None and key in ANY_PAGE_PRODUCE and s.produce is not None:
+            section_key = "produce"  # 相談等页面底栏的持有饮料：也写进 produce（识别 3804ac8）
+            s.produce[key] = copy.deepcopy(value)
+            s.sources[f"produce.{key}"] = Source(origin, obs.seq)
+            s.page_fields[key] = value
+            continue
+        if key in PAGE_LOCAL or section is None:
+            s.page_fields[key] = value
+            continue
+        target: dict[str, Any] = getattr(s, section) if getattr(s, section) is not None else {}
+        setattr(s, section, target)
+        full = f"{section}.{key}"
+        old_src = s.sources.get(full)
+        if old_src is not None and PRIORITY[old_src.origin] > PRIORITY[origin] and old_src.seq >= obs.seq:
+            continue  # 高优先级的新值不被低优先级覆盖
+        old = target.get(key)
+        if old is not None and old != value and old_src is not None and old_src.origin != origin:
+            _note(s, f"seq {obs.seq}: {full} {old_src.origin}={old!r} vs {origin}={value!r}，采用 {origin}")
+        target[key] = copy.deepcopy(value)
+        s.sources[full] = Source(origin, obs.seq)
+    if section == "exam":
+        _observe_turn(s, obs)
+        _attr_permil(s, obs)
+    if obs.page.name == "HIF_EXAM_BRIEFING":
+        pct = obs.fields.get("multiplier_pct")
+        if isinstance(pct, dict) and all(pct.get(k) for k in ("Vo", "Da", "Vi")):
+            s.exam_session.brief_permil = {k: int(pct[k]) * 10 for k in ("Vo", "Da", "Vi")}
+
+
+def _attr_permil(s: GameState, obs: Observation) -> None:
+    """倍率按属性记（识别-01 提议）：同帧 attr 与 multiplier_permil 都有时更新该属性；multiplier_permil 始终取当前属性的值，
+    不让 None 保留上一个属性的倍率（否则 Vi 会配上 Da 的倍率）。"""
+    ex = s.exam if s.exam is not None else {}
+    table = ex.setdefault("attr_permil", dict(s.exam_session.brief_permil or {}))
+    attr, mp = obs.fields.get("attr"), obs.fields.get("multiplier_permil")
+    if attr and mp is not None:
+        table[attr] = mp
+    cur = ex.get("attr")
+    ex["multiplier_permil"] = table.get(cur) if cur else None
+    s.exam = ex
+
+
+def _observe_turn(s: GameState, obs: Observation) -> None:
+    remaining = obs.fields.get("remaining_turns")
+    if remaining is None:
+        return
+    last = s.exam_session.last_remaining
+    if last is None or remaining < last:
+        s.exam_session.turn += 1
+    s.exam_session.last_remaining = remaining
+
+
+def _note(s: GameState, text: str) -> None:
+    s.conflicts.append(text)
+    del s.conflicts[:-MAX_CONFLICTS]
+
+
+def reduce_all(obs_seq, state: GameState | None = None):
+    """依次 reduce，逐步 yield (obs, state)。"""
+    s = state or GameState()
+    for obs in obs_seq:
+        s = reduce(s, obs)
+        yield obs, s

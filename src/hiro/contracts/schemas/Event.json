@@ -1,0 +1,62 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Event",
+ "type": "object",
+ "properties": {
+  "seq": {
+   "type": "integer"
+  },
+  "kind": {
+   "type": "string"
+  },
+  "origin": {
+   "type": "string"
+  },
+  "args": {
+   "type": "object",
+   "additionalProperties": {}
+  },
+  "basis": {
+   "type": "string"
+  },
+  "confirmed": {
+   "type": [
+    "boolean",
+    "null"
+   ]
+  },
+  "ref": {
+   "type": "object",
+   "additionalProperties": {}
+  },
+  "confidence": {
+   "type": [
+    "number",
+    "null"
+   ]
+  },
+  "note": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "version": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "seq",
+  "kind",
+  "origin",
+  "args",
+  "basis",
+  "confirmed",
+  "ref",
+  "confidence",
+  "note",
+  "version"
+ ],
+ "additionalProperties": false,
+ "description": "Event(seq: int, kind: str, origin: str, args: dict[str, typing.Any] = <factory>, basis: str = 'observe_only', confirmed: bool | None = None, ref: dict[str, typing.Any] = <factory>, confidence: float | None = None, note: str | None = None, version: str = '1.2')"
+}

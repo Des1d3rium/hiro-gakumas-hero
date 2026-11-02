@@ -1,0 +1,256 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "GameState",
+ "type": "object",
+ "properties": {
+  "mode": {
+   "type": "string"
+  },
+  "page": {
+   "title": "PageState",
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string"
+    },
+    "area": {
+     "type": "string"
+    },
+    "since_seq": {
+     "type": "integer"
+    },
+    "stable": {
+     "type": "boolean"
+    },
+    "frames": {
+     "type": "integer"
+    }
+   },
+   "required": [
+    "name",
+    "area",
+    "since_seq",
+    "stable",
+    "frames"
+   ],
+   "additionalProperties": false,
+   "description": "PageState(name: str = 'unknown', area: str = 'unknown', since_seq: int = 0, stable: bool = False, frames: int = 0)"
+  },
+  "produce": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "additionalProperties": {}
+  },
+  "exam": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "additionalProperties": {}
+  },
+  "exam_session": {
+   "title": "ExamSession",
+   "type": "object",
+   "properties": {
+    "label": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "turn": {
+     "type": "integer"
+    },
+    "last_remaining": {
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "brief_permil": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "additionalProperties": {
+      "type": "integer"
+     }
+    }
+   },
+   "required": [
+    "label",
+    "turn",
+    "last_remaining",
+    "brief_permil"
+   ],
+   "additionalProperties": false,
+   "description": "考试内与 ExamMemory 对应、且需要落盘的少量字段；完整记忆仍在 hiro.brain.state.ExamMemory。"
+  },
+  "page_fields": {
+   "type": "object",
+   "additionalProperties": {}
+  },
+  "sources": {
+   "type": "object",
+   "additionalProperties": {
+    "title": "Source",
+    "type": "object",
+    "properties": {
+     "origin": {
+      "type": "string"
+     },
+     "seq": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "origin",
+     "seq"
+    ],
+    "additionalProperties": false,
+    "description": "Source(origin: str, seq: int)"
+   }
+  },
+  "seq": {
+   "type": "integer"
+  },
+  "pending_page": {
+   "title": "PageState",
+   "type": [
+    "object",
+    "null"
+   ],
+   "properties": {
+    "name": {
+     "type": "string"
+    },
+    "area": {
+     "type": "string"
+    },
+    "since_seq": {
+     "type": "integer"
+    },
+    "stable": {
+     "type": "boolean"
+    },
+    "frames": {
+     "type": "integer"
+    }
+   },
+   "required": [
+    "name",
+    "area",
+    "since_seq",
+    "stable",
+    "frames"
+   ],
+   "additionalProperties": false,
+   "description": "PageState(name: str = 'unknown', area: str = 'unknown', since_seq: int = 0, stable: bool = False, frames: int = 0)"
+  },
+  "conflicts": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "field_status": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "string"
+   }
+  },
+  "pending_review": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "ledger": {
+   "type": "array",
+   "items": {
+    "title": "Event",
+    "type": "object",
+    "properties": {
+     "seq": {
+      "type": "integer"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "origin": {
+      "type": "string"
+     },
+     "args": {
+      "type": "object",
+      "additionalProperties": {}
+     },
+     "basis": {
+      "type": "string"
+     },
+     "confirmed": {
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "ref": {
+      "type": "object",
+      "additionalProperties": {}
+     },
+     "confidence": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "version": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "seq",
+     "kind",
+     "origin",
+     "args",
+     "basis",
+     "confirmed",
+     "ref",
+     "confidence",
+     "note",
+     "version"
+    ],
+    "additionalProperties": false,
+    "description": "Event(seq: int, kind: str, origin: str, args: dict[str, typing.Any] = <factory>, basis: str = 'observe_only', confirmed: bool | None = None, ref: dict[str, typing.Any] = <factory>, confidence: float | None = None, note: str | None = None, version: str = '1.2')"
+   }
+  },
+  "version": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "mode",
+  "page",
+  "produce",
+  "exam",
+  "exam_session",
+  "page_fields",
+  "sources",
+  "seq",
+  "pending_page",
+  "conflicts",
+  "field_status",
+  "pending_review",
+  "ledger",
+  "version"
+ ],
+ "additionalProperties": false,
+ "description": "全局状态。"
+}

@@ -1,0 +1,270 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Decision",
+ "type": "object",
+ "properties": {
+  "action": {
+   "title": "Action",
+   "type": "object",
+   "properties": {
+    "kind": {
+     "type": "string",
+     "enum": [
+      "ProduceNext",
+      "ActivateEffect",
+      "ExcludeCard",
+      "Reroll",
+      "ShopBuy",
+      "ShopUpgradeCard",
+      "ShopEnd",
+      "EventSelect",
+      "PresentReceive",
+      "IntervalBuy",
+      "IntervalUpgradeCard",
+      "IntervalChangeCard",
+      "IntervalEnd",
+      "CustomizeCard",
+      "CustomizeEnd",
+      "SelectFormation",
+      "ChangeCard",
+      "RemoveCard",
+      "EnhanceCard",
+      "Dialog",
+      "SelectQualifyMemory",
+      "DiscardDrink",
+      "PlayCard",
+      "UseDrink",
+      "Skip",
+      "Continue",
+      "Wait",
+      "Recover",
+      "Noop"
+     ]
+    },
+    "args": {
+     "type": "object",
+     "additionalProperties": {}
+    },
+    "version": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "kind",
+    "args",
+    "version"
+   ],
+   "additionalProperties": false,
+   "description": "一个要执行的动作。args 的键按 kind 固定（见各工厂方法），全部是 JSON 标量或列表。"
+  },
+  "reason": {
+   "type": "string"
+  },
+  "source": {
+   "type": "string"
+  },
+  "confidence": {
+   "type": [
+    "number",
+    "null"
+   ]
+  },
+  "candidates": {
+   "type": "array",
+   "items": {
+    "title": "Candidate",
+    "type": "object",
+    "properties": {
+     "action": {
+      "title": "Action",
+      "type": "object",
+      "properties": {
+       "kind": {
+        "type": "string",
+        "enum": [
+         "ProduceNext",
+         "ActivateEffect",
+         "ExcludeCard",
+         "Reroll",
+         "ShopBuy",
+         "ShopUpgradeCard",
+         "ShopEnd",
+         "EventSelect",
+         "PresentReceive",
+         "IntervalBuy",
+         "IntervalUpgradeCard",
+         "IntervalChangeCard",
+         "IntervalEnd",
+         "CustomizeCard",
+         "CustomizeEnd",
+         "SelectFormation",
+         "ChangeCard",
+         "RemoveCard",
+         "EnhanceCard",
+         "Dialog",
+         "SelectQualifyMemory",
+         "DiscardDrink",
+         "PlayCard",
+         "UseDrink",
+         "Skip",
+         "Continue",
+         "Wait",
+         "Recover",
+         "Noop"
+        ]
+       },
+       "args": {
+        "type": "object",
+        "additionalProperties": {}
+       },
+       "version": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "args",
+       "version"
+      ],
+      "additionalProperties": false,
+      "description": "一个要执行的动作。args 的键按 kind 固定（见各工厂方法），全部是 JSON 标量或列表。"
+     },
+     "preview": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "additionalProperties": {}
+     },
+     "expected": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "action",
+     "preview",
+     "expected",
+     "note"
+    ],
+    "additionalProperties": false,
+    "description": "Candidate(action: hiro.contracts.action.Action, preview: dict[str, typing.Any] | None = None, expected: float | None = None, note: str | None = None)"
+   }
+  },
+  "plan": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": {}
+   }
+  },
+  "warnings": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "line": {
+   "type": "string"
+  },
+  "llm": {
+   "type": "array",
+   "items": {
+    "title": "LLMTrace",
+    "type": "object",
+    "properties": {
+     "adapter": {
+      "type": "string"
+     },
+     "model": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "seconds": {
+      "type": "number"
+     },
+     "raw": {
+      "type": "string"
+     },
+     "error": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "prompt_version": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "input_tokens": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "output_tokens": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "adapter",
+     "model",
+     "seconds",
+     "raw",
+     "error",
+     "prompt_version",
+     "input_tokens",
+     "output_tokens"
+    ],
+    "additionalProperties": false,
+    "description": "一次 LLM 调用。"
+   }
+  },
+  "seconds": {
+   "type": [
+    "number",
+    "null"
+   ]
+  },
+  "decider": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "version": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "action",
+  "reason",
+  "source",
+  "confidence",
+  "candidates",
+  "plan",
+  "warnings",
+  "line",
+  "llm",
+  "seconds",
+  "decider",
+  "version"
+ ],
+ "additionalProperties": false,
+ "description": "一个决策点的输出。"
+}

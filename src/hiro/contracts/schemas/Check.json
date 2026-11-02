@@ -1,0 +1,50 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Check",
+ "type": "object",
+ "properties": {
+  "seq": {
+   "type": "integer"
+  },
+  "field": {
+   "type": "string"
+  },
+  "predicted": {},
+  "observed": {},
+  "verdict": {
+   "type": "string"
+  },
+  "rule": {
+   "type": "string"
+  },
+  "action": {
+   "type": "string"
+  },
+  "retries": {
+   "type": "integer"
+  },
+  "note": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "version": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "seq",
+  "field",
+  "predicted",
+  "observed",
+  "verdict",
+  "rule",
+  "action",
+  "retries",
+  "note",
+  "version"
+ ],
+ "additionalProperties": false,
+ "description": "Check(seq: int, field: str, predicted: Any = None, observed: Any = None, verdict: str = 'unpredicted', rule: str = 'prediction', action: str = 'accept', retries: int = 0, note: str | None = None, version: str = '1.2')"
+}

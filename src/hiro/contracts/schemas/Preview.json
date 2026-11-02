@@ -1,0 +1,122 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Preview",
+ "type": "object",
+ "properties": {
+  "action": {
+   "title": "Action",
+   "type": "object",
+   "properties": {
+    "kind": {
+     "type": "string",
+     "enum": [
+      "ProduceNext",
+      "ActivateEffect",
+      "ExcludeCard",
+      "Reroll",
+      "ShopBuy",
+      "ShopUpgradeCard",
+      "ShopEnd",
+      "EventSelect",
+      "PresentReceive",
+      "IntervalBuy",
+      "IntervalUpgradeCard",
+      "IntervalChangeCard",
+      "IntervalEnd",
+      "CustomizeCard",
+      "CustomizeEnd",
+      "SelectFormation",
+      "ChangeCard",
+      "RemoveCard",
+      "EnhanceCard",
+      "Dialog",
+      "SelectQualifyMemory",
+      "DiscardDrink",
+      "PlayCard",
+      "UseDrink",
+      "Skip",
+      "Continue",
+      "Wait",
+      "Recover",
+      "Noop"
+     ]
+    },
+    "args": {
+     "type": "object",
+     "additionalProperties": {}
+    },
+    "version": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "kind",
+    "args",
+    "version"
+   ],
+   "additionalProperties": false,
+   "description": "一个要执行的动作。args 的键按 kind 固定（见各工厂方法），全部是 JSON 标量或列表。"
+  },
+  "immediate": {
+   "type": "object",
+   "additionalProperties": {}
+  },
+  "expected": {
+   "type": [
+    "number",
+    "null"
+   ]
+  },
+  "spread": {
+   "type": [
+    "number",
+    "null"
+   ]
+  },
+  "vs_best": {
+   "type": [
+    "number",
+    "null"
+   ]
+  },
+  "vs_best_se": {
+   "type": [
+    "number",
+    "null"
+   ]
+  },
+  "turn_passed": {
+   "type": [
+    "boolean",
+    "null"
+   ]
+  },
+  "summary": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "additionalProperties": {}
+  },
+  "engine": {
+   "type": "string"
+  },
+  "version": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "action",
+  "immediate",
+  "expected",
+  "spread",
+  "vs_best",
+  "vs_best_se",
+  "turn_passed",
+  "summary",
+  "engine",
+  "version"
+ ],
+ "additionalProperties": false,
+ "description": "一个候选动作的预演结果。"
+}

@@ -1,0 +1,105 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Observation",
+ "type": "object",
+ "properties": {
+  "seq": {
+   "type": "integer"
+  },
+  "t": {
+   "type": "number"
+  },
+  "page": {
+   "title": "PageObs",
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string"
+    },
+    "area": {
+     "type": "string"
+    },
+    "confidence": {
+     "type": "number"
+    },
+    "stable_frames": {
+     "type": "integer"
+    }
+   },
+   "required": [
+    "name",
+    "area",
+    "confidence",
+    "stable_frames"
+   ],
+   "additionalProperties": false,
+   "description": "页面判定。name 为 hiro.vision.scene 的场景名（ACTION_SELECT / HIF_EXAM / …，unknown 表示没认出）。"
+  },
+  "fields": {
+   "type": "object",
+   "additionalProperties": {}
+  },
+  "field_meta": {
+   "type": "object",
+   "additionalProperties": {
+    "title": "FieldMeta",
+    "type": "object",
+    "properties": {
+     "method": {
+      "type": "string"
+     },
+     "confidence": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "method",
+     "confidence",
+     "note"
+    ],
+    "additionalProperties": false,
+    "description": "某个字段是怎么读出来的。"
+   }
+  },
+  "screenshot": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "source": {
+   "type": "string"
+  },
+  "timings_ms": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "number"
+   }
+  },
+  "version": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "seq",
+  "t",
+  "page",
+  "fields",
+  "field_meta",
+  "screenshot",
+  "source",
+  "timings_ms",
+  "version"
+ ],
+ "additionalProperties": false,
+ "description": "一帧的识别结果。"
+}

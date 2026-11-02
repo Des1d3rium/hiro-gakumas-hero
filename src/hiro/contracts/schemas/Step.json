@@ -1,0 +1,1601 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Step",
+ "type": "object",
+ "properties": {
+  "seq": {
+   "type": "integer"
+  },
+  "t": {
+   "type": "number"
+  },
+  "observation": {
+   "title": "Observation",
+   "type": "object",
+   "properties": {
+    "seq": {
+     "type": "integer"
+    },
+    "t": {
+     "type": "number"
+    },
+    "page": {
+     "title": "PageObs",
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "area": {
+       "type": "string"
+      },
+      "confidence": {
+       "type": "number"
+      },
+      "stable_frames": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "name",
+      "area",
+      "confidence",
+      "stable_frames"
+     ],
+     "additionalProperties": false,
+     "description": "页面判定。name 为 hiro.vision.scene 的场景名（ACTION_SELECT / HIF_EXAM / …，unknown 表示没认出）。"
+    },
+    "fields": {
+     "type": "object",
+     "additionalProperties": {}
+    },
+    "field_meta": {
+     "type": "object",
+     "additionalProperties": {
+      "title": "FieldMeta",
+      "type": "object",
+      "properties": {
+       "method": {
+        "type": "string"
+       },
+       "confidence": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "note": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "method",
+       "confidence",
+       "note"
+      ],
+      "additionalProperties": false,
+      "description": "某个字段是怎么读出来的。"
+     }
+    },
+    "screenshot": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "source": {
+     "type": "string"
+    },
+    "timings_ms": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "number"
+     }
+    },
+    "version": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "seq",
+    "t",
+    "page",
+    "fields",
+    "field_meta",
+    "screenshot",
+    "source",
+    "timings_ms",
+    "version"
+   ],
+   "additionalProperties": false,
+   "description": "一帧的识别结果。"
+  },
+  "state": {
+   "title": "GameState",
+   "type": "object",
+   "properties": {
+    "mode": {
+     "type": "string"
+    },
+    "page": {
+     "title": "PageState",
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "area": {
+       "type": "string"
+      },
+      "since_seq": {
+       "type": "integer"
+      },
+      "stable": {
+       "type": "boolean"
+      },
+      "frames": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "name",
+      "area",
+      "since_seq",
+      "stable",
+      "frames"
+     ],
+     "additionalProperties": false,
+     "description": "PageState(name: str = 'unknown', area: str = 'unknown', since_seq: int = 0, stable: bool = False, frames: int = 0)"
+    },
+    "produce": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "additionalProperties": {}
+    },
+    "exam": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "additionalProperties": {}
+    },
+    "exam_session": {
+     "title": "ExamSession",
+     "type": "object",
+     "properties": {
+      "label": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "turn": {
+       "type": "integer"
+      },
+      "last_remaining": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "brief_permil": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "additionalProperties": {
+        "type": "integer"
+       }
+      }
+     },
+     "required": [
+      "label",
+      "turn",
+      "last_remaining",
+      "brief_permil"
+     ],
+     "additionalProperties": false,
+     "description": "考试内与 ExamMemory 对应、且需要落盘的少量字段；完整记忆仍在 hiro.brain.state.ExamMemory。"
+    },
+    "page_fields": {
+     "type": "object",
+     "additionalProperties": {}
+    },
+    "sources": {
+     "type": "object",
+     "additionalProperties": {
+      "title": "Source",
+      "type": "object",
+      "properties": {
+       "origin": {
+        "type": "string"
+       },
+       "seq": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "origin",
+       "seq"
+      ],
+      "additionalProperties": false,
+      "description": "Source(origin: str, seq: int)"
+     }
+    },
+    "seq": {
+     "type": "integer"
+    },
+    "pending_page": {
+     "title": "PageState",
+     "type": [
+      "object",
+      "null"
+     ],
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "area": {
+       "type": "string"
+      },
+      "since_seq": {
+       "type": "integer"
+      },
+      "stable": {
+       "type": "boolean"
+      },
+      "frames": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "name",
+      "area",
+      "since_seq",
+      "stable",
+      "frames"
+     ],
+     "additionalProperties": false,
+     "description": "PageState(name: str = 'unknown', area: str = 'unknown', since_seq: int = 0, stable: bool = False, frames: int = 0)"
+    },
+    "conflicts": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "field_status": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string"
+     }
+    },
+    "pending_review": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "ledger": {
+     "type": "array",
+     "items": {
+      "title": "Event",
+      "type": "object",
+      "properties": {
+       "seq": {
+        "type": "integer"
+       },
+       "kind": {
+        "type": "string"
+       },
+       "origin": {
+        "type": "string"
+       },
+       "args": {
+        "type": "object",
+        "additionalProperties": {}
+       },
+       "basis": {
+        "type": "string"
+       },
+       "confirmed": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "ref": {
+        "type": "object",
+        "additionalProperties": {}
+       },
+       "confidence": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "note": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "version": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "seq",
+       "kind",
+       "origin",
+       "args",
+       "basis",
+       "confirmed",
+       "ref",
+       "confidence",
+       "note",
+       "version"
+      ],
+      "additionalProperties": false,
+      "description": "Event(seq: int, kind: str, origin: str, args: dict[str, typing.Any] = <factory>, basis: str = 'observe_only', confirmed: bool | None = None, ref: dict[str, typing.Any] = <factory>, confidence: float | None = None, note: str | None = None, version: str = '1.2')"
+     }
+    },
+    "version": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "mode",
+    "page",
+    "produce",
+    "exam",
+    "exam_session",
+    "page_fields",
+    "sources",
+    "seq",
+    "pending_page",
+    "conflicts",
+    "field_status",
+    "pending_review",
+    "ledger",
+    "version"
+   ],
+   "additionalProperties": false,
+   "description": "全局状态。"
+  },
+  "decision": {
+   "title": "Decision",
+   "type": [
+    "object",
+    "null"
+   ],
+   "properties": {
+    "action": {
+     "title": "Action",
+     "type": "object",
+     "properties": {
+      "kind": {
+       "type": "string",
+       "enum": [
+        "ProduceNext",
+        "ActivateEffect",
+        "ExcludeCard",
+        "Reroll",
+        "ShopBuy",
+        "ShopUpgradeCard",
+        "ShopEnd",
+        "EventSelect",
+        "PresentReceive",
+        "IntervalBuy",
+        "IntervalUpgradeCard",
+        "IntervalChangeCard",
+        "IntervalEnd",
+        "CustomizeCard",
+        "CustomizeEnd",
+        "SelectFormation",
+        "ChangeCard",
+        "RemoveCard",
+        "EnhanceCard",
+        "Dialog",
+        "SelectQualifyMemory",
+        "DiscardDrink",
+        "PlayCard",
+        "UseDrink",
+        "Skip",
+        "Continue",
+        "Wait",
+        "Recover",
+        "Noop"
+       ]
+      },
+      "args": {
+       "type": "object",
+       "additionalProperties": {}
+      },
+      "version": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "kind",
+      "args",
+      "version"
+     ],
+     "additionalProperties": false,
+     "description": "一个要执行的动作。args 的键按 kind 固定（见各工厂方法），全部是 JSON 标量或列表。"
+    },
+    "reason": {
+     "type": "string"
+    },
+    "source": {
+     "type": "string"
+    },
+    "confidence": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "candidates": {
+     "type": "array",
+     "items": {
+      "title": "Candidate",
+      "type": "object",
+      "properties": {
+       "action": {
+        "title": "Action",
+        "type": "object",
+        "properties": {
+         "kind": {
+          "type": "string",
+          "enum": [
+           "ProduceNext",
+           "ActivateEffect",
+           "ExcludeCard",
+           "Reroll",
+           "ShopBuy",
+           "ShopUpgradeCard",
+           "ShopEnd",
+           "EventSelect",
+           "PresentReceive",
+           "IntervalBuy",
+           "IntervalUpgradeCard",
+           "IntervalChangeCard",
+           "IntervalEnd",
+           "CustomizeCard",
+           "CustomizeEnd",
+           "SelectFormation",
+           "ChangeCard",
+           "RemoveCard",
+           "EnhanceCard",
+           "Dialog",
+           "SelectQualifyMemory",
+           "DiscardDrink",
+           "PlayCard",
+           "UseDrink",
+           "Skip",
+           "Continue",
+           "Wait",
+           "Recover",
+           "Noop"
+          ]
+         },
+         "args": {
+          "type": "object",
+          "additionalProperties": {}
+         },
+         "version": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "kind",
+         "args",
+         "version"
+        ],
+        "additionalProperties": false,
+        "description": "一个要执行的动作。args 的键按 kind 固定（见各工厂方法），全部是 JSON 标量或列表。"
+       },
+       "preview": {
+        "type": [
+         "object",
+         "null"
+        ],
+        "additionalProperties": {}
+       },
+       "expected": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "note": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "action",
+       "preview",
+       "expected",
+       "note"
+      ],
+      "additionalProperties": false,
+      "description": "Candidate(action: hiro.contracts.action.Action, preview: dict[str, typing.Any] | None = None, expected: float | None = None, note: str | None = None)"
+     }
+    },
+    "plan": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": {}
+     }
+    },
+    "warnings": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "line": {
+     "type": "string"
+    },
+    "llm": {
+     "type": "array",
+     "items": {
+      "title": "LLMTrace",
+      "type": "object",
+      "properties": {
+       "adapter": {
+        "type": "string"
+       },
+       "model": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "seconds": {
+        "type": "number"
+       },
+       "raw": {
+        "type": "string"
+       },
+       "error": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "prompt_version": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "input_tokens": {
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "output_tokens": {
+        "type": [
+         "integer",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "adapter",
+       "model",
+       "seconds",
+       "raw",
+       "error",
+       "prompt_version",
+       "input_tokens",
+       "output_tokens"
+      ],
+      "additionalProperties": false,
+      "description": "一次 LLM 调用。"
+     }
+    },
+    "seconds": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "decider": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "version": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "action",
+    "reason",
+    "source",
+    "confidence",
+    "candidates",
+    "plan",
+    "warnings",
+    "line",
+    "llm",
+    "seconds",
+    "decider",
+    "version"
+   ],
+   "additionalProperties": false,
+   "description": "一个决策点的输出。"
+  },
+  "previews": {
+   "type": "array",
+   "items": {
+    "title": "Preview",
+    "type": "object",
+    "properties": {
+     "action": {
+      "title": "Action",
+      "type": "object",
+      "properties": {
+       "kind": {
+        "type": "string",
+        "enum": [
+         "ProduceNext",
+         "ActivateEffect",
+         "ExcludeCard",
+         "Reroll",
+         "ShopBuy",
+         "ShopUpgradeCard",
+         "ShopEnd",
+         "EventSelect",
+         "PresentReceive",
+         "IntervalBuy",
+         "IntervalUpgradeCard",
+         "IntervalChangeCard",
+         "IntervalEnd",
+         "CustomizeCard",
+         "CustomizeEnd",
+         "SelectFormation",
+         "ChangeCard",
+         "RemoveCard",
+         "EnhanceCard",
+         "Dialog",
+         "SelectQualifyMemory",
+         "DiscardDrink",
+         "PlayCard",
+         "UseDrink",
+         "Skip",
+         "Continue",
+         "Wait",
+         "Recover",
+         "Noop"
+        ]
+       },
+       "args": {
+        "type": "object",
+        "additionalProperties": {}
+       },
+       "version": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "args",
+       "version"
+      ],
+      "additionalProperties": false,
+      "description": "一个要执行的动作。args 的键按 kind 固定（见各工厂方法），全部是 JSON 标量或列表。"
+     },
+     "immediate": {
+      "type": "object",
+      "additionalProperties": {}
+     },
+     "expected": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "spread": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "vs_best": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "vs_best_se": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "turn_passed": {
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "summary": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "additionalProperties": {}
+     },
+     "engine": {
+      "type": "string"
+     },
+     "version": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "action",
+     "immediate",
+     "expected",
+     "spread",
+     "vs_best",
+     "vs_best_se",
+     "turn_passed",
+     "summary",
+     "engine",
+     "version"
+    ],
+    "additionalProperties": false,
+    "description": "一个候选动作的预演结果。"
+   }
+  },
+  "execution": {
+   "title": "ExecutionResult",
+   "type": [
+    "object",
+    "null"
+   ],
+   "properties": {
+    "action": {
+     "title": "Action",
+     "type": "object",
+     "properties": {
+      "kind": {
+       "type": "string",
+       "enum": [
+        "ProduceNext",
+        "ActivateEffect",
+        "ExcludeCard",
+        "Reroll",
+        "ShopBuy",
+        "ShopUpgradeCard",
+        "ShopEnd",
+        "EventSelect",
+        "PresentReceive",
+        "IntervalBuy",
+        "IntervalUpgradeCard",
+        "IntervalChangeCard",
+        "IntervalEnd",
+        "CustomizeCard",
+        "CustomizeEnd",
+        "SelectFormation",
+        "ChangeCard",
+        "RemoveCard",
+        "EnhanceCard",
+        "Dialog",
+        "SelectQualifyMemory",
+        "DiscardDrink",
+        "PlayCard",
+        "UseDrink",
+        "Skip",
+        "Continue",
+        "Wait",
+        "Recover",
+        "Noop"
+       ]
+      },
+      "args": {
+       "type": "object",
+       "additionalProperties": {}
+      },
+      "version": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "kind",
+      "args",
+      "version"
+     ],
+     "additionalProperties": false,
+     "description": "一个要执行的动作。args 的键按 kind 固定（见各工厂方法），全部是 JSON 标量或列表。"
+    },
+    "ok": {
+     "type": "boolean"
+    },
+    "taps": {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     }
+    },
+    "waited_s": {
+     "type": "number"
+    },
+    "page_before": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "page_after": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "expected_transition": {
+     "type": [
+      "boolean",
+      "null"
+     ]
+    },
+    "retries": {
+     "type": "integer"
+    },
+    "error": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "seconds": {
+     "type": "number"
+    },
+    "version": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "action",
+    "ok",
+    "taps",
+    "waited_s",
+    "page_before",
+    "page_after",
+    "expected_transition",
+    "retries",
+    "error",
+    "seconds",
+    "version"
+   ],
+   "additionalProperties": false,
+   "description": "一次动作执行的结果。"
+  },
+  "observations_before": {
+   "type": "array",
+   "items": {
+    "title": "Observation",
+    "type": "object",
+    "properties": {
+     "seq": {
+      "type": "integer"
+     },
+     "t": {
+      "type": "number"
+     },
+     "page": {
+      "title": "PageObs",
+      "type": "object",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "area": {
+        "type": "string"
+       },
+       "confidence": {
+        "type": "number"
+       },
+       "stable_frames": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "name",
+       "area",
+       "confidence",
+       "stable_frames"
+      ],
+      "additionalProperties": false,
+      "description": "页面判定。name 为 hiro.vision.scene 的场景名（ACTION_SELECT / HIF_EXAM / …，unknown 表示没认出）。"
+     },
+     "fields": {
+      "type": "object",
+      "additionalProperties": {}
+     },
+     "field_meta": {
+      "type": "object",
+      "additionalProperties": {
+       "title": "FieldMeta",
+       "type": "object",
+       "properties": {
+        "method": {
+         "type": "string"
+        },
+        "confidence": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "note": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "method",
+        "confidence",
+        "note"
+       ],
+       "additionalProperties": false,
+       "description": "某个字段是怎么读出来的。"
+      }
+     },
+     "screenshot": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "source": {
+      "type": "string"
+     },
+     "timings_ms": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      }
+     },
+     "version": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "seq",
+     "t",
+     "page",
+     "fields",
+     "field_meta",
+     "screenshot",
+     "source",
+     "timings_ms",
+     "version"
+    ],
+    "additionalProperties": false,
+    "description": "一帧的识别结果。"
+   }
+  },
+  "observations_after": {
+   "type": "array",
+   "items": {
+    "title": "Observation",
+    "type": "object",
+    "properties": {
+     "seq": {
+      "type": "integer"
+     },
+     "t": {
+      "type": "number"
+     },
+     "page": {
+      "title": "PageObs",
+      "type": "object",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "area": {
+        "type": "string"
+       },
+       "confidence": {
+        "type": "number"
+       },
+       "stable_frames": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "name",
+       "area",
+       "confidence",
+       "stable_frames"
+      ],
+      "additionalProperties": false,
+      "description": "页面判定。name 为 hiro.vision.scene 的场景名（ACTION_SELECT / HIF_EXAM / …，unknown 表示没认出）。"
+     },
+     "fields": {
+      "type": "object",
+      "additionalProperties": {}
+     },
+     "field_meta": {
+      "type": "object",
+      "additionalProperties": {
+       "title": "FieldMeta",
+       "type": "object",
+       "properties": {
+        "method": {
+         "type": "string"
+        },
+        "confidence": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "note": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "method",
+        "confidence",
+        "note"
+       ],
+       "additionalProperties": false,
+       "description": "某个字段是怎么读出来的。"
+      }
+     },
+     "screenshot": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "source": {
+      "type": "string"
+     },
+     "timings_ms": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      }
+     },
+     "version": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "seq",
+     "t",
+     "page",
+     "fields",
+     "field_meta",
+     "screenshot",
+     "source",
+     "timings_ms",
+     "version"
+    ],
+    "additionalProperties": false,
+    "description": "一帧的识别结果。"
+   }
+  },
+  "notes": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "timings_ms": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "number"
+   }
+  },
+  "state_after": {
+   "title": "GameState",
+   "type": [
+    "object",
+    "null"
+   ],
+   "properties": {
+    "mode": {
+     "type": "string"
+    },
+    "page": {
+     "title": "PageState",
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "area": {
+       "type": "string"
+      },
+      "since_seq": {
+       "type": "integer"
+      },
+      "stable": {
+       "type": "boolean"
+      },
+      "frames": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "name",
+      "area",
+      "since_seq",
+      "stable",
+      "frames"
+     ],
+     "additionalProperties": false,
+     "description": "PageState(name: str = 'unknown', area: str = 'unknown', since_seq: int = 0, stable: bool = False, frames: int = 0)"
+    },
+    "produce": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "additionalProperties": {}
+    },
+    "exam": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "additionalProperties": {}
+    },
+    "exam_session": {
+     "title": "ExamSession",
+     "type": "object",
+     "properties": {
+      "label": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "turn": {
+       "type": "integer"
+      },
+      "last_remaining": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "brief_permil": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "additionalProperties": {
+        "type": "integer"
+       }
+      }
+     },
+     "required": [
+      "label",
+      "turn",
+      "last_remaining",
+      "brief_permil"
+     ],
+     "additionalProperties": false,
+     "description": "考试内与 ExamMemory 对应、且需要落盘的少量字段；完整记忆仍在 hiro.brain.state.ExamMemory。"
+    },
+    "page_fields": {
+     "type": "object",
+     "additionalProperties": {}
+    },
+    "sources": {
+     "type": "object",
+     "additionalProperties": {
+      "title": "Source",
+      "type": "object",
+      "properties": {
+       "origin": {
+        "type": "string"
+       },
+       "seq": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "origin",
+       "seq"
+      ],
+      "additionalProperties": false,
+      "description": "Source(origin: str, seq: int)"
+     }
+    },
+    "seq": {
+     "type": "integer"
+    },
+    "pending_page": {
+     "title": "PageState",
+     "type": [
+      "object",
+      "null"
+     ],
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "area": {
+       "type": "string"
+      },
+      "since_seq": {
+       "type": "integer"
+      },
+      "stable": {
+       "type": "boolean"
+      },
+      "frames": {
+       "type": "integer"
+      }
+     },
+     "required": [
+      "name",
+      "area",
+      "since_seq",
+      "stable",
+      "frames"
+     ],
+     "additionalProperties": false,
+     "description": "PageState(name: str = 'unknown', area: str = 'unknown', since_seq: int = 0, stable: bool = False, frames: int = 0)"
+    },
+    "conflicts": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "field_status": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string"
+     }
+    },
+    "pending_review": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "ledger": {
+     "type": "array",
+     "items": {
+      "title": "Event",
+      "type": "object",
+      "properties": {
+       "seq": {
+        "type": "integer"
+       },
+       "kind": {
+        "type": "string"
+       },
+       "origin": {
+        "type": "string"
+       },
+       "args": {
+        "type": "object",
+        "additionalProperties": {}
+       },
+       "basis": {
+        "type": "string"
+       },
+       "confirmed": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "ref": {
+        "type": "object",
+        "additionalProperties": {}
+       },
+       "confidence": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "note": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "version": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "seq",
+       "kind",
+       "origin",
+       "args",
+       "basis",
+       "confirmed",
+       "ref",
+       "confidence",
+       "note",
+       "version"
+      ],
+      "additionalProperties": false,
+      "description": "Event(seq: int, kind: str, origin: str, args: dict[str, typing.Any] = <factory>, basis: str = 'observe_only', confirmed: bool | None = None, ref: dict[str, typing.Any] = <factory>, confidence: float | None = None, note: str | None = None, version: str = '1.2')"
+     }
+    },
+    "version": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "mode",
+    "page",
+    "produce",
+    "exam",
+    "exam_session",
+    "page_fields",
+    "sources",
+    "seq",
+    "pending_page",
+    "conflicts",
+    "field_status",
+    "pending_review",
+    "ledger",
+    "version"
+   ],
+   "additionalProperties": false,
+   "description": "全局状态。"
+  },
+  "events": {
+   "type": "array",
+   "items": {
+    "title": "Event",
+    "type": "object",
+    "properties": {
+     "seq": {
+      "type": "integer"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "origin": {
+      "type": "string"
+     },
+     "args": {
+      "type": "object",
+      "additionalProperties": {}
+     },
+     "basis": {
+      "type": "string"
+     },
+     "confirmed": {
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "ref": {
+      "type": "object",
+      "additionalProperties": {}
+     },
+     "confidence": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "version": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "seq",
+     "kind",
+     "origin",
+     "args",
+     "basis",
+     "confirmed",
+     "ref",
+     "confidence",
+     "note",
+     "version"
+    ],
+    "additionalProperties": false,
+    "description": "Event(seq: int, kind: str, origin: str, args: dict[str, typing.Any] = <factory>, basis: str = 'observe_only', confirmed: bool | None = None, ref: dict[str, typing.Any] = <factory>, confidence: float | None = None, note: str | None = None, version: str = '1.2')"
+   }
+  },
+  "predictions": {
+   "type": "array",
+   "items": {
+    "title": "Prediction",
+    "type": "object",
+    "properties": {
+     "seq": {
+      "type": "integer"
+     },
+     "event_seq": {
+      "type": "integer"
+     },
+     "fields": {
+      "type": "object",
+      "additionalProperties": {
+       "title": "Expect",
+       "type": "object",
+       "properties": {
+        "value": {},
+        "min": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "max": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "exact": {
+         "type": "boolean"
+        },
+        "tolerance": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "note": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "value",
+        "min",
+        "max",
+        "exact",
+        "tolerance",
+        "note"
+       ],
+       "additionalProperties": false,
+       "description": "一个字段的期望：精确值（exact=True）或区间 [min, max]；牌组等多重集用 value + exact。"
+      }
+     },
+     "due": {
+      "type": "string"
+     },
+     "expires_after": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "version": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "seq",
+     "event_seq",
+     "fields",
+     "due",
+     "expires_after",
+     "version"
+    ],
+    "additionalProperties": false,
+    "description": "Prediction(seq: int, event_seq: int, fields: dict[str, hiro.contracts.events.Expect] = <factory>, due: str = 'any', expires_after: int | None = None, version: str = '1.2')"
+   }
+  },
+  "checks": {
+   "type": "array",
+   "items": {
+    "title": "Check",
+    "type": "object",
+    "properties": {
+     "seq": {
+      "type": "integer"
+     },
+     "field": {
+      "type": "string"
+     },
+     "predicted": {},
+     "observed": {},
+     "verdict": {
+      "type": "string"
+     },
+     "rule": {
+      "type": "string"
+     },
+     "action": {
+      "type": "string"
+     },
+     "retries": {
+      "type": "integer"
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "version": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "seq",
+     "field",
+     "predicted",
+     "observed",
+     "verdict",
+     "rule",
+     "action",
+     "retries",
+     "note",
+     "version"
+    ],
+    "additionalProperties": false,
+    "description": "Check(seq: int, field: str, predicted: Any = None, observed: Any = None, verdict: str = 'unpredicted', rule: str = 'prediction', action: str = 'accept', retries: int = 0, note: str | None = None, version: str = '1.2')"
+   }
+  },
+  "version": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "seq",
+  "t",
+  "observation",
+  "state",
+  "decision",
+  "previews",
+  "execution",
+  "observations_before",
+  "observations_after",
+  "notes",
+  "timings_ms",
+  "state_after",
+  "events",
+  "predictions",
+  "checks",
+  "version"
+ ],
+ "additionalProperties": false,
+ "description": "主循环的一步。decision / execution 为 None 表示这一帧只更新了状态（转场、等待）。"
+}

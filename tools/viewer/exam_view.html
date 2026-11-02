@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>考试复盘</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --hue: 255;
+  --bg: oklch(0.985 0.004 var(--hue));
+  --bg-sunk: oklch(0.955 0.007 var(--hue));
+  --bg-raise: oklch(0.995 0.003 var(--hue));
+  --ink: oklch(0.24 0.02 var(--hue));
+  --ink-2: oklch(0.45 0.02 var(--hue));
+  --ink-3: oklch(0.62 0.015 var(--hue));
+  --rule: oklch(0.88 0.008 var(--hue));
+  --accent: oklch(0.55 0.17 265);
+  --accent-soft: oklch(0.93 0.04 265);
+  --good: oklch(0.58 0.14 150);
+  --bad: oklch(0.58 0.19 25);
+  --warn: oklch(0.72 0.15 70);
+  --vo: oklch(0.64 0.2 3);
+  --da: oklch(0.58 0.17 255);
+  --vi: oklch(0.76 0.15 78);
+  --opp: oklch(0.6 0.02 var(--hue));
+  --radius: 10px;
+  --font: system-ui, -apple-system, "Hiragino Sans", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: oklch(0.19 0.012 var(--hue));
+    --bg-sunk: oklch(0.155 0.012 var(--hue));
+    --bg-raise: oklch(0.235 0.014 var(--hue));
+    --ink: oklch(0.93 0.008 var(--hue));
+    --ink-2: oklch(0.76 0.012 var(--hue));
+    --ink-3: oklch(0.6 0.012 var(--hue));
+    --rule: oklch(0.32 0.012 var(--hue));
+    --accent: oklch(0.72 0.14 265);
+    --accent-soft: oklch(0.3 0.06 265);
+    --good: oklch(0.72 0.14 150);
+    --bad: oklch(0.7 0.17 25);
+    --warn: oklch(0.8 0.13 75);
+    --vo: oklch(0.72 0.18 3);
+    --da: oklch(0.7 0.14 255);
+    --vi: oklch(0.82 0.14 80);
+    --opp: oklch(0.66 0.02 var(--hue));
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--font); -webkit-text-size-adjust: 100%; }
+button, textarea, select { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- header ---------- */
+header.top { padding: 18px clamp(14px, 3vw, 32px) 12px; display: grid; gap: 12px; }
+.run { font-size: 12px; color: var(--ink-3); letter-spacing: .02em; }
+.titlebar { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; }
+.titlebar h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+.verdict { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; color: var(--ink-2); }
+.verdict b { color: var(--ink); font-size: 17px; }
+.verdict .gap.bad { color: var(--bad); }
+.verdict .gap.good { color: var(--good); }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tabs button { border: 1px solid var(--rule); background: transparent; padding: 5px 11px; border-radius: 999px; cursor: pointer; color: var(--ink-2); }
+.tabs button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+/* ---------- turn strip ---------- */
+.strip-wrap { position: sticky; top: 0; z-index: 5; background: var(--bg); border-block: 1px solid var(--rule); }
+.strip { display: flex; gap: 2px; overflow-x: auto; padding: 8px clamp(14px, 3vw, 32px); scrollbar-width: thin; }
+.turn { flex: 0 0 auto; min-width: 74px; padding: 6px 8px 7px; border-radius: 8px; border: 1px solid transparent; background: transparent; text-align: left; cursor: pointer; display: grid; gap: 2px; }
+.turn:hover { background: var(--bg-sunk); }
+.turn[aria-current="true"] { background: var(--bg-raise); border-color: var(--ink-3); }
+.turn .t1 { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2); }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.attr-Vo { --c: var(--vo); } .attr-Da { --c: var(--da); } .attr-Vi { --c: var(--vi); }
+.dot { background: var(--c, var(--ink-3)); }
+.turn .gain { font-weight: 650; font-size: 15px; }
+.turn .ev { display: flex; gap: 3px; min-height: 16px; }
+.tag { font-size: 10.5px; line-height: 16px; padding: 0 5px; border-radius: 4px; background: var(--bg-sunk); color: var(--ink-2); white-space: nowrap; }
+.tag.drink { background: oklch(from var(--accent) l c h / .14); color: var(--accent); }
+.tag.finisher { background: oklch(from var(--bad) l c h / .14); color: var(--bad); }
+.tag.delayed { background: oklch(from var(--warn) l c h / .2); color: oklch(from var(--warn) calc(l - .25) c h); }
+.tag.sustained { background: oklch(from var(--good) l c h / .15); color: var(--good); }
+.tag.cashout { background: oklch(from var(--vo) l c h / .14); color: var(--vo); }
+.tag.once { background: transparent; border: 1px solid var(--rule); color: var(--ink-3); }
+
+/* ---------- main layout ---------- */
+main { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px clamp(18px, 3vw, 40px); padding: 20px clamp(14px, 3vw, 32px) 80px; max-width: 1500px; }
+@media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+section h2 { font-size: 12px; font-weight: 650; letter-spacing: .06em; color: var(--ink-3); margin: 0 0 8px; text-transform: uppercase; }
+section + section { margin-top: 26px; }
+
+/* steps within turn */
+.steps { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.steps button { border: 1px solid var(--rule); background: transparent; padding: 4px 10px; border-radius: 6px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; max-width: 100%; }
+.steps button[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.steps .k { color: var(--ink-3); font-size: 12px; }
+.src { font-size: 10.5px; padding: 0 5px; border-radius: 4px; line-height: 16px; }
+.src-expert { background: oklch(from var(--good) l c h / .16); color: var(--good); }
+.src-llm { background: oklch(from var(--accent) l c h / .16); color: var(--accent); }
+.src-plan, .src-rule, .src-fallback { background: var(--bg-sunk); color: var(--ink-2); }
+
+/* decision */
+.decision { display: grid; gap: 6px; }
+.decision .act { font-size: 20px; font-weight: 700; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.decision .reason { color: var(--ink-2); max-width: 72ch; }
+.warn { color: var(--warn); font-size: 13px; }
+.err { color: var(--bad); font-size: 13px; }
+/* ---------- 低级失误 ---------- */
+.blunders { border: 1px solid color-mix(in oklch, var(--bad) 45%, var(--rule)); border-radius: var(--radius); padding: 8px 12px; background: color-mix(in oklch, var(--bad) 6%, var(--bg)); }
+.blunders summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; list-style: none; }
+.blunders summary::-webkit-details-marker { display: none; }
+.blunders summary b { color: var(--bad); }
+.blunders .bk { font-size: 12px; color: var(--ink-2); border: 1px solid var(--rule); border-radius: 999px; padding: 1px 8px; background: var(--bg-raise); }
+.blunders ul { margin: 8px 0 2px; padding: 0; list-style: none; display: grid; gap: 3px; max-height: 260px; overflow: auto; font-size: 13px; }
+.blunders li { display: flex; gap: 8px; align-items: baseline; }
+.blunders li .where { flex: 0 0 auto; color: var(--ink-3); font-family: var(--mono); font-size: 12px; }
+.blunders li button { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font-family: var(--mono); font-size: 12px; }
+.blunders.none { border-color: var(--rule); background: transparent; color: var(--ink-3); }
+.turn .bl, .steps .bl { width: 7px; height: 7px; border-radius: 50%; background: var(--bad); display: inline-block; flex: 0 0 auto; }
+.turn.has-blunder { border-color: color-mix(in oklch, var(--bad) 55%, transparent); }
+.steps button.blunder { border-color: var(--bad); }
+.blunder-note { color: var(--bad); font-size: 13px; font-weight: 600; }
+
+/* stats row */
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 2px 14px; margin: 14px 0 4px; }
+.stat .l { font-size: 11.5px; color: var(--ink-3); }
+.stat .v { font-size: 17px; font-weight: 650; }
+.stat .d { font-size: 11.5px; margin-left: 4px; }
+.up { color: var(--good); } .down { color: var(--bad); }
+
+/* candidates */
+table.cands { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cands th { text-align: left; font-weight: 500; color: var(--ink-3); font-size: 11.5px; padding: 4px 6px; border-bottom: 1px solid var(--rule); }
+.cands td { padding: 6px; border-bottom: 1px solid color-mix(in oklch, var(--rule) 55%, transparent); vertical-align: middle; }
+.cands tr.chosen td { background: var(--accent-soft); }
+.cands tr.chosen td:first-child { font-weight: 650; }
+.cands .r { text-align: right; white-space: nowrap; }
+.bar { position: relative; height: 6px; background: var(--bg-sunk); border-radius: 3px; min-width: 70px; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink-3); border-radius: 3px; }
+.cands tr.chosen .bar i { background: var(--accent); }
+.noise { font-size: 10.5px; color: var(--warn); margin-left: 4px; }
+.imm { color: var(--ink-3); font-size: 12px; }
+
+/* hand */
+.hand { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.card { border: 1px solid var(--rule); border-radius: var(--radius); padding: 8px 10px; background: var(--bg-raise); display: grid; gap: 4px; cursor: pointer; text-align: left; }
+.card.played { border-color: var(--accent); box-shadow: 0 0 0 2px oklch(from var(--accent) l c h / .25); }
+.card.na { opacity: .55; }
+.card .nm { font-weight: 650; display: flex; justify-content: space-between; gap: 6px; }
+.card .badge { font-size: 12px; color: var(--vo); white-space: nowrap; }
+.card .tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.card .tx { font-size: 12px; color: var(--ink-2); display: none; line-height: 1.45; }
+.card[aria-expanded="true"] .tx { display: block; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--rule); border-radius: 999px; padding: 2px 10px; font-size: 12.5px; background: var(--bg-raise); }
+.chip .v { font-weight: 650; margin-left: 4px; }
+.drink { border: 1px solid var(--rule); border-radius: 8px; padding: 6px 10px; font-size: 13px; display: grid; gap: 2px; max-width: 260px; }
+.drink small { color: var(--ink-3); font-size: 11.5px; line-height: 1.4; }
+.drink.used { border-color: var(--accent); }
+
+/* charts */
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { fill: var(--ink-3); font-size: 10.5px; font-family: var(--font); }
+.chart .grid { stroke: var(--rule); stroke-width: 1; }
+.chart .me { stroke: var(--accent); fill: none; stroke-width: 2.2; }
+.chart .opp { stroke: var(--opp); fill: none; stroke-width: 1.6; stroke-dasharray: 4 3; }
+.chart .genki { stroke: var(--vi); fill: none; stroke-width: 2; }
+.chart .hp { stroke: var(--good); fill: none; stroke-width: 2; }
+.chart .mot { stroke: var(--vo); fill: none; stroke-width: 1.4; stroke-dasharray: 3 3; }
+.chart .imp { stroke: var(--da); fill: none; stroke-width: 1.4; stroke-dasharray: 1 3; }
+.chart .half { fill: oklch(from var(--bad) l c h / .08); }
+.chart .settle { fill: oklch(from var(--good) l c h / .55); }
+.chart .cur { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 2 2; }
+.chart .hit { fill: transparent; cursor: pointer; }
+.chart .attrband { opacity: .14; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; }
+
+/* screenshot */
+.shot img { width: 100%; max-width: 270px; border-radius: 8px; border: 1px solid var(--rule); cursor: zoom-in; display: block; }
+.shot img.big { max-width: 540px; cursor: zoom-out; }
+
+/* notes */
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 5px 12px; cursor: pointer; color: var(--ink-2); }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"].v-bad { background: oklch(from var(--bad) l c h / .16); color: var(--bad); font-weight: 650; }
+.seg button[aria-pressed="true"].v-good { background: oklch(from var(--good) l c h / .16); color: var(--good); font-weight: 650; }
+.seg button[aria-pressed="true"].v-unsure { background: var(--bg-sunk); color: var(--ink); font-weight: 650; }
+.form { display: grid; gap: 10px; }
+.form label.l { font-size: 12px; color: var(--ink-3); display: block; margin-bottom: 4px; }
+.form select { width: 100%; border: 1px solid var(--rule); border-radius: 8px; padding: 6px 8px; background: var(--bg-raise); }
+.tagpick { display: flex; flex-wrap: wrap; gap: 6px; }
+.tagpick button { border: 1px solid var(--rule); background: transparent; border-radius: 999px; padding: 2px 10px; font-size: 12.5px; cursor: pointer; color: var(--ink-2); }
+.tagpick button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.status { font-size: 12.5px; color: var(--ink-3); }
+.status.ok { color: var(--good); } .status.err { color: var(--bad); }
+.notes-list .v { font-size: 11px; padding: 0 5px; border-radius: 4px; margin-right: 6px; }
+.notes-list .v-bad { background: oklch(from var(--bad) l c h / .14); color: var(--bad); }
+.notes-list .v-good { background: oklch(from var(--good) l c h / .14); color: var(--good); }
+.notes-list .v-unsure { background: var(--bg-sunk); color: var(--ink-2); }
+.turn .marked { width: 6px; height: 6px; border-radius: 50%; background: var(--bad); display: inline-block; margin-left: 4px; }
+textarea { width: 100%; min-height: 76px; resize: vertical; border: 1px solid var(--rule); border-radius: 8px; padding: 8px 10px; background: var(--bg-raise); }
+textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notes-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.btn { border: 1px solid var(--rule); background: var(--bg-raise); padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.notes-list { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
+.notes-list li { display: grid; grid-template-columns: auto 1fr; gap: 10px; cursor: pointer; }
+.notes-list .where { color: var(--ink-3); white-space: nowrap; }
+.muted { color: var(--ink-3); }
+.result { display: grid; gap: 4px; font-size: 13px; }
+.result .row { display: flex; justify-content: space-between; gap: 10px; }
+.result .row.me { font-weight: 650; color: var(--accent); }
+kbd { font: 11px var(--mono); border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--ink-2); }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 7px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .25s cubic-bezier(.16,1,.3,1); pointer-events: none; }
+.toast.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+@media (max-width: 560px) {
+  .cands .c-bar, .cands .c-spread { display: none; }
+  .decision .act { font-size: 18px; }
+  .hand { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .turn { min-width: 68px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="run" id="run"></div>
+  <div class="titlebar">
+    <h1 id="title"></h1>
+    <div class="verdict" id="verdict"></div>
+  </div>
+  <div class="tabs" id="tabs" role="tablist" aria-label="考试"></div>
+  <details class="blunders" id="blunders" hidden></details>
+</header>
+<div class="strip-wrap"><div class="strip" id="strip" aria-label="回合"></div></div>
+<main>
+  <div>
+    <section>
+      <h2 id="stepHead">步骤</h2>
+      <div class="steps" id="steps"></div>
+      <div class="decision" id="decision"></div>
+      <div class="stats" id="stats"></div>
+    </section>
+    <section>
+      <h2>专家候选（期望终局分）</h2>
+      <div id="cands"></div>
+    </section>
+    <section>
+      <h2>手牌 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">· 点卡看效果</span></h2>
+      <div class="hand" id="hand"></div>
+    </section>
+    <section>
+      <h2>饮料栏</h2>
+      <div class="chips" id="drinks" style="gap:8px"></div>
+    </section>
+    <section>
+      <h2>身上的状态</h2>
+      <div class="chips" id="statuses"></div>
+    </section>
+  </div>
+  <div>
+    <section>
+      <h2>分数（每回合开始时）</h2>
+      <svg class="chart" id="chartScore" viewBox="0 0 600 220" role="img" aria-label="分数曲线"></svg>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i>我方（最后一点是结束时）</span>
+        <span><i style="background:var(--opp)"></i>对手头名（画面显示值；本战开考就显示本轮最终分）</span>
+        <span><i style="background:oklch(from var(--good) l c h / .55);height:8px"></i>回合开始结算</span>
+      </div>
+    </section>
+    <section>
+      <h2>元气（回合开始时）</h2>
+      <svg class="chart" id="chartGenki" viewBox="0 0 600 150" role="img" aria-label="元气曲线"></svg>
+    </section>
+    <section>
+      <h2>体力 / 干劲 / 好印象（回合开始时）</h2>
+      <svg class="chart" id="chartRes" viewBox="0 0 600 170" role="img" aria-label="体力干劲好印象曲线"></svg>
+      <div class="legend">
+        <span><i style="background:var(--good)"></i>体力（红底是半血以下）</span>
+        <span><i style="background:var(--vo)"></i>干劲</span>
+        <span><i style="background:var(--da)"></i>好印象</span>
+        <span><span class="dot" style="background:var(--vo)"></span> <span class="dot" style="background:var(--da)"></span> <span class="dot" style="background:var(--vi)"></span> 背景色 = 回合属性 Vo / Da / Vi</span>
+      </div>
+    </section>
+    <section>
+      <h2>标注这一步 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">· 提交后存到服务器，各设备同步</span></h2>
+      <div class="form">
+        <div>
+          <label class="l">判定</label>
+          <div class="seg" id="verdictPick" role="group" aria-label="判定">
+            <button data-v="问题" class="v-bad" aria-pressed="false">有问题</button>
+            <button data-v="正确" class="v-good" aria-pressed="false">做得对</button>
+            <button data-v="不确定" class="v-unsure" aria-pressed="false">不确定</button>
+          </div>
+        </div>
+        <div>
+          <label class="l" for="should">应该怎么做</label>
+          <select id="should"></select>
+        </div>
+        <div>
+          <label class="l">问题类型（可多选）</label>
+          <div class="tagpick" id="tagpick"></div>
+        </div>
+        <div>
+          <label class="l" for="note">说明</label>
+          <textarea id="note" placeholder="例如：先打叠元气的 距離感の基本，再打按元气得分的 仕草の基本+"></textarea>
+        </div>
+        <div class="notes-bar" style="margin-top:0">
+          <button class="btn primary" id="submitNote">提交</button>
+          <button class="btn" id="newNote" hidden>再加一条</button>
+          <button class="btn" id="delNote" hidden>删除</button>
+          <span class="status" id="noteStatus"></span>
+        </div>
+      </div>
+      <div class="notes-bar">
+        <button class="btn" id="copyNotes">复制全部标注</button>
+        <button class="btn" id="dlNotes">下载 .md</button>
+        <button class="btn" id="uploadLocal" hidden>上传本机旧批注</button>
+        <span class="muted" id="noteCount"></span>
+      </div>
+      <ul class="notes-list" id="notesList"></ul>
+    </section>
+    <section class="shot">
+      <h2>截图</h2>
+      <div id="shot"></div>
+    </section>
+    <section id="resultSec" hidden>
+      <h2>结果页</h2>
+      <div class="result" id="result"></div>
+    </section>
+    <section>
+      <p class="muted" style="font-size:12px">键盘：<kbd>←</kbd><kbd>→</kbd> 上一步 / 下一步，<kbd>[</kbd><kbd>]</kbd> 上一回合 / 下一回合。回合条上的红点表示那一回合有标注。回合切换得分由「下一回合开始分 − 本回合最后一步观测分」得到；有预演时减去最后一手的即时得分，剩下的记为回合开始结算，没有预演时只能给出合计。</p>
+    </section>
+  </div>
+</main>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const DATA = /*__DATA__*/null;
+const BASE = { r1: 400000, r2: 600000 };
+const STARCAP = { "qualify-1": 14001, "qualify-2": 146364, "qualify-3": 390910 };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = n => n == null ? "—" : Math.abs(n) >= 10000 ? (n / 10000).toFixed(Math.abs(n) >= 1e6 ? 0 : 1) + "万" : Math.round(n).toLocaleString();
+const sgn = n => n == null ? "" : (n > 0 ? "+" : "") + fmt(n);
+const examName = e => {
+  const m = { r1: "本战 R1", r2: "本战 R2" };
+  const q = /qualify-(\d)/.exec(e.label);
+  const base = m[e.label] || (q ? `选拔${"①②③④"[q[1] - 1]}` : e.label);
+  const same = DATA.exams.filter(x => x.label === e.label).length;
+  return same > 1 ? `${base} · 第${e.attempt}次` : base;
+};
+const roleName = { finisher: "终结", delayed: "延迟", sustained: "持续", cashout: "兑现", drink: "饮料" };
+const SRC = { expert: "专家", llm: "LLM", plan: "计划", rule: "规则", fallback: "兜底" };
+let ei = 0, si = 0;
+const exam = () => DATA.exams[ei];
+const step = () => exam().steps[si];
+const noteKey = (e, s) => `examview|${DATA.run}|${e.label}|${e.attempt}|${s.seg}|${s.seq}`;
+const TAGS = ["出牌顺序", "饮料时机", "构筑选卡", "体力控制", "终结时机", "持续/延迟时机", "空过回合", "识别错误", "模拟器", "其他"];
+const API = /*__API__*/"api/notes";  // 生成时用 --api 指定；页面和后端同域时用相对路径
+let NOTES = [], online = false, editing = null, form = { verdict: null, tags: new Set() };
+const sameStep = (n, e, s) => n.exam === e.label && (n.attempt ?? 1) === e.attempt && n.seg === s.seg && n.seq === s.seq;
+const notesOf = (e, s) => NOTES.filter(n => sameStep(n, e, s));
+
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 1600); }
+
+function renderHeader() {
+  $("run").textContent = `${DATA.run} · 生成于 ${DATA.generated}`;
+  const e = exam();
+  $("title").textContent = examName(e);
+  const r = e.result || {};
+  const me = e.final_score;
+  const opp = (r.entries || []).filter(x => !x.me && x.name !== "篠澤広").map(x => x.round_score ?? x.score);
+  const top = opp.length ? Math.max(...opp) : (e.steps.at(-1).npc || [])[0];
+  const base = BASE[e.label];
+  let html = `<span>我方 <b class="num">${fmt(me)}</b>${e.label === "r1" && me != null ? `<span class="muted">（结算值，原始约 ${fmt(Math.round(me / 1.2))}）</span>` : ""}</span>`;
+  if (top != null) html += `<span>对手头名 <b class="num">${fmt(top)}</b></span>`;
+  if (base) { const g = (me ?? 0) - base; html += `<span>底线 <b class="num">${fmt(base)}</b> <span class="gap ${g >= 0 ? "good" : "bad"} num">${g >= 0 ? "达成" : "差 " + fmt(-g)}</span></span>`; }
+  const cap = STARCAP[e.label];
+  if (cap) { const g = (me ?? 0) - cap; html += `<span>满星线 <b class="num">${fmt(cap)}</b> <span class="gap ${g >= 0 ? "good" : "bad"} num">${g >= 0 ? "拿满" : "完成 " + Math.round((me ?? 0) / cap * 100) + "%"}</span></span>`; }
+  if (r.rank) html += `<span>名次 <b>${r.rank}</b>${r.passed === false ? " · 敗退" : ""}</span>`;
+  $("verdict").innerHTML = html;
+  $("tabs").innerHTML = DATA.exams.map((x, i) => `<button role="tab" aria-pressed="${i === ei}" data-i="${i}">${esc(examName(x))}</button>`).join("");
+  $("tabs").querySelectorAll("button").forEach(b => b.onclick = () => { ei = +b.dataset.i; si = 0; renderAll(); });
+}
+
+const blOf = s => s.blunders || [];
+function renderBlunders() {
+  const B = DATA.blunders, box = $("blunders");
+  if (!B) { box.hidden = true; return; }
+  box.hidden = false;
+  box.classList.toggle("none", !B.total);
+  const kinds = B.counts.map(c => `<span class="bk">${esc(c.label)} ×${c.n}</span>`).join("");
+  const rows = B.items.map(x => `<li><span class="where">${x.at ? `<button data-at="${x.at.join(",")}">${esc(x.seg)} #${x.seq}</button>` : esc(x.seg) + (x.seq != null ? " #" + x.seq : "")}</span>
+    <span><b>${esc(x.label)}</b>：${esc(x.detail)}</span></li>`).join("");
+  box.innerHTML = `<summary>${B.total ? `低级失误 <b class="num">${B.total}</b> 条` : "低级失误 0 条"} ${kinds}</summary><ul>${rows}</ul>`;
+  box.querySelectorAll("button[data-at]").forEach(b => b.onclick = () => { [ei, si] = b.dataset.at.split(",").map(Number); renderAll(); });
+}
+
+function renderStrip() {
+  const e = exam(), cur = step().turn;
+  $("strip").innerHTML = e.turns.map((t, i) => {
+    const extra = i > 0 && t.rem != null && e.turns[i - 1].rem != null && t.rem > e.turns[i - 1].rem;
+    const ev = t.events.slice(0, 4).map(v => `<span class="tag ${v.type}" title="${esc(v.label)}">${roleName[v.type] || v.type}</span>`).join("");
+    const bl = t.steps.some(k => blOf(e.steps[k]).length);
+    return `<button class="turn attr-${t.attr}${bl ? " has-blunder" : ""}" aria-current="${t.turn === cur}" data-s="${t.steps[0]}">
+      <span class="t1"><span class="dot"></span>${bl ? `<span class="bl" title="有低级失误"></span>` : ""}${extra ? "追加回合" : "剩 " + (t.rem ?? "?")} · ${t.attr ?? "?"}${t.mult ? " ×" + t.mult.toFixed(1) : ""}${t.steps.some(k => notesOf(e, e.steps[k]).length) ? `<span class="marked" title="有标注"></span>` : ""}</span>
+      <span class="gain num">${t.gain == null ? "—" : sgn(t.gain)}</span>
+      <span class="ev">${ev}</span></button>`;
+  }).join("");
+  $("strip").querySelectorAll(".turn").forEach(b => b.onclick = () => { si = +b.dataset.s; renderAll(); });
+  const c = $("strip").querySelector('[aria-current="true"]');
+  if (c) { const sp = $("strip"); sp.scrollLeft = c.offsetLeft - sp.clientWidth / 2 + c.clientWidth / 2; }
+}
+
+function renderStep() {
+  const e = exam(), s = step(), turn = e.turns.find(t => t.turn === s.turn);
+  const prev = si > 0 ? e.steps[si - 1] : null;
+  $("stepHead").textContent = `第 ${s.turn} 回合（剩 ${s.rem ?? "?"}，${s.attr ?? "?"} ×${s.mult ?? "?"}） · 段 ${s.seg} #${s.seq}`;
+  $("steps").innerHTML = turn.steps.map((k, j) => {
+    const x = e.steps[k];
+    const bl = blOf(x);
+    return `<button aria-current="${k === si}" data-s="${k}"${bl.length ? ` class="blunder" title="${esc(bl.map(b => b.label).join("；"))}"` : ""}><span class="k">${j + 1}</span>${bl.length ? `<span class="bl"></span>` : ""}${esc(x.action.label)}<span class="src src-${x.source}">${SRC[x.source] || x.source}</span></button>`;
+  }).join("");
+  $("steps").querySelectorAll("button").forEach(b => b.onclick = () => { si = +b.dataset.s; renderAll(); });
+
+  let dh = `<div class="act">${esc(s.action.label)} <span class="src src-${s.source}">${SRC[s.source] || s.source}</span></div>`;
+  if (s.reason) dh += `<div class="reason">${esc(s.reason)}</div>`;
+  if (s.plan.length) dh += `<div class="muted" style="font-size:12.5px">本回合计划：${esc(s.plan.join(" → "))}</div>`;
+  s.warnings.forEach(w => dh += `<div class="warn">⚠ ${esc(w)}</div>`);
+  if (s.exec_ok === false) dh += `<div class="err">执行失败：${esc(s.exec_error)}</div>`;
+  blOf(s).forEach(b => dh += `<div class="blunder-note">✖ 低级失误 · ${esc(b.label)}：${esc(b.detail)}</div>`);
+  if (turn.settle != null && turn.steps[0] === si) dh += `<div class="muted" style="font-size:12.5px">本回合开始结算约 <b class="num" style="color:var(--good)">${sgn(turn.settle)}</b>（回合切换合计 ${sgn(turn.switch)}）</div>`;
+  else if (turn.switch != null && turn.steps[0] === si) dh += `<div class="muted" style="font-size:12.5px">回合切换得分 ${sgn(turn.switch)}（含上回合最后一手，无法拆分）</div>`;
+  $("decision").innerHTML = dh;
+
+  const stat = (l, v, pv, opts = {}) => {
+    const d = (v != null && pv != null) ? v - pv : null;
+    const dd = d ? `<span class="d ${d > 0 ? "up" : "down"}">${sgn(d)}</span>` : "";
+    return `<div class="stat"><div class="l">${l}</div><div class="v num">${opts.raw ? (v ?? "—") : fmt(v)}${dd}</div></div>`;
+  };
+  $("stats").innerHTML = [
+    stat("分数", s.score, prev && prev.turn >= 0 ? prev.score : null),
+    stat("元气", s.genki, prev?.genki, { raw: 1 }),
+    stat("体力", s.hp, prev?.hp, { raw: 1 }),
+    stat("干劲", s.motivation, prev?.motivation, { raw: 1 }),
+    stat("好印象", s.impression, prev?.impression, { raw: 1 }),
+    stat("P 道具次数", s.pitem_charges, null, { raw: 1 }),
+    stat("对手头名", (s.npc || [])[0], null),
+  ].join("");
+
+  if (!s.previews.length) {
+    $("cands").innerHTML = `<p class="muted">这一步没有预演（${SRC[s.source] || s.source} 决定）。</p>`;
+  } else {
+    const best = s.previews[0].expected || 1;
+    const lo = Math.min(...s.previews.map(p => p.expected || 0));
+    $("cands").innerHTML = `<table class="cands"><thead><tr><th>动作</th><th class="r">期望终局分</th><th class="c-bar"></th><th class="r">比最优</th><th class="r c-spread">波动</th></tr></thead><tbody>` +
+      s.previews.map(p => {
+        const w = best > lo ? ((p.expected - lo) / (best - lo)) * 100 : 100;
+        const noise = p.vs_best && p.se && Math.abs(p.vs_best) < p.se ? `<span class="noise" title="差距小于 1 个标准误">噪声内</span>` : "";
+        const im = p.immediate || {};
+        const imm = (im.approx ? "约 " : "") + [im.score ? "分" + sgn(im.score) : "", im.shield ? "元气" + sgn(im.shield) : "", im.hp ? "体力" + sgn(im.hp) : "", im.motivation ? "干劲" + sgn(im.motivation) : ""].filter(Boolean).join(" ");
+        const immShown = imm.replace(/^约 $/, "");
+        return `<tr class="${p.chosen ? "chosen" : ""}"><td>${esc(p.label)}${immShown ? `<div class="imm">${esc(immShown)}</div>` : ""}</td>
+          <td class="r num">${fmt(p.expected)}</td><td class="c-bar"><div class="bar"><i style="width:${Math.max(4, w)}%"></i></div></td>
+          <td class="r num">${p.vs_best ? sgn(p.vs_best) : "最优"}${noise}</td><td class="r num muted c-spread">±${fmt(p.spread)}</td></tr>`;
+      }).join("") + `</tbody></table>`;
+  }
+
+  const playedSlot = s.action.kind === "PlayCard" ? s.action.args.slot : null;
+  $("hand").innerHTML = s.hand.map(c => {
+    const tags = [c.role ? `<span class="tag ${c.role}">${roleName[c.role]}</span>` : "", c.once ? `<span class="tag once">一次性</span>` : `<span class="tag once">可复用</span>`].join("");
+    return `<button class="card ${c.slot === playedSlot ? "played" : ""} ${c.available === false ? "na" : ""}" aria-expanded="false">
+      <span class="nm"><span>${esc(c.name)}</span>${c.badge != null ? `<span class="badge num">${fmt(c.badge)}</span>` : ""}</span>
+      <span class="tags">${tags}${c.available === false ? `<span class="tag">不可打</span>` : ""}</span>
+      <span class="tx">${esc(c.text)}</span></button>`;
+  }).join("") || `<p class="muted">没有读到手牌</p>`;
+  $("hand").querySelectorAll(".card").forEach(b => b.onclick = () => b.setAttribute("aria-expanded", b.getAttribute("aria-expanded") === "true" ? "false" : "true"));
+
+  const usedSlot = s.action.kind === "UseDrink" ? s.action.args.slot : null;
+  $("drinks").innerHTML = s.drinks.map(d => `<div class="drink ${d.slot === usedSlot ? "used" : ""}"><b>${esc(d.name)}</b>${d.slot === usedSlot ? ` <span class="tag drink">这一步喝了</span>` : ""}<small>${esc(d.text)}</small></div>`).join("") || `<p class="muted">饮料栏是空的（或没读到）</p>`;
+  $("statuses").innerHTML = s.statuses.map(x => `<span class="chip">${esc(x.name)}${x.value != null ? `<span class="v num">${esc(x.value)}</span>` : ""}</span>`).join("") || `<p class="muted">没有</p>`;
+  $("shot").innerHTML = s.thumb ? `<img src="${s.thumb}" alt="这一步的截图">` : `<p class="muted">这一步没有截图</p>`;
+  const img = $("shot").querySelector("img"); if (img) img.onclick = () => img.classList.toggle("big");
+  loadForm(e, s);
+}
+
+function renderResult() {
+  const r = exam().result;
+  $("resultSec").hidden = !r;
+  if (!r) return;
+  $("result").innerHTML = (r.entries || []).map(x => `<div class="row ${x.me || x.name === "篠澤広" ? "me" : ""}"><span>${esc(x.name ?? "?")}</span><span class="num">${fmt(x.score)}${x.round_score != null && x.round_score !== x.score ? `（本轮 ${fmt(x.round_score)}）` : ""}</span></div>`).join("") +
+    (r.thumb ? `<img src="${r.thumb}" alt="结果页截图" style="max-width:200px;border-radius:8px;margin-top:6px;border:1px solid var(--rule)">` : "");
+}
+
+function chart(svg, series, opts) {
+  const e = exam(), W = 600, H = +svg.getAttribute("viewBox").split(" ")[3], L = 46, R = 8, T = 10, B = 22;
+  const n = e.turns.length + (opts.extra ? 1 : 0), x = i => L + (n <= 1 ? 0 : (i * (W - L - R)) / (n - 1));
+  const vals = series.flatMap(s => s.pts.map(p => p)).filter(v => v != null);
+  const max = Math.max(opts.min || 0, ...vals) * 1.08 || 1;
+  const y = v => T + (H - T - B) * (1 - v / max);
+  let g = "";
+  e.turns.forEach((t, i) => { const w = (W - L - R) / Math.max(1, n - 1); g += `<rect class="attrband attr-${t.attr}" x="${x(i) - w / 2}" y="${T}" width="${w}" height="${H - T - B}" style="fill:var(--c,transparent)"/>`; });
+  for (let k = 0; k <= 4; k++) { const v = (max / 4) * k; g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 3}" text-anchor="end">${opts.fmt ? opts.fmt(v) : Math.round(v)}</text>`; }
+  if (opts.half) { const hv = opts.half; g += `<rect class="half" x="${L}" y="${y(hv)}" width="${W - L - R}" height="${H - B - y(hv)}"/>`; }
+  if (opts.bars) opts.bars.forEach((v, i) => { if (v > 0) g += `<rect class="settle" x="${x(i) - 4}" y="${y(v)}" width="8" height="${H - B - y(v)}"/>`; });
+  series.forEach(s => {
+    const d = s.pts.map((v, i) => v == null ? null : `${x(i)},${y(v)}`).filter(Boolean);
+    if (d.length) g += `<polyline class="${s.cls}" points="${d.join(" ")}"/>`;
+  });
+  e.turns.forEach((t, i) => { if (i % Math.ceil(n / 12) === 0 || i === e.turns.length - 1) g += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle">剩${t.rem ?? "?"}</text>`; });
+  if (opts.extra) g += `<text x="${x(n - 1)}" y="${H - 6}" text-anchor="middle">结束</text>`;
+  const ci = e.turns.findIndex(t => t.turn === step().turn);
+  if (ci >= 0) g += `<line class="cur" x1="${x(ci)}" x2="${x(ci)}" y1="${T}" y2="${H - B}"/>`;
+  e.turns.forEach((t, i) => { const w = (W - L - R) / Math.max(1, n - 1); g += `<rect class="hit" data-s="${t.steps[0]}" x="${x(i) - w / 2}" y="${T}" width="${w}" height="${H - T - B}"><title>剩 ${t.rem} · ${t.attr} ×${t.mult ?? "?"} · 本回合 ${sgn(t.gain)}</title></rect>`; });
+  svg.innerHTML = g;
+  svg.querySelectorAll(".hit").forEach(r => r.onclick = () => { si = +r.dataset.s; renderAll(); });
+}
+
+function finalRaw(e) {
+  const f = e.final_score;
+  if (f == null) return null;
+  return e.label === "r1" ? Math.round(f / 1.2) : f;
+}
+
+function renderCharts() {
+  const e = exam(), first = t => e.steps[t.steps[0]];
+  const fin = finalRaw(e);
+  chart($("chartScore"), [
+    { cls: "opp", pts: [...e.turns.map(t => t.npc), e.turns.at(-1)?.npc ?? null] },
+    { cls: "me", pts: [...e.turns.map(t => t.start), fin] },
+  ], { fmt: v => fmt(v), bars: e.turns.map(t => t.settle), extra: true });
+  chart($("chartGenki"), [{ cls: "genki", pts: e.turns.map(t => first(t).genki) }], {});
+  const maxHp = Math.max(...e.steps.map(s => s.hp || 0));
+  chart($("chartRes"), [
+    { cls: "hp", pts: e.turns.map(t => first(t).hp) },
+    { cls: "mot", pts: e.turns.map(t => first(t).motivation) },
+    { cls: "imp", pts: e.turns.map(t => first(t).impression) },
+  ], { half: maxHp ? maxHp / 2 : null });
+}
+
+function loadForm(e, s, fresh = false) {
+  const mine = notesOf(e, s);
+  editing = fresh ? null : (mine.at(-1) || null);
+  form = { verdict: editing?.verdict || null, tags: new Set(editing?.tags || []) };
+  const opts = [["", "（不填）"]]
+    .concat(s.hand.filter(c => c.available !== false).map(c => ["打 " + c.name, "打 " + c.name]))
+    .concat(s.hand.filter(c => c.available === false).map(c => ["打 " + c.name, "打 " + c.name + "（当时不可打）"]))
+    .concat(s.drinks.map(d => ["喝 " + d.name, "喝 " + d.name]))
+    .concat([["结束回合", "结束回合"], ["这一步本身没问题", "这一步本身没问题（问题在别处）"]]);
+  if (editing?.should && !opts.some(o => o[0] === editing.should)) opts.push([editing.should, editing.should]);
+  $("should").innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join("");
+  $("should").value = editing?.should || "";
+  $("note").value = editing?.text ?? (fresh ? "" : (localStorage.getItem(noteKey(e, s)) || ""));
+  $("tagpick").innerHTML = TAGS.map(t => `<button data-t="${esc(t)}" aria-pressed="${form.tags.has(t)}">${esc(t)}</button>`).join("");
+  $("tagpick").querySelectorAll("button").forEach(b => b.onclick = () => { const t = b.dataset.t; form.tags.has(t) ? form.tags.delete(t) : form.tags.add(t); b.setAttribute("aria-pressed", form.tags.has(t)); });
+  $("verdictPick").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === form.verdict));
+  $("submitNote").textContent = editing ? "更新" : "提交";
+  $("delNote").hidden = !editing; $("newNote").hidden = !editing;
+  const st = $("noteStatus");
+  st.className = "status";
+  st.textContent = !online ? "服务器连不上，提交会先存在本机" : editing ? `已提交 · ${new Date(editing.ts * 1000).toLocaleString()}${mine.length > 1 ? ` · 这一步共 ${mine.length} 条` : ""}` : "";
+}
+$("verdictPick").querySelectorAll("button").forEach(b => b.onclick = () => { form.verdict = form.verdict === b.dataset.v ? null : b.dataset.v; $("verdictPick").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.v === form.verdict)); });
+
+async function fetchNotes() {
+  try {
+    const r = await fetch(`${API}?run=${encodeURIComponent(DATA.run)}`, { cache: "no-store" });
+    NOTES = (await r.json()).notes || []; online = true;
+  } catch { online = false; }
+}
+
+function payload(e, s) {
+  return { id: editing?.id, run: DATA.run, exam: e.label, attempt: e.attempt, seg: s.seg, seq: s.seq, turn: s.turn, rem: s.rem, attr: s.attr, mult: s.mult,
+    score: s.score, genki: s.genki, hp: s.hp, action: s.action.label, source: s.source, verdict: form.verdict || "", should: $("should").value,
+    tags: [...form.tags], text: $("note").value.trim(), client: navigator.userAgent.includes("Mobile") ? "mobile" : "desktop" };
+}
+
+async function post(body) {
+  const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j.note;
+}
+
+$("submitNote").onclick = async () => {
+  const e = exam(), s = step(), body = payload(e, s), st = $("noteStatus");
+  if (!body.verdict && !body.text && !body.should && !body.tags.length) { st.className = "status err"; st.textContent = "至少选一个判定或写一句说明"; return; }
+  try {
+    const n = await post(body);
+    NOTES = NOTES.filter(x => x.id !== n.id).concat(n); online = true;
+    localStorage.removeItem(noteKey(e, s));
+    loadForm(e, s); st.className = "status ok"; st.textContent = "已提交到服务器"; renderNotes(); renderStrip();
+  } catch (err) {
+    if (body.text) localStorage.setItem(noteKey(e, s), body.text);
+    st.className = "status err"; st.textContent = "提交失败，说明已暂存本机：" + err.message;
+  }
+};
+$("newNote").onclick = () => loadForm(exam(), step(), true);
+$("delNote").onclick = async () => {
+  if (!editing) return;
+  try { await post({ id: editing.id, deleted: true }); NOTES = NOTES.filter(x => x.id !== editing.id); loadForm(exam(), step()); renderNotes(); renderStrip(); toast("已删除"); }
+  catch (err) { toast("删除失败：" + err.message); }
+};
+
+function localOnly() {
+  const out = [];
+  DATA.exams.forEach(e => e.steps.forEach(s => { const v = localStorage.getItem(noteKey(e, s)); if (v && v.trim() && !notesOf(e, s).length) out.push({ e, s, v: v.trim() }); }));
+  return out;
+}
+$("uploadLocal").onclick = async () => {
+  let n = 0;
+  for (const { e, s, v } of localOnly()) {
+    try { const saved = await post({ run: DATA.run, exam: e.label, attempt: e.attempt, seg: s.seg, seq: s.seq, turn: s.turn, rem: s.rem, attr: s.attr, mult: s.mult, action: s.action.label, source: s.source, verdict: "问题", text: v, tags: [] }); NOTES.push(saved); localStorage.removeItem(noteKey(e, s)); n++; } catch {}
+  }
+  toast(`已上传 ${n} 条`); renderNotes(); renderStrip(); loadForm(exam(), step());
+};
+
+function noteItems() {
+  const items = [];
+  DATA.exams.forEach(e => e.steps.forEach(s => notesOf(e, s).forEach(n => items.push({ e, s, n }))));
+  return items;
+}
+
+function renderNotes() {
+  const items = noteItems();
+  $("uploadLocal").hidden = !(online && localOnly().length);
+  $("noteCount").textContent = items.length ? `共 ${items.length} 条${online ? "" : "（离线）"}` : (online ? "还没有标注" : "服务器连不上");
+  const vc = { 问题: "v-bad", 正确: "v-good", 不确定: "v-unsure" };
+  $("notesList").innerHTML = items.map((it, k) => `<li data-k="${k}"><span class="where">${esc(examName(it.e))} 剩${it.s.rem} #${it.s.seq}</span><span>${it.n.verdict ? `<span class="v ${vc[it.n.verdict] || ""}">${esc(it.n.verdict)}</span>` : ""}${it.n.should ? `应：${esc(it.n.should)}　` : ""}${esc(it.n.text || "")}${it.n.tags?.length ? ` <span class="muted">#${esc(it.n.tags.join(" #"))}</span>` : ""}</span></li>`).join("");
+  $("notesList").querySelectorAll("li").forEach(li => li.onclick = () => { const it = items[+li.dataset.k]; ei = DATA.exams.indexOf(it.e); si = it.e.steps.indexOf(it.s); renderAll(); });
+  return items;
+}
+
+function notesText() {
+  const items = renderNotes();
+  const lines = [`# 复盘标注：${DATA.run}`, ""];
+  items.forEach(({ e, s, n }) => lines.push(`- ${examName(e)} · 第${s.turn}回合（剩${s.rem}，${s.attr}×${s.mult ?? "?"}）· 段${s.seg} #${s.seq} · 当时：${s.action.label}（${SRC[s.source] || s.source}）` +
+    `\n  判定：${n.verdict || "—"}${n.should ? `；应该：${n.should}` : ""}${n.tags?.length ? `；类型：${n.tags.join("、")}` : ""}` + (n.text ? `\n  ${n.text.replace(/\n/g, "\n  ")}` : "")));
+  return lines.join("\n");
+}
+
+$("copyNotes").onclick = async () => { const t = notesText(); try { await navigator.clipboard.writeText(t); toast("已复制"); } catch { const ta = document.createElement("textarea"); ta.value = t; document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); toast("已复制"); } };
+$("dlNotes").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([notesText()], { type: "text/markdown" })); a.download = `${DATA.run}-标注.md`; a.click(); };
+document.addEventListener("keydown", ev => {
+  if (ev.target.tagName === "TEXTAREA") return;
+  const e = exam(), cur = step().turn;
+  if (ev.key === "ArrowRight") si = Math.min(e.steps.length - 1, si + 1);
+  else if (ev.key === "ArrowLeft") si = Math.max(0, si - 1);
+  else if (ev.key === "]") { const t = e.turns.find(t => t.turn > cur); if (t) si = t.steps[0]; }
+  else if (ev.key === "[") { const ts = e.turns.filter(t => t.turn < cur); if (ts.length) si = ts.at(-1).steps[0]; }
+  else return;
+  ev.preventDefault(); renderAll();
+});
+
+function renderAll() { renderHeader(); renderBlunders(); renderStrip(); renderStep(); renderCharts(); renderResult(); renderNotes(); }
+renderAll();
+fetchNotes().then(() => renderAll());
+</script>
+</body>
+</html>
