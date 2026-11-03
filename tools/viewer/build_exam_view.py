@@ -8,6 +8,7 @@
 
 有低级失误报告（tools/audit/blunders.py 产出的 reports/analysis/*-blunders.json，segments 含本局）时自动读入：
 页首列出失误汇总，失误步在回合条和步骤上标红。也可以用 --blunders 指定文件。
+每场考试的开局牌库（手牌 + 山札 + 弃牌，按一次性 / 再動 / 塞眠気标注，R2 对比 R1 的增减）见 deck_view.py。
 """
 
 from __future__ import annotations
@@ -282,6 +283,9 @@ def main() -> None:
     data = build(args.base, Path(args.traces))
     if not data["exams"]:
         raise SystemExit(f"{args.base}：没有找到考试步骤")
+    from deck_view import attach_decks
+
+    attach_decks(data, _segments(Path(args.traces), args.base))
     bl = Path(args.blunders) if args.blunders else find_blunders(args.base)
     if bl is not None and bl.exists():
         attach_blunders(data, json.loads(bl.read_text(encoding="utf-8")))

@@ -115,8 +115,9 @@ def _reduce_fields(s: GameState, obs: Observation) -> None:
         _attr_permil(s, obs)
     if obs.page.name == "HIF_EXAM_BRIEFING":
         pct = obs.fields.get("multiplier_pct")
-        if isinstance(pct, dict) and all(pct.get(k) for k in ("Vo", "Da", "Vi")):
-            s.exam_session.brief_permil = {k: int(pct[k]) * 10 for k in ("Vo", "Da", "Vi")}
+        got = {k: int(pct[k]) * 10 for k in ("Vo", "Da", "Vi") if pct.get(k)} if isinstance(pct, dict) else {}
+        if got:  # 读到几个属性记几个（q17 #431 Da 一度读不到）；整体替换，不与上一场（本战 R1）的旧值混
+            s.exam_session.brief_permil = got
 
 
 def _attr_permil(s: GameState, obs: Observation) -> None:

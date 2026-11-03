@@ -17,7 +17,8 @@ verdict：read_error（读数不合理，丢弃重读）/ model_gap（读数合�
 - turn_step        剩余回合每次减 0 或 1；+1 视为加回合（model_gap，待事件确认），减 2 以上为漏观测（model_gap）
 - param_monotonic  培育中属性只增不减（目前没有减属性的事件）
 - star_monotonic   星数只增不减
-- attr_multiplier  考试页 (attr, 倍率) 等于考前说明页的值（exam_session.brief_permil）；倍率等于另一属性的值时判属性读错
+- attr_multiplier  考试页 (attr, 倍率) 等于考前说明页的值（exam_session.brief_permil，差 ≤ 1%）；倍率等于另一属性的值时判属性读错
+- model_permil     模拟器 / finals_context 的倍率 vs 说明页真值（model_permil_checks，考试第一帧由 battle 调；差 > 1% 为 model_gap）
 - drink_capacity   持有饮料数 ≤ drink_capacity（未观测到时按 UI 4 格）
 - counters         三选一刷新 / 除去次数只减不增
 - p_delta          P 点变化 = 本步事件里的价格 / 奖励之和（需传 events；没有事件不判）
@@ -249,21 +250,42 @@ def check_invariants(prev, obs, *, events: list[dict] | None = None, debug: bool
     return out + ok
 
 
+MULT_TOL = 0.01  # 倍率 vs 说明页真值：差 ≤ 1% 算一致（画面是整数 %，换算千分比有舍入）
+
+
+def _pct_diff(mp: int, want: int) -> str:
+    return f"差 {mp - want:+d}‰（{(mp - want) / want * 100:+.1f}%）"
+
+
 def _brief_check(seq: int, attr: str | None, mp: int | None, brief: dict | None, ok: list | None) -> list[Check]:
-    """考试页的 (attr, 倍率) 必须等于考前说明页的值（整场考试倍率不变）。
-    倍率恰好等于说明页上另一个属性的值时，读错的是属性（只报 exam.attr）；否则报倍率。
+    """考试页的 (attr, 倍率) 必须等于考前说明页的值（整场考试倍率不变；说明页是真值，用户 2026-11-02）。差 ≤ 1% 算一致。
+    倍率恰好等于说明页上另一个属性的值时，读错的是属性（只报 exam.attr）；否则报倍率，note 写差值。
     现有读错都是首位被回合转盘的箭头遮住：1481→7481、1085→11085、1905→905。"""
     if not brief or attr not in brief or mp is None:
         return []
     want = brief[attr]
-    if mp == want:
+    if abs(mp - want) <= want * MULT_TOL:
         if ok is not None:
-            ok.append(_check(seq, "exam.multiplier_permil", want, mp, "consistent", "attr_multiplier"))
+            ok.append(_check(seq, "exam.multiplier_permil", want, mp, "consistent", "attr_multiplier", _pct_diff(mp, want) if mp != want else None))
         return []
     others = [a for a, v in brief.items() if a != attr and v == mp]
     if len(others) == 1 and list(brief.values()).count(want) == 1:
         return [_check(seq, "exam.attr", others[0], attr, "read_error", "attr_multiplier", f"倍率 {mp} 是说明页 {others[0]} 的值")]
-    return [_check(seq, "exam.multiplier_permil", {"attr": attr, "value": want}, mp, "read_error", "attr_multiplier", f"说明页 {attr} = {want}")]
+    return [_check(seq, "exam.multiplier_permil", {"attr": attr, "value": want}, mp, "read_error", "attr_multiplier",
+                   f"说明页 {attr} = {want}，{_pct_diff(mp, want)}")]  # fmt: skip
+
+
+def model_permil_checks(seq: int, label: str, model: dict | None, brief: dict | None) -> list[Check]:
+    """模型倍率（模拟器考试元数据 / 本战 finals_context.permil，按参数算的）vs 考前说明页真值：每个属性一条，差 > 1% 记 model_gap。"""
+    out = []
+    for a in ATTRS:
+        m, want = (model or {}).get(a), (brief or {}).get(a)
+        if not m or not want:
+            continue
+        bad = abs(int(m) - want) > want * MULT_TOL
+        out.append(_check(seq, f"exam.model_permil.{a}", want, int(m), "model_gap" if bad else "consistent", "model_permil",
+                          f"{label}：模型 {int(m)} vs 说明页 {want}，{_pct_diff(int(m), want)}"))  # fmt: skip
+    return out
 
 
 def _p_delta(seq, old, new, events, out, ok, debug) -> None:

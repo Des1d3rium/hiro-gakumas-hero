@@ -196,6 +196,30 @@ def test_multiplier_matches_brief():
     assert not check_invariants(brief_state(), mult(1, "Vo", 14810))
 
 
+def test_multiplier_within_one_percent():
+    """说明页是真值，差 ≤ 1% 算一致（画面整数 %）；差 > 1% 报读错，note 写差值。"""
+    assert not check_invariants(brief_state(), mult(1, "Vo", 14900))
+    (c,) = [c for c in check_invariants(brief_state(), mult(1, "Vo", 15200)) if c.rule == "attr_multiplier"]
+    assert c.verdict == "read_error" and "+390‰" in c.note and "+2.6%" in c.note
+
+
+def test_model_permil_vs_brief():
+    """模拟器 / finals_context 的倍率 vs 说明页：每属性一条，差 > 1% 为 model_gap。"""
+    from hiro.state.invariants import model_permil_checks
+
+    cs = model_permil_checks(5, "r1", {"Vo": 14810, "Da": 13000, "Vi": 10860}, {"Vo": 14810, "Da": 12470, "Vi": 10850})
+    assert [(c.field, c.verdict) for c in cs] == [("exam.model_permil.Vo", "consistent"), ("exam.model_permil.Da", "model_gap"),
+                                                  ("exam.model_permil.Vi", "consistent")]  # fmt: skip
+    assert "r1" in cs[1].note and "+530‰" in cs[1].note
+    assert model_permil_checks(5, "r1", {"Vo": 14810}, None) == []
+
+
+def test_partial_brief_kept():
+    """说明页只读到两个属性（q17 #431 Da 一度读不到）：读到的照样当真值，不与上一场旧值混。"""
+    s = reduce(brief_state(), obs(1, "HIF_EXAM_BRIEFING", multiplier_pct={"Vo": 2408, "Da": None, "Vi": 1616}))
+    assert s.exam_session.brief_permil == {"Vo": 24080, "Vi": 16160}
+
+
 def test_multiplier_first_digit_covered():
     """Vi 实际 1481%，回合转盘箭头盖住首位读成 7481%；1085% 多读一位成 11085%。"""
     assert ("exam.multiplier_permil", "attr_multiplier") in rules(check_invariants(brief_state(), mult(1, "Vo", 74810)))

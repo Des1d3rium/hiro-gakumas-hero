@@ -95,6 +95,7 @@ HIF_EXAM 的 `motivation` / `impression`：状态栏读到槽位且每个蓝底�
 
 `action` `immediate`（字段 → 值或 `[min, max]`）`expected` `spread` `vs_best` `vs_best_se` `turn_passed` `summary` `engine`（sim / formula）。
 `Preview.from_slots(slot_previews(...))` 把 `hiro.sim.preview` 的结果按槽位转成契约。
+考试预演带可观测字段（都可空）：`worlds`（这个动作实际算了几个世界）、`preview_ms`（这一步预演总耗时）、`worlds_planned` / `worlds_done`（计划 / 实际算完的世界数，截止时间到了会少于计划）、`eliminated`（没算或中途淘汰的原因，剪枝二期起用）。汇总：`python tools/preview_stats.py traces/<run>…`。
 
 ## ExecutionResult
 
@@ -153,3 +154,9 @@ HIF_EXAM 的 `motivation` / `impression`：状态栏读到槽位且每个蓝底�
 | 2026-11-01 | 识别-01（q10 特別指導实机帧）：SPECIAL_GUIDANCE 加 `view` `menu`{items[{item_index, id, name, price, left, maxed, available, selected, center}], total_left} `cards_left` `at_top`，cards 改为实测网格（guidance 几何）并带 available（压暗）；新页面 CUSTOMIZE_RESULT（`name` `card_id` `upgrade`，事件 CARD_CUSTOMIZE）；DIALOG 认「カスタマイズ実行確認」「特別指導終了確認」（kind customize_confirm / guidance_end）。 |
 | 2026-11-01 | 识别-01（main10 相談強化）：选卡对话框 cards 加 `dimmed`（压暗；强化对话框里 = 已满级不能再强化，特別指導里 = 不能定制），压暗格先提亮再判「+」/ 定制；SKILL_CARD_ENHANCE 加 `upgradable`（详情框「強化できません / これ以上強化不可能」→ False）。 |
 | 2026-11-01 | 识别-01（q11 特別指導）：SPECIAL_GUIDANCE 加 `produce_point` `stamina` `max_stamina`（头部 P / 体力，与选行动页同位置，`pages.read_hud_resources` 三票；轮间页同用）。 |
+| 2026-11-02 | 识别-01（协调：每局 4–7 次认不出 30 秒）：新页面 DELETE_RESULT（`cards` `text`，「〜を削除しました」，事件 CARD_DELETE confirmed=True，覆盖考试后自动处理基础卡）；`hiro.vision.quick.quick_page` 快速判页接入主循环（HiroController._quick_page）。 |
+| 2026-11-02 | 识别-01（第十七局选拔认不出逐处核对）：快速判页补 LOADING（右下「NOW LOADING」）、TRANSITION `kind` flash（不点）/ custom_cutin / exam_bonus（点 (12,12)）；PDRINK_MAX 加 `incomings`（全部新饮料，一次可能两瓶；`incoming` 仍是最下面那瓶），`select_left` 改整屏读（原来只看 y<1150，长弹窗一直 None）。 |
+| 2026-11-02 | 识别-01（用户：考试开头的倍率弹窗最准）：考前说明页由快速判页在「タップして次へ」出来后读成 HIF_EXAM_BRIEFING（加 `finals`，本战「優勝条件」也认），演出中不读不点；brief_permil 读到几个属性记几个；不变量 attr_multiplier 差 ≤ 1% 算一致、note 写差值；新规则 model_permil（存档 / finals_context 倍率 vs 说明页，考试第一帧，差 > 1% 为 model_gap，一致的也记）；审计加「读数 / 模型不一致」（model_mismatch）。 |
+| 2026-11-02 | `Preview` 加可观测字段 `worlds` / `preview_ms` / `worlds_planned` / `worlds_done` / `eliminated`（可空、只增不改，版本号不变；协调预演加速一期第 5 项）。汇总脚本 `tools/preview_stats.py`。 |
+| 2026-11-02 | 识别-01（第十八局本战轮间「リフレッシュ確認」挂 30 秒）：DIALOG kind `refresh_confirm`，`confirm` = {p_before, p_after, cost, jewel, cancel, ok}（`pages.read_refresh_confirm`）；HIF_ROUND_INTERVAL 加 `dialog`（盖在轮间上的确认框，`pages.overlay_dialog`，没有为 None）；快速判页认出后点「キャンセル」（刷新动作自己按更新，落到主循环的是没有刷新决策时挂着的框）。 |
+| 2026-11-03 | 识别-01（决策 da6c8e5 牌组读全）：`deck.merge_deck_list(screens)` 一览页多屏 → DECK_LIST 字段（deck 只在恰好拼出标签张数且全认出时给，重叠拼不上退回首屏 + 末屏），本战开局写 produce.deck；`merge_dialog_screens` 的 cards 加 `dimmed` `screen`；SKILL_CARD_REMOVAL / ENHANCE / CHANGE_2 加 `deck_complete` `deck_screens`（执行侧滑动读整副后给，cards 换成整副、带 `deck_index` `screen`）；轮间 changes 的 upgrade 不再因橙色插画给 None。 |

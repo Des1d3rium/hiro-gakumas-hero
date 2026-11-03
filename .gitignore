@@ -1,7 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
-traces/
-reports/
-datasets/
+/traces/
+/reports/
+/datasets/
 .temp/

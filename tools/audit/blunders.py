@@ -43,6 +43,7 @@ KINDS: dict[str, dict[str, str]] = {
     },
     "识别": {
         "read_error": "读数被不变量拦下",
+        "model_mismatch": "读数 / 模型不一致（倍率 vs 考前说明页真值）",
         "unknown_page": f"页面认不出超过 {UNKNOWN_SECS} 秒",
         "result_no_score": "结果页没读到分数",
     },
@@ -68,6 +69,7 @@ KINDS: dict[str, dict[str, str]] = {
     },
 }
 GAPS = {
+    "model_mismatch": "说明页倍率由快速判页在「タップして次へ」出来后读（识屏 2026-11-02 起）；更早的局没有说明页读数，算不出。",
     "wrong_card": "考试出牌只按前后两帧手牌差推断（同回合、无抽牌干扰时可靠）；执行记录没有被点卡框的位置，点错但手牌恰好对得上时测不到。",
     "hand_mismatch": "依赖录像器 live_hand_rebuilt / unfixable（2026-11-01 晚加入）；更早的局只有截图兜底记录，算不出。",
     "shop_not_spent": "相談页没有 P 点读数，只能按「决策要买、执行没成」统计，算不出没花掉的 P 数；价格在候选预览里有才给。",
@@ -299,17 +301,36 @@ def hand_mismatch(seg: Segment) -> list[Finding]:
 
 
 # ------------------------------------------------------------------ 识别
+MULT_RULES = ("attr_multiplier", "model_permil")  # 倍率对说明页真值：单独计「读数 / 模型不一致」，不重复计进 read_error
+
+
 def read_error(seg: Segment) -> list[Finding]:
     out, seen = [], set()
     for st in seg.steps:
         for c in st.get("checks") or []:
-            if c.get("verdict") != "read_error":
+            if c.get("verdict") != "read_error" or c.get("rule") in MULT_RULES:
                 continue
             key = (c.get("seq"), c.get("field"))
             if key in seen:
                 continue
             seen.add(key)
             out.append(_f(seg, "识别", "read_error", st, f"{c.get('field')}={c.get('observed')!r}（{c.get('rule')}，参考 {c.get('predicted')!r}）"))
+    return out
+
+
+def model_mismatch(seg: Segment) -> list[Finding]:
+    """考试 HUD 倍率（attr_multiplier，read_error）/ 模拟器·finals_context 倍率（model_permil，model_gap）与考前说明页真值差 > 1%。"""
+    out, seen = [], set()
+    for st in seg.steps:
+        for c in st.get("checks") or []:
+            if c.get("rule") not in MULT_RULES or c.get("verdict") not in ("read_error", "model_gap"):
+                continue
+            key = (c.get("seq"), c.get("field"))
+            if key in seen:
+                continue
+            seen.add(key)
+            src = "HUD" if c.get("rule") == "attr_multiplier" else "模型"
+            out.append(_f(seg, "识别", "model_mismatch", st, f"{src} {c.get('field')}={c.get('observed')!r} vs 说明页 {c.get('predicted')!r}：{c.get('note') or ''}"))
     return out
 
 
@@ -631,7 +652,7 @@ def retry_unused(segs: list[Segment]) -> list[Finding]:
     return out
 
 
-SEGMENT_DETECTORS = [skip_with_playable, slot_mismatch, wrong_card_exam, wrong_card_select, hand_mismatch, read_error, unknown_page,
+SEGMENT_DETECTORS = [skip_with_playable, slot_mismatch, wrong_card_exam, wrong_card_select, hand_mismatch, read_error, model_mismatch, unknown_page,
                      result_no_score, execution, selection_log]  # fmt: skip
 
 

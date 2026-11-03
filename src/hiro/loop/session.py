@@ -51,6 +51,8 @@ class Session:
         self.last: Observation | None = None
         self.img = None  # 最近一次 observe 的截图
         self.steps = 0
+        self._last_exec_t: float | None = None  # 上一个有执行结果的步落盘时刻（time.time），算过场耗时
+        self.advance_taps = 0  # 上一个决策步之后主循环点空白推进的次数（HiroController）
         self._buffer: list[Observation] = []  # 上一条 Step 之后并入状态的全部观测（重放用）
         self._decision_state: GameState | None = None  # 第一次执行校验开始时的状态 = 决策输入（Step.state）
         # 1.2 状态推算与互验（docs/state-events.md）
@@ -183,6 +185,12 @@ class Session:
     def note(self, text: str) -> None:
         self.notes.append(text)
 
+    def add_checks(self, checks: list) -> None:
+        """主循环之外算出的互验（如 battle 的模型倍率 vs 说明页真值）：并入下一条 Step 的 checks。"""
+        for c in checks:
+            self.check_counts[c.verdict] += 1
+        self._checks.extend(checks)
+
     def record(self, obs: Observation | None = None, *, decision: Decision | None = None, previews: list[Preview] | None = None,
                execution: ExecutionResult | None = None, timings_ms: dict[str, float] | None = None) -> Step:  # fmt: skip
         obs = obs or self.last
@@ -199,13 +207,24 @@ class Session:
             for ev in events_from_step(obs.page.name, decision.action.to_dict(), bool(execution.ok), state_in.page_fields,
                                        state_in.produce, seq=obs.seq):  # fmt: skip
                 self.emit(ev)
-        checks = self._checks if self.debug_recog else [c for c in self._checks if c.verdict in ("read_error", "model_gap")]
+        timings_ms = dict(timings_ms or {})
+        if decision is not None and obs.page.name != "HIF_EXAM":
+            # 过场耗时：上一个执行完的决策步 → 这一步的决策帧（不含本步决策），以及其间主循环点空白推进的次数（hiro.loop.advance）
+            if self._last_exec_t is not None:
+                timings_ms.setdefault("transition", max(0.0, obs.t - self._last_exec_t) * 1000)
+            timings_ms.setdefault("advance_taps", self.advance_taps)
+        if decision is not None:
+            self.advance_taps = 0
+        # 模型倍率核对每场 3 条，一致的也留（证明这场核对过）
+        checks = self._checks if self.debug_recog else [c for c in self._checks if c.verdict in ("read_error", "model_gap") or c.rule == "model_permil"]
         events, preds = self._events, self._new_predictions
         self._checks, self._events, self._new_predictions = [], [], []
         step = Step(seq=obs.seq, t=time.time(), observation=obs, state=state_in, events=events, predictions=preds, checks=checks,
                     state_after=None if state_in is self.state else self.state, decision=decision, previews=list(previews or []),
                     execution=execution, observations_before=before, observations_after=after, notes=list(self.notes),
-                    timings_ms=dict(timings_ms or {}))  # fmt: skip
+                    timings_ms=timings_ms)  # fmt: skip
+        if execution is not None:
+            self._last_exec_t = step.t
         self.notes = []
         self.trace.write(step)
         self.steps += 1

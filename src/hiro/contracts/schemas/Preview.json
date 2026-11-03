@@ -101,6 +101,36 @@
   "engine": {
    "type": "string"
   },
+  "worlds": {
+   "type": [
+    "integer",
+    "null"
+   ]
+  },
+  "preview_ms": {
+   "type": [
+    "number",
+    "null"
+   ]
+  },
+  "worlds_planned": {
+   "type": [
+    "integer",
+    "null"
+   ]
+  },
+  "worlds_done": {
+   "type": [
+    "integer",
+    "null"
+   ]
+  },
+  "eliminated": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
   "version": {
    "type": "string"
   }
@@ -115,6 +145,11 @@
   "turn_passed",
   "summary",
   "engine",
+  "worlds",
+  "preview_ms",
+  "worlds_planned",
+  "worlds_done",
+  "eliminated",
   "version"
  ],
  "additionalProperties": false,

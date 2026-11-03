@@ -108,6 +108,20 @@ section + section { margin-top: 26px; }
 .decision .reason { color: var(--ink-2); max-width: 72ch; }
 .warn { color: var(--warn); font-size: 13px; }
 .err { color: var(--bad); font-size: 13px; }
+/* ---------- 开局牌库 ---------- */
+.deck-sum { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+.deck-sum b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.deck-sum .warn b { color: var(--bad); }
+.deck-grp { margin: 6px 0 2px; font-size: 12px; color: var(--ink-3); }
+.deck-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.dk { display: inline-flex; align-items: baseline; gap: 4px; border: 1px solid var(--rule); border-radius: 6px; padding: 2px 7px; font-size: 13px; background: var(--bg-raise); cursor: help; }
+.dk.reuse { border-color: color-mix(in oklch, var(--warn) 55%, var(--rule)); background: color-mix(in oklch, var(--warn) 9%, var(--bg-raise)); }
+.dk.bad { border-color: color-mix(in oklch, var(--bad) 55%, var(--rule)); background: color-mix(in oklch, var(--bad) 9%, var(--bg-raise)); }
+.dk.trouble { color: var(--ink-3); border-style: dashed; }
+.dk .tag { font-size: 10px; }
+.dk .tag.core { background: oklch(from var(--good) l c h / .16); color: var(--good); }
+.deck-diff { font-size: 13px; margin-top: 8px; color: var(--ink-2); }
+.deck-legend { font-size: 12px; color: var(--ink-3); margin-top: 8px; }
 /* ---------- 低级失误 ---------- */
 .blunders { border: 1px solid color-mix(in oklch, var(--bad) 45%, var(--rule)); border-radius: var(--radius); padding: 8px 12px; background: color-mix(in oklch, var(--bad) 6%, var(--bg)); }
 .blunders summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; list-style: none; }
@@ -240,6 +254,10 @@ kbd { font: 11px var(--mono); border: 1px solid var(--rule); border-bottom-width
 <div class="strip-wrap"><div class="strip" id="strip" aria-label="回合"></div></div>
 <main>
   <div>
+    <section id="deckSec" hidden>
+      <h2>开局牌库 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">· 这场考试第一步时的整副牌，悬停看效果</span></h2>
+      <div id="deck"></div>
+    </section>
     <section>
       <h2 id="stepHead">步骤</h2>
       <div class="steps" id="steps"></div>
@@ -288,7 +306,7 @@ kbd { font: 11px var(--mono); border: 1px solid var(--rule); border-bottom-width
       </div>
     </section>
     <section>
-      <h2>标注这一步 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">· 提交后存到服务器，各设备同步</span></h2>
+      <h2>标注这一步 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">· 改动自动保存到服务器，各设备同步</span></h2>
       <div class="form">
         <div>
           <label class="l">判定</label>
@@ -311,7 +329,7 @@ kbd { font: 11px var(--mono); border: 1px solid var(--rule); border-bottom-width
           <textarea id="note" placeholder="例如：先打叠元气的 距離感の基本，再打按元气得分的 仕草の基本+"></textarea>
         </div>
         <div class="notes-bar" style="margin-top:0">
-          <button class="btn primary" id="submitNote">提交</button>
+          <button class="btn primary" id="submitNote" hidden>提交</button>
           <button class="btn" id="newNote" hidden>再加一条</button>
           <button class="btn" id="delNote" hidden>删除</button>
           <span class="status" id="noteStatus"></span>
@@ -544,6 +562,7 @@ function renderCharts() {
 }
 
 function loadForm(e, s, fresh = false) {
+  flushSave(); saveCtx = null;
   const mine = notesOf(e, s);
   editing = fresh ? null : (mine.at(-1) || null);
   form = { verdict: editing?.verdict || null, tags: new Set(editing?.tags || []) };
@@ -557,15 +576,60 @@ function loadForm(e, s, fresh = false) {
   $("should").value = editing?.should || "";
   $("note").value = editing?.text ?? (fresh ? "" : (localStorage.getItem(noteKey(e, s)) || ""));
   $("tagpick").innerHTML = TAGS.map(t => `<button data-t="${esc(t)}" aria-pressed="${form.tags.has(t)}">${esc(t)}</button>`).join("");
-  $("tagpick").querySelectorAll("button").forEach(b => b.onclick = () => { const t = b.dataset.t; form.tags.has(t) ? form.tags.delete(t) : form.tags.add(t); b.setAttribute("aria-pressed", form.tags.has(t)); });
+  $("tagpick").querySelectorAll("button").forEach(b => b.onclick = () => { const t = b.dataset.t; form.tags.has(t) ? form.tags.delete(t) : form.tags.add(t); b.setAttribute("aria-pressed", form.tags.has(t)); scheduleSave(0); });
   $("verdictPick").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === form.verdict));
-  $("submitNote").textContent = editing ? "更新" : "提交";
   $("delNote").hidden = !editing; $("newNote").hidden = !editing;
   const st = $("noteStatus");
   st.className = "status";
-  st.textContent = !online ? "服务器连不上，提交会先存在本机" : editing ? `已提交 · ${new Date(editing.ts * 1000).toLocaleString()}${mine.length > 1 ? ` · 这一步共 ${mine.length} 条` : ""}` : "";
+  st.textContent = !online ? "服务器连不上，改动会先存在本机" : editing ? `已保存 · ${new Date(editing.ts * 1000).toLocaleString()}${mine.length > 1 ? ` · 这一步共 ${mine.length} 条` : ""}` : "选判定、标签或写说明，会自动保存";
 }
-$("verdictPick").querySelectorAll("button").forEach(b => b.onclick = () => { form.verdict = form.verdict === b.dataset.v ? null : b.dataset.v; $("verdictPick").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.v === form.verdict)); });
+$("verdictPick").querySelectorAll("button").forEach(b => b.onclick = () => { form.verdict = form.verdict === b.dataset.v ? null : b.dataset.v; $("verdictPick").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.v === form.verdict)); scheduleSave(0); });
+$("should").onchange = () => scheduleSave(0);
+$("note").oninput = () => scheduleSave(800);
+$("note").onblur = () => flushSave();
+window.addEventListener("pagehide", () => flushSave());
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushSave(); });
+
+// ---------- 自动保存：每次改动排一次保存（文字停顿 0.8 秒），同一步的保存串行，第一次保存拿到 id 后续都更新这一条 ----------
+let saveTimer = null, saveCtx = null, inflight = Promise.resolve();
+const formNow = () => ({ verdict: form.verdict || "", should: $("should").value, tags: [...form.tags], text: $("note").value.trim() });
+function scheduleSave(ms) {
+  if (!saveCtx || saveCtx.e !== exam() || saveCtx.s !== step()) saveCtx = { e: exam(), s: step(), id: editing?.id };
+  saveCtx.form = formNow();
+  clearTimeout(saveTimer);
+  const st = $("noteStatus"); st.className = "status"; st.textContent = "保存中…";
+  const c = saveCtx;
+  saveTimer = setTimeout(() => { saveTimer = null; saveNow(c); }, ms);
+}
+function flushSave() {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer); saveTimer = null;
+  if (saveCtx) { saveCtx.form = (saveCtx.e === exam() && saveCtx.s === step()) ? formNow() : saveCtx.form; saveNow(saveCtx); }
+}
+function saveNow(c) {
+  const f = c.form, empty = !f.verdict && !f.text && !f.should && !f.tags.length;
+  inflight = inflight.then(async () => {
+    const here = () => exam() === c.e && step() === c.s, st = $("noteStatus");
+    try {
+      if (empty) {
+        if (!c.id) { if (here()) { st.className = "status"; st.textContent = "选判定、标签或写说明，会自动保存"; } return; }
+        await post({ id: c.id, deleted: true });
+        NOTES = NOTES.filter(x => x.id !== c.id); c.id = null;
+        if (here()) { editing = null; $("delNote").hidden = true; $("newNote").hidden = true; st.className = "status"; st.textContent = "已清空"; }
+      } else {
+        const n = await post({ ...payload(c.e, c.s), ...f, id: c.id });
+        c.id = n.id; NOTES = NOTES.filter(x => x.id !== n.id).concat(n); online = true;
+        localStorage.removeItem(noteKey(c.e, c.s));
+        if (here()) { editing = n; $("delNote").hidden = false; $("newNote").hidden = false; st.className = "status ok"; st.textContent = `已自动保存 · ${new Date().toLocaleTimeString()}`; }
+      }
+      renderNotes(); renderStrip();
+    } catch (err) {
+      if (f.text) localStorage.setItem(noteKey(c.e, c.s), f.text);
+      if (here()) { st.className = "status err"; st.textContent = "保存失败，说明已暂存本机：" + err.message; }
+    }
+  });
+  return inflight;
+}
 
 async function fetchNotes() {
   try {
@@ -581,7 +645,7 @@ function payload(e, s) {
 }
 
 async function post(body) {
-  const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), keepalive: true });
   const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j.note;
 }
 
@@ -598,9 +662,10 @@ $("submitNote").onclick = async () => {
     st.className = "status err"; st.textContent = "提交失败，说明已暂存本机：" + err.message;
   }
 };
-$("newNote").onclick = () => loadForm(exam(), step(), true);
+$("newNote").onclick = () => { flushSave(); inflight.then(() => loadForm(exam(), step(), true)); };
 $("delNote").onclick = async () => {
   if (!editing) return;
+  clearTimeout(saveTimer); saveTimer = null; await inflight; saveCtx = null;
   try { await post({ id: editing.id, deleted: true }); NOTES = NOTES.filter(x => x.id !== editing.id); loadForm(exam(), step()); renderNotes(); renderStrip(); toast("已删除"); }
   catch (err) { toast("删除失败：" + err.message); }
 };
@@ -655,7 +720,41 @@ document.addEventListener("keydown", ev => {
   ev.preventDefault(); renderAll();
 });
 
-function renderAll() { renderHeader(); renderBlunders(); renderStrip(); renderStep(); renderCharts(); renderResult(); renderNotes(); }
+
+const GRP = { hand: "手牌", draw: "山札", discard: "弃牌", exile: "除外" };
+function deckChip(c) {
+  const tags = [];
+  if (c.trouble) tags.push(`<span class="tag">トラブル</span>`);
+  else if (c.once === true) tags.push(`<span class="tag">一次性</span>`);
+  else if (c.once === false) tags.push(`<span class="tag">可复用</span>`);
+  if (c.redo) tags.push(`<span class="tag">再動</span>`);
+  if (c.sleep) tags.push(`<span class="tag">塞眠気</span>`);
+  if (c.basic && !c.trouble) tags.push(`<span class="tag">初始</span>`);
+  if (c.core) tags.push(`<span class="tag core">核心</span>`);
+  const reuseJunk = c.once === false && !c.trouble && !c.redo && !c.core;
+  const cls = c.trouble ? "trouble" : reuseJunk ? "bad" : c.once === false ? "reuse" : "";
+  return `<span class="dk ${cls}" title="${esc(c.text || "")}">${esc(c.name)}${tags.join("")}</span>`;
+}
+function renderDeck() {
+  const D = exam().deck, sec = $("deckSec");
+  if (!D) { sec.hidden = true; return; }
+  sec.hidden = false;
+  const S = D.summary;
+  let html = `<div class="deck-sum"><span>共 <b>${S.total}</b> 张</span><span>一次性 <b>${S.once}</b></span><span>可复用 <b>${S.reusable}</b></span>
+    <span class="${S.reusable_noredo ? "warn" : ""}">可复用且没再動的非核心 <b>${S.reusable_noredo}</b></span>
+    <span class="${S.sleep_gen ? "warn" : ""}">会塞眠気 <b>${S.sleep_gen}</b></span><span>眠気等 <b>${S.trouble}</b></span><span>初始卡 <b>${S.basic}</b></span>
+    ${D.drinks?.length ? `<span>饮料 <b>${D.drinks.map(esc).join("、")}</b></span>` : ""}${S.unknown ? `<span>未查到 <b>${S.unknown}</b></span>` : ""}</div>`;
+  for (const [k, label] of Object.entries(GRP)) {
+    const L = D.groups[k] || [];
+    if (!L.length && k !== "hand") continue;
+    html += `<div class="deck-grp">${label} ${L.length} 张</div><div class="deck-list">${L.map(deckChip).join("") || '<span class="muted">—</span>'}</div>`;
+  }
+  const d = exam().deck_diff;
+  if (d) html += `<div class="deck-diff">比 ${d.vs === "r1" ? "R1" : esc(d.vs)} 开局：多了 ${d.added.length ? d.added.map(esc).join("、") : "无"}；少了 ${d.removed.length ? d.removed.map(esc).join("、") : "无"}</div>`;
+  html += `<div class="deck-legend">红框 = 可复用、没有再動的非核心牌（优先换 / 删）；黄框 = 其他可复用牌；虚线 = 眠気等トラブル。</div>`;
+  $("deck").innerHTML = html;
+}
+function renderAll() { renderHeader(); renderBlunders(); renderDeck(); renderStrip(); renderStep(); renderCharts(); renderResult(); renderNotes(); }
 renderAll();
 fetchNotes().then(() => renderAll());
 </script>

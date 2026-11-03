@@ -23,6 +23,13 @@ class Preview(Contract):
     turn_passed: bool | None = None
     summary: dict[str, Any] | None = None  # 给 LLM 的可读摘要（hiro.sim.preview.Preview.to_prompt 或 state.context 的行）
     engine: str = "sim"  # sim（gakumas_sim）/ formula（主数据公式）
+    # 可观测（协调 2026-11-02 预演加速一期第 5 项）：这个动作实际算了几个世界；这一步预演的总耗时 / 计划世界数 / 实际算完的世界数；
+    # 没算或中途淘汰的原因（预筛 / 淘汰赛，二期起用；一期为 None）
+    worlds: int | None = None
+    preview_ms: float | None = None
+    worlds_planned: int | None = None
+    worlds_done: int | None = None
+    eliminated: str | None = None
     version: str = VERSION
 
     @classmethod
@@ -38,6 +45,11 @@ class Preview(Contract):
             turn_passed=bool(p.turn_passed),
             summary=p.to_prompt(),
             engine="sim",
+            worlds=len(p.samples) if getattr(p, "samples", None) is not None else None,
+            preview_ms=getattr(p, "preview_ms", None),
+            worlds_planned=getattr(p, "worlds_planned", None),
+            worlds_done=getattr(p, "worlds_done", None),
+            eliminated=getattr(p, "eliminated", None),
         )
 
     @classmethod

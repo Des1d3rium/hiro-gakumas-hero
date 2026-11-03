@@ -110,6 +110,8 @@ P 点、体力、饮料栏、牌组仍从 `GameState.produce` 取（`produce_poi
 - 画面构成按社区：换卡购买 4 格、セレクトチェンジ 2 格、饮料 2 格，下方强化 / 定制 / 回复。
 - 输出动作：买 `IntervalBuy{index}`；回复体力 `IntervalBuy{service: "recover"}`（操作层点回复，按画面能回的量；每 2 体力 10P）；
   强化 `IntervalUpgradeCard{card_index}`；结束 `IntervalEnd`。セレクトチェンジ（`changes`）、定制、刷新暂不决策。
+- `dialog`：盖在轮间上的确认框（没有为 null）。刷新后的「リフレッシュ確認」是 `{"kind": "refresh_confirm", "confirm": {"p_before": 335, "p_after": 325, "cost": 10, "jewel": false, "cancel": [x, y], "ok": [x, y]}}`；
+  它挂着时 `interval` 为 null，但仍在轮间（不是已离开）。
 
 ### PDRINK_MAX（饮料满了）
 
@@ -119,6 +121,7 @@ P 点、体力、饮料栏、牌组仍从 `GameState.produce` 取（`produce_poi
 {"held": [{"index": 0, "drink_id": "pdrink_…", "name": "リカバリドリンク"}], "incoming": {"drink_id": "pdrink_02-3-010", "name": "特製ハツボシエキス"}}
 ```
 
+- 一次可能来两瓶新饮料：`incomings` 是全部新饮料（从上到下），`incoming` 只是最下面那瓶；`select_left` 是「あと N個選択」。
 - `held` 缺失时用 `produce.drinks`。输出 `DiscardDrink{discard: [index], receive: true}`（丢掉第 index 瓶再收下新的）
   或 `DiscardDrink{discard: [], receive: false}`（不收）。按社区优先表（`knowledge.DRINK_PRIORITY`）比较，表外饮料最差。
 

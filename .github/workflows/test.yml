@@ -1,0 +1,21 @@
+name: test
+on:
+  push:
+  pull_request:
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev]"
+      - run: PYTHONPATH=src python -m pytest -q tests
+      - name: demo trace → 复盘页
+        run: |
+          python examples/make_demo_trace.py
+          python tools/viewer/build_exam_view.py demo-run --traces examples/traces --out /tmp/hiro-view
