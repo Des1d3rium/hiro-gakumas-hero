@@ -77,8 +77,10 @@ def _action_select(img: MatLike) -> dict:
 
 def _consult(img: MatLike) -> dict:
     from hiro.vision.items import read_bar_drinks
+    from hiro.vision.pages import read_hud_resources
 
-    return {**read_consult(img), **read_bar_drinks(img)}
+    # D43：相談页头部的体力 / P 点与选行动同一位置；续跑落在相談时 state.produce 没有 P，决策只能不买
+    return {**read_consult(img), **read_bar_drinks(img), **read_hud_resources(img)}
 
 
 def _select_drink(img: MatLike) -> dict:

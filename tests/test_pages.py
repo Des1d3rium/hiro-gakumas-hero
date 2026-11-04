@@ -349,3 +349,17 @@ def test_card_dialog_cancelable(rel, page, cancelable):
     assert raw["cancelable"] is cancelable
     obs = observation(1, 0.0, page, raw)
     assert obs.fields["cancelable"] is cancelable and obs.problems(strict=True) == []
+
+
+@pytest.mark.parametrize(
+    ("rel", "hud"),
+    [("shop/consult-main33-00014.jpg", (13, 33, 380)), ("shop/consult-r5.jpg", (26, 33, 370)), ("shop/consult-q12-00231.jpg", (16, 33, 440))],
+)  # fmt: skip
+def test_consult_hud(rel, hud):
+    """D43（第三十三局本战续跑落在相談，seq 14）：相談页也读头部体力 / P 点（与选行动同一位置），state.produce 才有 P 可决策。"""
+    from hiro.vision.extract import extract
+
+    raw, _ = extract("CONSULT", load(cv2.imread(str(FIX / rel))))
+    obs = observation(1, 0.0, "CONSULT", raw)
+    assert (obs.fields["stamina"], obs.fields["max_stamina"], obs.fields["produce_point"]) == hud
+    assert obs.problems(strict=True) == [] and obs.field_meta["produce_point"].method == "ocr"

@@ -248,7 +248,8 @@ def _consult_observation(fields: dict) -> dict:
     # shelf 给 None，reduce 保留上一帧完整的货架，observe_complete 会等到货架出现
     shelf = fields.get("shelf") if fields.get("complete") is not False else None
     return {"shelf": shelf, "services": fields.get("services"), "rerolls_left": fields.get("rerolls_left"),
-            "complete": fields.get("complete"), "drinks": fields.get("drinks"), "drink_capacity": fields.get("drink_capacity")}  # fmt: skip
+            "complete": fields.get("complete"), "drinks": fields.get("drinks"), "drink_capacity": fields.get("drink_capacity"),
+            "stamina": fields.get("stamina"), "max_stamina": fields.get("max_stamina"), "produce_point": fields.get("produce_point")}  # fmt: skip
 
 
 DECK_CARD_KEYS = ("index", "row", "col", "card_id", "name", "upgrade", "customized", "center", "dimmed")  # dimmed：压暗（强化对话框里 = 不能再强化）
@@ -371,7 +372,8 @@ FIELD_METHODS: dict[str, dict[str, str]] = {
     "OUTING": {"choices": "ocr", "selected": "derived", "effect": "ocr", "complete": "derived"},
     "SELECT_PITEM": {"pitems": "template", "selected": "derived", "confirm_enabled": "kaa"},
     "PRODUCE_START_CONFIRM": {"supports": "template", "main_attr": "derived"},
-    "CONSULT": {"shelf": "template", "services": "ocr", "rerolls_left": "ocr", "complete": "ocr", "drinks": "template", "drink_capacity": "template"},
+    "CONSULT": {"shelf": "template", "services": "ocr", "rerolls_left": "ocr", "complete": "ocr", "drinks": "template", "drink_capacity": "template",
+                "stamina": "ocr", "max_stamina": "ocr", "produce_point": "ocr"},
     "DECK_LIST": {"deck": "template", "deck_size": "ocr", "cards": "template", "complete": "derived", "problems": "derived"},
     **{page: {"cards": "template", "selected": "template", "selected_card": "derived", "agree": "derived", "confirm": "ocr",
               "deck_complete": "derived", "deck_screens": "derived"}

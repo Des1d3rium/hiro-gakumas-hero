@@ -42,7 +42,7 @@ FIELD_CATALOG: dict[str, tuple[str, ...]] = {
     "SELECT_DRINK": ("candidates", "held", "full"),
     "SELECT_PITEM": ("pitems", "selected", "confirm_enabled"),
     "PRODUCE_START_CONFIRM": ("supports", "main_attr"),
-    "CONSULT": ("shelf", "services", "rerolls_left", "complete", "drinks", "drink_capacity"),
+    "CONSULT": ("shelf", "services", "rerolls_left", "complete", "drinks", "drink_capacity", "stamina", "max_stamina", "produce_point"),
     "HIF_EXAM_RESULT": ("score", "rank", "passed", "exam_no", "rank_line", "participants", "entries", "retry"),
     "STUDY": ("choices", "selected", "effect", "complete"),
     "OUTING": ("choices", "selected", "effect", "complete"),
