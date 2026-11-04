@@ -5,12 +5,14 @@ import sys
 from pathlib import Path
 
 import cv2
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 FIX = Path(__file__).parent / "fixtures/settings"
 
 
 def _read(name):
+    pytest.importorskip("kotonebot", reason="读设置页要 OCR（KAA / kotonebot，pip install -e '.[play]'）")
     from check_settings import read_toggles
 
     from hiro.produce.ops import ocr_boxes
