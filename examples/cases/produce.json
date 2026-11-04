@@ -1,0 +1,3378 @@
+[
+ {
+  "id": "action-day5-outing",
+  "decider": "ACTION_SELECT",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "选拔第 5 天：もりし模板选外出（眠気档多拿强化卡），体力 25/33 不缺",
+  "accept": [
+   "outing"
+  ],
+  "forbid": [
+   "rest"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "ACTION_SELECT",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 5,
+    "stamina": 25,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "options": [
+     {
+      "option": "outing",
+      "attr": null,
+      "hp_cost": null,
+      "hp_gain": null
+     },
+     {
+      "option": "shop",
+      "attr": null,
+      "hp_cost": null,
+      "hp_gain": null
+     },
+     {
+      "option": "rest",
+      "attr": null,
+      "hp_cost": null,
+      "hp_gain": 16
+     }
+    ]
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "action-day9-main-sp",
+  "decider": "ACTION_SELECT",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "选拔第 9 天星星重视课程：只上主属性（成长率最高的 Da），今天 Da 是 SP（体力 -8）",
+  "accept": [
+   "training:Da:sp"
+  ],
+  "forbid": [
+   "rest"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "ACTION_SELECT",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 9,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {
+     "9": [
+      {
+       "main": "Vo",
+       "sub": "Da",
+       "sp": null
+      },
+      {
+       "main": "Da",
+       "sub": "Vo",
+       "sp": true
+      },
+      {
+       "main": "Vi",
+       "sub": "Vo",
+       "sp": null
+      }
+     ]
+    }
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "options": [
+     {
+      "option": "training",
+      "attr": "Vo",
+      "hp_cost": 6,
+      "hp_gain": null
+     },
+     {
+      "option": "training",
+      "attr": "Da",
+      "hp_cost": 8,
+      "hp_gain": null
+     },
+     {
+      "option": "training",
+      "attr": "Vi",
+      "hp_cost": 6,
+      "hp_gain": null
+     },
+     {
+      "option": "rest",
+      "attr": null,
+      "hp_cost": null,
+      "hp_gain": 11
+     }
+    ]
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "action-day8-low-hp-outing",
+  "decider": "ACTION_SELECT",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "选拔①后体力 15 < 21：もりし建议第 8 天选外出回体力（差し入れ不回体力）",
+  "accept": [
+   "outing"
+  ],
+  "forbid": [
+   "gift"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "ACTION_SELECT",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 8,
+    "stamina": 15,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "options": [
+     {
+      "option": "outing",
+      "attr": null,
+      "hp_cost": null,
+      "hp_gain": null
+     },
+     {
+      "option": "gift",
+      "attr": null,
+      "hp_cost": null,
+      "hp_gain": null
+     },
+     {
+      "option": "rest",
+      "attr": null,
+      "hp_cost": null,
+      "hp_gain": 16
+     }
+    ]
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "card-must-have",
+  "decider": "SELECT_CARD",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "せのびの魔法 是 game8 列的必拿卡，牌组里还没有",
+  "accept": [
+   "pick:0"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "SELECT_CARD",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 9,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {
+     "9": [
+      {
+       "main": "Vo",
+       "sub": "Da",
+       "sp": null
+      },
+      {
+       "main": "Da",
+       "sub": "Vo",
+       "sp": true
+      },
+      {
+       "main": "Vi",
+       "sub": "Vo",
+       "sp": null
+      }
+     ]
+    }
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "candidates": [
+     {
+      "slot": 0,
+      "card_id": "p_card-02-act-3_186",
+      "upgrade": 0,
+      "name": "せのびの魔法"
+     },
+     {
+      "slot": 1,
+      "card_id": "p_card-02-men-2_111",
+      "upgrade": 1,
+      "name": "成長痛+"
+     },
+     {
+      "slot": 2,
+      "card_id": "p_card-02-act-2_049",
+      "upgrade": 0,
+      "name": "みんな大好き"
+     }
+    ],
+    "recommended": 1
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "card-tier-a-over-b",
+  "decider": "SELECT_CARD",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "没有必拿卡：もりし评级 あのときの約束 A > テレビ出演 B（要定制才强）；牌组 16 张，不该禁用或刷新掉 A 卡",
+  "accept": [
+   "pick:0"
+  ],
+  "forbid": [
+   "pick:2"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "SELECT_CARD",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 9,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_186",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {
+     "9": [
+      {
+       "main": "Vo",
+       "sub": "Da",
+       "sp": null
+      },
+      {
+       "main": "Da",
+       "sub": "Vo",
+       "sp": true
+      },
+      {
+       "main": "Vi",
+       "sub": "Vo",
+       "sp": null
+      }
+     ]
+    }
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "candidates": [
+     {
+      "slot": 0,
+      "card_id": "p_card-02-act-3_045",
+      "upgrade": 0,
+      "name": "あのときの約束"
+     },
+     {
+      "slot": 1,
+      "card_id": "p_card-02-act-2_049",
+      "upgrade": 0,
+      "name": "みんな大好き"
+     },
+     {
+      "slot": 2,
+      "card_id": "p_card-00-men-3_012",
+      "upgrade": 0,
+      "name": "テレビ出演"
+     }
+    ],
+    "recommended": 2
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "drink-hatsuboshi",
+  "decider": "SELECT_DRINK",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "用户 2026-11-02：饮料按持有组合比较——已有 特製（复制），没有爆发；默认至少 1 瓶爆发，拿 ブースト（复制不再写死给 せのび）",
+  "accept": [
+   "pick:2"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "SELECT_DRINK",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 9,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {
+     "9": [
+      {
+       "main": "Vo",
+       "sub": "Da",
+       "sp": null
+      },
+      {
+       "main": "Da",
+       "sub": "Vo",
+       "sp": true
+      },
+      {
+       "main": "Vi",
+       "sub": "Vo",
+       "sp": null
+      }
+     ]
+    }
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "candidates": [
+     {
+      "slot": 0,
+      "drink_id": "pdrink_00-2-003",
+      "name": "リカバリドリンク"
+     },
+     {
+      "slot": 1,
+      "drink_id": "pdrink_02-3-010",
+      "name": "特製ハツボシエキス"
+     },
+     {
+      "slot": 2,
+      "drink_id": "pdrink_00-2-008",
+      "name": "ブーストエキス"
+     }
+    ]
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "outing-day5-trouble",
+  "decider": "OUTING",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "选拔第 5 天外出选眠気档（もなみ、もりし）",
+  "accept": [
+   "event:1"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "OUTING",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 5,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "choices": [
+     {
+      "index": 0,
+      "text": "Pポイント-50"
+     },
+     {
+      "index": 1,
+      "text": "トラブル追加（眠気獲得）"
+     },
+     {
+      "index": 2,
+      "text": "なし"
+     }
+    ]
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "study-avoid-trouble",
+  "decider": "STUDY",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "授業选本人おすすめ効果（やる気）那档；避开眠気档（もなみ）。第一项是好印象，やる気型不该选",
+  "accept": [
+   "event:1"
+  ],
+  "forbid": [
+   "event:0",
+   "event:2"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "STUDY",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 10,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "choices": [
+     {
+      "index": 0,
+      "text": "体力-5 好印象"
+     },
+     {
+      "index": 1,
+      "text": "体力-5 やる気"
+     },
+     {
+      "index": 2,
+      "text": "トラブル追加（眠気獲得）"
+     }
+    ]
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "consult-delete-sleep",
+  "decider": "CONSULT",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "用户 2026-11-02选拔相談顺序：补全核心卡 + 饮料（第一档）> 删眠気 > 强化。持有 リカバリ + 特製、没有爆发（饮料事故），先买 ブースト；删眠気 / 强化在下一步",
+  "accept": [
+   "buy:4"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "CONSULT",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 12,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "shelf": [
+     {
+      "index": 0,
+      "kind": "card",
+      "card_id": "p_card-00-men-3_012",
+      "upgrade": 0,
+      "price": 100,
+      "sale": false,
+      "purchased": false
+     },
+     {
+      "index": 1,
+      "kind": "card",
+      "card_id": "p_card-02-act-2_049",
+      "upgrade": 1,
+      "price": 35,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 4,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-008",
+      "price": 52,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 5,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-003",
+      "price": 75,
+      "sale": false,
+      "purchased": false
+     }
+    ],
+    "services": {
+     "delete": {
+      "price": 100,
+      "available": true
+     },
+     "upgrade": {
+      "price": 100,
+      "available": true
+     }
+    }
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "consult-upgrade-core",
+  "decider": "CONSULT",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "同 consult-delete-sleep：先补饮料事故（没有爆发）买 ブースト，强化在下一步",
+  "accept": [
+   "buy:4"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "CONSULT",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 12,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "shelf": [
+     {
+      "index": 0,
+      "kind": "card",
+      "card_id": "p_card-00-men-3_012",
+      "upgrade": 0,
+      "price": 100,
+      "sale": false,
+      "purchased": false
+     },
+     {
+      "index": 1,
+      "kind": "card",
+      "card_id": "p_card-02-act-2_049",
+      "upgrade": 1,
+      "price": 35,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 4,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-008",
+      "price": 52,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 5,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-003",
+      "price": 75,
+      "sale": false,
+      "purchased": false
+     }
+    ],
+    "services": {
+     "delete": {
+      "price": 100,
+      "available": true
+     },
+     "upgrade": {
+      "price": 100,
+      "available": true
+     }
+    }
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "consult-finals-keep-points",
+  "decider": "CONSULT",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "本战第 6 天（用户 2026-11-02：本战相談按价值，不用瓶数阈值）：牌组 15 张，轮间要补 7 张到 22 张（需要量 550P），现有 300P + R1 约 200P 刚好不够；买 ブースト 会挤占补卡的钱，社区默认（もなみ先验）不买。模拟价值好过 2 个标准误时才会偏离（规则测试里模拟关闭）",
+  "accept": [
+   "ShopEnd"
+  ],
+  "forbid": [
+   "buy:4",
+   "buy:5",
+   "upgrade:12"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "CONSULT",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-008",
+    "step": 6,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 300,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "shelf": [
+     {
+      "index": 0,
+      "kind": "card",
+      "card_id": "p_card-00-men-3_012",
+      "upgrade": 0,
+      "price": 100,
+      "sale": false,
+      "purchased": false
+     },
+     {
+      "index": 1,
+      "kind": "card",
+      "card_id": "p_card-02-act-2_049",
+      "upgrade": 1,
+      "price": 35,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 4,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-008",
+      "price": 52,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 5,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-003",
+      "price": 75,
+      "sale": false,
+      "purchased": false
+     }
+    ],
+    "services": {
+     "delete": {
+      "price": 100,
+      "available": true
+     },
+     "upgrade": {
+      "price": 100,
+      "available": true
+     }
+    }
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "consult-last-buy-drink",
+  "decider": "CONSULT",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "选拔第 19 天、牌组无眠気、核心卡都强化过：P 点和饮料不带进本战，买优先表里的ブーストエキス",
+  "accept": [
+   "buy:4"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "CONSULT",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 19,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "shelf": [
+     {
+      "index": 0,
+      "kind": "card",
+      "card_id": "p_card-00-men-3_012",
+      "upgrade": 0,
+      "price": 100,
+      "sale": false,
+      "purchased": false
+     },
+     {
+      "index": 1,
+      "kind": "card",
+      "card_id": "p_card-02-act-2_049",
+      "upgrade": 1,
+      "price": 35,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 4,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-008",
+      "price": 52,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 5,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-003",
+      "price": 75,
+      "sale": false,
+      "purchased": false
+     }
+    ],
+    "services": {
+     "delete": {
+      "price": 100,
+      "available": true
+     },
+     "upgrade": {
+      "price": 100,
+      "available": true
+     }
+    }
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "interval-low-hp-recover-first",
+  "decider": "HIF_ROUND_INTERVAL",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "R1 后体力 8/33、P 120：回满要 130P，P 点不够兼顾，先回体力（R1 消耗只能在轮间回复）",
+  "accept": [
+   "ibuy:recover"
+  ],
+  "forbid": [
+   "ibuy:0",
+   "ibuy:4"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "HIF_ROUND_INTERVAL",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-008",
+    "step": 8,
+    "stamina": 8,
+    "max_stamina": 33,
+    "produce_point": 120,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "interval": {
+     "cards": [
+      {
+       "index": 0,
+       "card_id": "p_card-02-act-3_045",
+       "upgrade": 1,
+       "price": 80,
+       "purchased": false
+      },
+      {
+       "index": 1,
+       "card_id": "p_card-02-act-2_049",
+       "upgrade": 1,
+       "price": 30,
+       "purchased": false
+      }
+     ],
+     "changes": [],
+     "drinks": [
+      {
+       "index": 4,
+       "drink_id": "pdrink_02-3-010",
+       "price": 100,
+       "purchased": false
+      }
+     ],
+     "recover": {
+      "available": true,
+      "price_per_2hp": 10
+     },
+     "upgrade": {
+      "price": 100,
+      "available": true
+     },
+     "refresh": {
+      "price": 10
+     }
+    },
+    "stamina": 8,
+    "max_stamina": 33,
+    "produce_point": 120
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "interval-full-hp-drink",
+  "decider": "HIF_ROUND_INTERVAL",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "体力满、P 200：先补优先饮料特製ハツボシエキス",
+  "accept": [
+   "ibuy:4"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "HIF_ROUND_INTERVAL",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-008",
+    "step": 8,
+    "stamina": 33,
+    "max_stamina": 33,
+    "produce_point": 200,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "interval": {
+     "cards": [
+      {
+       "index": 0,
+       "card_id": "p_card-02-act-3_045",
+       "upgrade": 1,
+       "price": 80,
+       "purchased": false
+      },
+      {
+       "index": 1,
+       "card_id": "p_card-02-act-2_049",
+       "upgrade": 1,
+       "price": 30,
+       "purchased": false
+      }
+     ],
+     "changes": [],
+     "drinks": [
+      {
+       "index": 4,
+       "drink_id": "pdrink_02-3-010",
+       "price": 100,
+       "purchased": false
+      }
+     ],
+     "recover": {
+      "available": true,
+      "price_per_2hp": 10
+     },
+     "upgrade": {
+      "price": 100,
+      "available": true
+     },
+     "refresh": {
+      "price": 10
+     }
+    },
+    "stamina": 33,
+    "max_stamina": 33,
+    "produce_point": 200
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "interval-nothing-affordable",
+  "decider": "HIF_ROUND_INTERVAL",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "体力满、只剩 20P：最便宜的卡 30P 也买不起，结束",
+  "accept": [
+   "IntervalEnd"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "HIF_ROUND_INTERVAL",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-008",
+    "step": 8,
+    "stamina": 33,
+    "max_stamina": 33,
+    "produce_point": 20,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-acc-0_002",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "interval": {
+     "cards": [
+      {
+       "index": 0,
+       "card_id": "p_card-02-act-3_045",
+       "upgrade": 1,
+       "price": 80,
+       "purchased": false
+      },
+      {
+       "index": 1,
+       "card_id": "p_card-02-act-2_049",
+       "upgrade": 1,
+       "price": 30,
+       "purchased": false
+      }
+     ],
+     "changes": [],
+     "drinks": [
+      {
+       "index": 4,
+       "drink_id": "pdrink_02-3-010",
+       "price": 100,
+       "purchased": false
+      }
+     ],
+     "recover": {
+      "available": true,
+      "price_per_2hp": 10
+     },
+     "upgrade": {
+      "price": 100,
+      "available": true
+     },
+     "refresh": {
+      "price": 10
+     }
+    },
+    "stamina": 33,
+    "max_stamina": 33,
+    "produce_point": 20
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "core-consult-buy-daydream-first",
+  "decider": "CONSULT",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "货架有 デイドリーミング（缺的本战核心）和 特製ハツボシエキス：先买核心卡",
+  "accept": [
+   "buy:2"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "CONSULT",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 12,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 300,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-men-2_014",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "shelf": [
+     {
+      "index": 0,
+      "kind": "card",
+      "card_id": "p_card-00-men-3_012",
+      "upgrade": 0,
+      "price": 100,
+      "sale": false,
+      "purchased": false
+     },
+     {
+      "index": 1,
+      "kind": "card",
+      "card_id": "p_card-02-act-2_049",
+      "upgrade": 1,
+      "price": 35,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 4,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-008",
+      "price": 52,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 5,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-003",
+      "price": 75,
+      "sale": false,
+      "purchased": false
+     },
+     {
+      "index": 2,
+      "kind": "card",
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 0,
+      "price": 120,
+      "sale": false,
+      "purchased": false
+     },
+     {
+      "index": 6,
+      "kind": "drink",
+      "drink_id": "pdrink_02-3-010",
+      "price": 100,
+      "sale": false,
+      "purchased": false
+     }
+    ],
+    "services": {
+     "delete": {
+      "price": 100,
+      "available": true
+     },
+     "upgrade": {
+      "price": 100,
+      "available": true
+     }
+    }
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "core-consult-delete-hightension",
+  "decider": "CONSULT",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "用户 2026-11-02：选拔相談只删 眠気（选拔①② 后游戏各随机删 2 张，R2 不满 22 张会被応援棒塞基础卡），ハイテンション 不删；没有爆发，先买 ブースト",
+  "accept": [
+   "buy:4"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "CONSULT",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 12,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 300,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_039",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-00-men-2_014",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "shelf": [
+     {
+      "index": 0,
+      "kind": "card",
+      "card_id": "p_card-00-men-3_012",
+      "upgrade": 0,
+      "price": 100,
+      "sale": false,
+      "purchased": false
+     },
+     {
+      "index": 1,
+      "kind": "card",
+      "card_id": "p_card-02-act-2_049",
+      "upgrade": 1,
+      "price": 35,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 4,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-008",
+      "price": 52,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 5,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-003",
+      "price": 75,
+      "sale": false,
+      "purchased": false
+     },
+     {
+      "index": 2,
+      "kind": "card",
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 0,
+      "price": 120,
+      "sale": false,
+      "purchased": true
+     },
+     {
+      "index": 6,
+      "kind": "drink",
+      "drink_id": "pdrink_02-3-010",
+      "price": 100,
+      "sale": false,
+      "purchased": false
+     }
+    ],
+    "services": {
+     "delete": {
+      "price": 100,
+      "available": true
+     },
+     "upgrade": {
+      "price": 100,
+      "available": true
+     }
+    }
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ },
+ {
+  "id": "q6-consult-upgrade-changed-senobi",
+  "decider": "CONSULT",
+  "source": "社区攻略（hiro.state.knowledge / brain/prompts/hif_produce.md）；局面为手工构造",
+  "note": "牌组已知（DECK_REVIEW）、换卡换进来的 せのびの魔法 未强化、饮料栏满：先强化 せのび（UPGRADE_ORDER 第 2，届いて！ 不在牌组）；用户 2026-11-03 删牌顺序（眠気 > 非一次性不带再動 > 初始卡 > 不好用的牌，P 预算 删卡 → 强化）：P 388 够删完再强化 せのび，第一步删 セルフケアの基本 也可接受（删初始卡不挤掉核心卡强化）",
+  "accept": [
+   "upgrade:14",
+   "buy:delete:6",
+   "buy:delete:0"
+  ],
+  "state": {
+   "mode": "produce",
+   "page": {
+    "name": "CONSULT",
+    "area": "produce",
+    "since_seq": 0,
+    "stable": true,
+    "frames": 3
+   },
+   "produce": {
+    "idol_card_id": "i_card-shro-3-007",
+    "mode": "produce-007",
+    "step": 19,
+    "stamina": 22,
+    "max_stamina": 33,
+    "produce_point": 388,
+    "params": {
+     "Vo": 609,
+     "Da": 928,
+     "Vi": 495
+    },
+    "growth_permil": {
+     "Vo": 1449,
+     "Da": 1579,
+     "Vi": 1251
+    },
+    "star": 375,
+    "star_permil": 1500,
+    "param_cap": 3000,
+    "deck": [
+     {
+      "card_id": "p_card-02-act-0_037",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-0_038",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_039",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-0_041",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-ido-3_105",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-1_031",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-1_037",
+      "upgrade": 1,
+      "customized": true
+     },
+     {
+      "card_id": "p_card-02-act-2_062",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_004",
+      "upgrade": 0,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_056",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-men-2_057",
+      "upgrade": 1,
+      "customized": false
+     },
+     {
+      "card_id": "p_card-02-act-3_186",
+      "upgrade": 0,
+      "customized": false
+     }
+    ],
+    "drinks": [
+     "pdrink_00-2-003",
+     "pdrink_02-3-010"
+    ],
+    "drink_capacity": 3,
+    "items": [],
+    "wappen_left": 3,
+    "rerolls_left": 2,
+    "excludes_left": 1,
+    "excluded": [],
+    "upgrades_done": 0,
+    "deletes_done": 0,
+    "lessons": {}
+   },
+   "exam": null,
+   "exam_session": {
+    "label": null,
+    "turn": 0,
+    "last_remaining": null
+   },
+   "page_fields": {
+    "shelf": [
+     {
+      "index": 0,
+      "kind": "card",
+      "card_id": "p_card-00-men-3_012",
+      "upgrade": 0,
+      "price": 100,
+      "sale": false,
+      "purchased": false
+     },
+     {
+      "index": 1,
+      "kind": "card",
+      "card_id": "p_card-02-act-2_049",
+      "upgrade": 1,
+      "price": 35,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 4,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-008",
+      "price": 52,
+      "sale": true,
+      "purchased": false
+     },
+     {
+      "index": 5,
+      "kind": "drink",
+      "drink_id": "pdrink_00-2-003",
+      "price": 75,
+      "sale": false,
+      "purchased": false
+     }
+    ],
+    "services": {
+     "delete": {
+      "price": 100,
+      "available": true
+     },
+     "upgrade": {
+      "price": 100,
+      "available": true
+     }
+    },
+    "drinks_full": true
+   },
+   "sources": {},
+   "seq": 0,
+   "pending_page": null,
+   "conflicts": [],
+   "version": "1.0"
+  }
+ }
+]
