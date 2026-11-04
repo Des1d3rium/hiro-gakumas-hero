@@ -58,13 +58,20 @@ class AssetSource(Protocol):
     def pitem_catalog(self) -> dict[str, dict[str, Any]] | None: ...
 
     def schedule(self, scenario: str) -> list[dict[str, Any]] | None:
-        """培育日程（每周可选的行动、考试周）。"""
+        """培育日程，scenario 如 "qualify" / "main"。列表下标 0 对应第 1 个阶段，每项：
+        {"day": int, "kind": "choice" | "exam" | "round1" | ..., "options": [...], "training_focus"?: str,
+         "open_lesson_ids"?: [...], "exam_number"?: int}。
+        **选行动页（ACTION_SELECT）离不开它**：返回 None 时决策器只能等待，整局会卡住，所以默认实现必须给出。"""
 
-    def support_effects(self, support_id: str, level: int) -> list[dict[str, Any]] | None: ...
+    def support_effects(self, support_id: str, level: int) -> list[dict[str, Any]] | None:
+        """支援卡技能：[{"effect_type", "value", "trigger_id", "limit"}]；None 时编成只按属性张数 / 等级排。"""
 
     def exam_requirements(self, scenario: str) -> dict[str, Any] | None:
-        """考试要求档、属性 → 倍率换算、星级基准等（选课 / 课程预演用）。公开数据里没有可靠来源时默认返回 None，
-        调用方退回「主属性 / 流行顺序」规则，相关提示行写「未知」。"""
+        """考试要求、属性 → 倍率、星级基准（选课 / 课程预演用）。返回函数表：
+        {"preview": f(mode, pos, params, idol_card_id), "assessment": f(value, requirement),
+         "star_baseline": f(mode, pos, idol_card_id), "star_factor": f(star, baseline),
+         "exam_bonus": f(mode, pos, params, star, idol_card_id)}。
+        公开数据里没有可靠来源时默认返回 None：选课退回补最低属性 / 主属性规则，相关提示行写「未知」。"""
 
 
 @runtime_checkable
