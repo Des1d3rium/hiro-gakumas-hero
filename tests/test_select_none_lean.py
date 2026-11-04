@@ -30,8 +30,7 @@ SKIP = {"action": "pick", "index": -1, "reason": "必拿卡已齐,三张候选�
 
 
 def test_switch_off_keeps_old_fallback(monkeypatch):
-    assert D.SELECT_NONE_LEAN is True  # 开源版默认开
-    monkeypatch.setattr(D, "SELECT_NONE_LEAN", False)
+    monkeypatch.setattr(D, "SELECT_NONE_LEAN", False)  # 默认值由总控定（协调 2026-11-04：全量过后设 True），这里只测关时的行为
     d = ProduceDeciders(CAMPUS_HIRO, MockLLM([SKIP])).decide("SELECT_CARD", st(), n_options=3)
     assert d.source == "fallback" and "LLM 输出无效" in d.reason
 
@@ -45,12 +44,22 @@ def test_skip_intent_takes_least_polluting(monkeypatch, reply):
     assert d.llm  # LLM 调用照样记进 trace
 
 
-def test_skip_intent_rerolls_when_budget(monkeypatch):
+def test_clean_candidate_picked_without_reroll(monkeypatch):
+    """协调 2026-11-04：有一次性 / 不污染的候选就直接拿，不刷新（#339 的 手書き / ゆるふわ 都是一次性）。"""
     monkeypatch.setattr(D, "SELECT_NONE_LEAN", True)
     d = ProduceDeciders(CAMPUS_HIRO, MockLLM([SKIP])).decide("SELECT_CARD", st(rerolls=3), n_options=3)
-    assert d.action.kind in (ActionKind.REROLL, ActionKind.ACTIVATE_EFFECT)  # 本页预算由 _pick_budget 定；有刷新时先刷新
-    if d.action.kind is ActionKind.ACTIVATE_EFFECT:
-        assert "不能不拿" in d.reason or "LLM" not in d.reason
+    assert d.action.kind is ActionKind.ACTIVATE_EFFECT and 2 not in d.action.args["pick_indexes"], d.reason
+
+
+def test_all_polluting_rerolls_first(monkeypatch):
+    """候选全部会污染牌组（可复用的非核心 / 好印象系）时才先刷新。"""
+    monkeypatch.setattr(D, "SELECT_NONE_LEAN", True)
+    cands = ["p_card-00-men-1_005", "p_card-02-act-2_049", "p_card-02-men-1_009"]  # 気合十分！/ みんな大好き / 励まし
+    raw = [{"index": i, "card_id": c, "upgrade": 0, "name": c} for i, c in enumerate(cands)]
+    s = st(rerolls=3)
+    s.page_fields["candidates"] = raw
+    d = ProduceDeciders(CAMPUS_HIRO, MockLLM([SKIP])).decide("SELECT_CARD", s, n_options=3)
+    assert d.action.kind in (ActionKind.REROLL, ActionKind.EXCLUDE_CARD) or "污染" in d.reason, d.reason
 
 
 def test_invalid_output_unrated_musts_done(monkeypatch):
