@@ -62,6 +62,10 @@ class AssetSource(Protocol):
 
     def support_effects(self, support_id: str, level: int) -> list[dict[str, Any]] | None: ...
 
+    def exam_requirements(self, scenario: str) -> dict[str, Any] | None:
+        """考试要求档、属性 → 倍率换算、星级基准等（选课 / 课程预演用）。公开数据里没有可靠来源时默认返回 None，
+        调用方退回「主属性 / 流行顺序」规则，相关提示行写「未知」。"""
+
 
 @runtime_checkable
 class ExamStateSource(Protocol):
