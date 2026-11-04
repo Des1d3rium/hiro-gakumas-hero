@@ -120,11 +120,11 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_settings_check:
         # 开局前检查设置（重新登录后会被重置；只报警，不改，不阻断）。只打本战也要查（第二十三局）
         try:
-            from check_settings import check
+            from check_settings import check, verdict
 
             res = check(ROOT / "reports/live/settings")
-            bad = {k: v for k, v in res.items() if v != "ON"}
-            print(f"设置检查：{res}" + (f"  ⚠ 被重置或读不到：{bad}（只报警）" if bad else ""), flush=True)
+            v = verdict(res)
+            print(f"设置检查：{res}  {'' if v.startswith('ok') else '⚠ '}{v}（只报警）", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"设置检查失败（{e}），继续开局", flush=True)
     if not args.main_only:

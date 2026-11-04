@@ -148,6 +148,9 @@ def _toggle(r: Run, y: int, want: bool, what: str) -> str | None:
     return None if ok else f"{what}的勾选框点了 {TOGGLE_TIMEOUT:.0f}s 没变成{'勾上' if want else '取消'}"
 
 
+LAST_ROWS: dict = {}  # 最近一次 resolve_overflow 在溢出页上看到的行数 {"new": n, "owned": n}（钩子据此把视口外的已有饮料标成点不到）
+
+
 def resolve_overflow(
     discard: int | list[int],
     *,
@@ -184,6 +187,8 @@ def resolve_overflow(
             if rows is None:
                 return r.result(False, "认不出饮料溢出页（没读到「手持ちのドリンク」）")
             new, owned = rows
+    LAST_ROWS.clear()
+    LAST_ROWS.update(new=len(new), owned=len(owned))
     if not new:
         return r.result(False, "溢出页上没找到新饮料那一行（可能要往上滚）")
     discards = [int(discard)] if isinstance(discard, int) else [int(i) for i in discard]

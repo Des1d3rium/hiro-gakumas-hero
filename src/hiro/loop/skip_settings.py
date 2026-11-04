@@ -46,6 +46,16 @@ def _center(b) -> tuple[int, int]:
     return (b[0] + b[2]) // 2, (b[1] + b[3]) // 2
 
 
+OK_TEXT = "決定"
+OK_ICON_JUNK = "く<〈✓✔√レ"  # 「決定」按钮左边的对勾图标常被 OCR 读成一个字符（第三十三局 ボイス再生確認：「く決定」）
+
+
+def is_ok_text(t: str) -> bool:
+    """「決定」按钮的 OCR 文字：「決定」，或前面多一个对勾图标读出来的字符。"""
+    n = _norm(t)
+    return n == OK_TEXT or (len(n) == len(OK_TEXT) + 1 and n.endswith(OK_TEXT) and n[0] in OK_ICON_JUNK)
+
+
 def kind_of(texts) -> str | None:
     """是哪个设置框（DIALOGS 的标题键），不是返回 None。"""
     flat = [_norm(t) for t in texts]
@@ -80,7 +90,7 @@ def read(boxes) -> dict | None:
     if spec["option"] is not None:
         want, avoid = spec["option"]
         option = next((_center(b) for t, _, b in boxes if want in _norm(t) and not any(a in _norm(t) for a in avoid)), None)
-    ok = next((_center(b) for t, _, b in boxes if _norm(t) == "決定"), None)
+    ok = next((_center(b) for t, _, b in boxes if is_ok_text(t)), None)
     return {"kind": kind, "items": items, "off": off, "option": option, "ok": ok}
 
 

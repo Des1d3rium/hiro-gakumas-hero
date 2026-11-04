@@ -674,7 +674,9 @@ class HiroController(ProduceController):
         if opt is not None:
             device.click(opt.rect)
             time.sleep(0.5)
-        btn = next((b for b in boxes if b.text.strip() == hit[2]), None)
+        from hiro.loop.skip_settings import is_ok_text
+
+        btn = next((b for b in boxes if b.text.strip() == hit[2] or (hit[2] == "決定" and is_ok_text(b.text))), None)
         if btn is None:
             return False
         device.click(btn.rect)

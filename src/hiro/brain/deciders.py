@@ -892,7 +892,13 @@ class ProduceDeciders:
         cards = state.page_fields.get("cards") or []
         self._note_seen_deck(cards or [])
         cancel = Action(ActionKind.ENHANCE_CARD, {"cancel": True})
+        # D42（总控 2026-11-04，第三十三局本战 18:45）：P 道具触发的免费强化页是必选的，没有キャンセル（画面只有「強化」）。
+        # page_fields.cancelable：识别 / 执行按画面有没有キャンセル 填（False = 必选；None = 不知道，按原来的可取消处理）
+        forced = state.page_fields.get("cancelable") is False or state.page_fields.get("trigger") == "pitem"
         if not cards:
+            if forced:
+                return Decision(Action.ui(ActionKind.WAIT, why="必选强化页卡格没读到"), "必选强化页（没有キャンセル）卡格没读到：等重新识别，不取消、不盲选",
+                                "rule", 0.3, warnings=["识别未提供 cards"], decider="enhance_card")  # fmt: skip
             return Decision(cancel, "强化页的卡格没读到：取消，不盲选", "rule", 0.6, warnings=["识别未提供 cards"], decider="enhance_card")
 
         from hiro.state.knowledge import SMALL_DECK_CORE
@@ -914,6 +920,8 @@ class ProduceDeciders:
                 return False
 
         pool = [c for c in cards if upgradable(c)]
+        if not pool and forced:
+            return self._forced_enhance(cards)
         if not pool:
             return Decision(cancel, "没有值得强化的卡（核心 / S·A 都已强化或没认出；基础卡、非核心不强化）：取消，相談接着删卡", "rule", 0.7,
                             decider="enhance_card")  # fmt: skip
@@ -927,6 +935,35 @@ class ProduceDeciders:
         args = {"card_id": best["card_id"], "index": best.get("index"), "upgrade": 0}
         why = "UPGRADE_ORDER" if best["card_id"] in UPGRADE_ORDER else "社区评级 / 卡牌价值"
         return Decision(Action(ActionKind.ENHANCE_CARD, args), f"强化 {_card_label(best)}（按 {why}）", "rule", 0.9, decider="enhance_card")
+
+    @staticmethod
+    def _forced_enhance(cards: list[dict]) -> Decision:
+        """必选强化页（D42）、核心都已强化：非核心里价值最高的未强化卡 → 基础卡 → 冲突卡（强化它们没用，但页面必须选一张）。"""
+        from hiro.state.context import catalog
+
+        def has_plus(c: dict) -> bool:
+            if not c.get("card_id") or c.get("upgrade") or _is_trouble_card(c["card_id"]):
+                return False
+            try:
+                catalog().card(c["card_id"], 1)
+                return True
+            except Exception:
+                return False
+
+        rest = [c for c in cards if has_plus(c)]
+        if not rest:
+            return Decision(Action.ui(ActionKind.WAIT, why="必选强化页没有能强化的卡"), "必选强化页（没有キャンセル）认出的卡都不能强化：等重新识别",
+                            "rule", 0.3, warnings=["必选强化页没有可强化的卡"], decider="enhance_card")  # fmt: skip
+
+        def key(c: dict) -> tuple:
+            cid = c["card_id"]
+            return (not is_conflict(cid), not _is_basic(cid), card_value(cid), -c.get("index", 0))
+
+        best = max(rest, key=key)
+        kind = "冲突卡" if is_conflict(best["card_id"]) else ("基础卡" if _is_basic(best["card_id"]) else "非核心里价值最高的卡")
+        args = {"card_id": best["card_id"], "index": best.get("index"), "upgrade": 0}
+        return Decision(Action(ActionKind.ENHANCE_CARD, args), f"必选强化页（P 道具触发，没有キャンセル）、核心都已强化：强化{kind} {_card_label(best)}",
+                        "rule", 0.7, decider="enhance_card")  # fmt: skip
 
     def _drink_overflow(self, state: GameState) -> Decision:
         """饮料满了（PDRINK_MAX）：收不收、丢哪瓶。候选 = 不收 / 丢第 j 瓶收下，按做完之后的持有组合比较（同 select_drink）。

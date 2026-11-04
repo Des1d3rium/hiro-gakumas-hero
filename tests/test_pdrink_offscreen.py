@@ -1,0 +1,75 @@
+# 来源：digital-hiro tests/test_pdrink_offscreen.py（fix_matto_prep_watchdog 5b5adff）
+"""D41 第三十三局 18:18 seq 111：饮料溢出页「手持ちのドリンク」第 3 行被视口切掉（未知饮料），决策丢它，执行只看到 2 行报失败，
+随后落到 KAA 默认「残す」= 丢掉新来的 特製ハツボシエキス。现在：视口外的已有饮料标成点不到，只在看得到的里重新决策一次；
+还失败就停下，不交给 KAA。"""
+
+import json
+from pathlib import Path
+from types import SimpleNamespace as NS
+
+import pytest
+
+from hiro.brain.deciders import ProduceDeciders
+from hiro.brain.state import CAMPUS_HIRO
+from hiro.contracts import Action, ActionKind, Decision, GameState
+
+FIX = Path(__file__).parent / "fixtures" / "replay" / "g33-seq111-pdrink-max.json"
+
+
+def _state():
+    return GameState.from_dict(json.loads(FIX.read_text(encoding="utf-8"))["state"])
+
+
+def _strategy(monkeypatch, state, decide, results):
+    import hiro.produce.hif as hif
+    from hiro.produce import drink_swap
+
+    calls = {"resolve": [], "kaa": 0, "stops": []}
+
+    def resolve(discard, **k):
+        calls["resolve"].append(discard)
+        drink_swap.LAST_ROWS.update(new=1, owned=2)
+        ok = results.pop(0)
+        return NS(ok=ok, error=None if ok else "溢出页上只看到 2 瓶已有饮料，没有第 [2] 瓶")
+
+    monkeypatch.setattr(drink_swap, "resolve_overflow", resolve)
+    monkeypatch.setattr(hif, "sleep", lambda s: None)
+    monkeypatch.setattr(hif, "device", NS(screenshot=lambda: None))
+    monkeypatch.setattr(hif.HifGrindStrategy, "on_pdrink_max", lambda self, ctx: calls.__setitem__("kaa", calls["kaa"] + 1), raising=False)
+    sess = NS(state=state, observe=lambda **k: NS(fields={}), record=lambda *a, **k: None, recover=lambda *a, **k: None, note=lambda *a: None)
+    strat = hif.HiroHifStrategy.__new__(hif.HiroHifStrategy)
+    strat.s, strat.deciders = sess, NS(decide=lambda page, st: decide(sess.state))
+
+    def stop(page, why, **k):
+        calls["stops"].append(why)
+        raise RuntimeError(why)
+
+    strat._stop = stop
+    return strat, calls
+
+
+def test_g33_offscreen_row_redecides_among_visible(monkeypatch):
+    dec = ProduceDeciders(CAMPUS_HIRO, None)
+    first = dec.decide("PDRINK_MAX", _state())
+    assert first.action.args["discard"] == [2] and first.action.args["receive"]  # 复现：决策要丢被切掉的第 3 行
+    strat, calls = _strategy(monkeypatch, _state(), lambda st: dec.decide("PDRINK_MAX", st), [False, True])
+    strat.on_pdrink_max(None)
+    assert calls["resolve"][0] == [2] and len(calls["resolve"]) == 2 and calls["resolve"][1] != [2]
+    assert calls["kaa"] == 0 and not calls["stops"]  # 没有落到 KAA 的「残す」
+    held = strat.s.state.page_fields["held"]
+    assert held[2]["visible"] is False and held[0].get("visible") is not False
+
+
+def test_swap_failing_twice_stops_instead_of_kaa_default(monkeypatch):
+    d = Decision(Action(ActionKind.DISCARD_DRINK, {"discard": [0], "receive": True}), "换", "rule", 0.9)
+    strat, calls = _strategy(monkeypatch, _state(), lambda st: d, [False, False])
+    with pytest.raises(RuntimeError):
+        strat.on_pdrink_max(None)
+    assert calls["kaa"] == 0 and len(calls["resolve"]) == 2 and "不落到 KAA 默认" in calls["stops"][0]
+
+
+def test_keep_decision_still_uses_kaa_skip(monkeypatch):
+    d = Decision(Action(ActionKind.DISCARD_DRINK, {"discard": [], "receive": False}), "不收", "rule", 0.9)
+    strat, calls = _strategy(monkeypatch, _state(), lambda st: d, [])
+    strat.on_pdrink_max(None)
+    assert calls["kaa"] == 1 and calls["resolve"] == [] and strat._skip_incoming_drink
