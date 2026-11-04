@@ -4,13 +4,18 @@
 夹具 tests/fixtures/q33_enhance_forced.json：#81 的 20 张卡，未强化的只有 元気な挨拶 / ゆるふわおしゃべり / イメトレ / ひなたぼっこ。"""
 
 import json
+
+import pytest
 from pathlib import Path
 
 from hiro.brain.deciders import ProduceDeciders
 from hiro.brain.state import CAMPUS_HIRO
 from hiro.contracts import ActionKind, GameState
 
-FIX = json.loads((Path(__file__).parent / "fixtures" / "q33_enhance_forced.json").read_text(encoding="utf-8"))
+_FIX_PATH = Path(__file__).parent / "fixtures" / "q33_enhance_forced.json"
+if not _FIX_PATH.is_file():  # 实机夹具不进仓库（tests/fixtures 在 .gitignore），没有就跳过整个文件
+    pytest.skip("缺实机夹具 tests/fixtures/q33_enhance_forced.json", allow_module_level=True)
+FIX = json.loads(_FIX_PATH.read_text(encoding="utf-8"))
 
 
 def _state(**extra):

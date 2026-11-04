@@ -398,6 +398,19 @@ class ProduceDeciders:
             musts_done = all(cid in owned_ids for cid, k in YARUKI_CARDS.items() if k.get("must"))
             sel_core = [i for i in known if raw[i]["card_id"] not in owned_ids and _is_core_card(raw[i]["card_id"], copies.get(raw[i]["card_id"], 0))]
             lean_sel = musts_done and not sel_core
+        musts_done = bool(ps.deck) and "deck" not in unknown and all(cid in {c.card_id for c in ps.deck} for cid, k in YARUKI_CARDS.items() if k.get("must"))
+
+        def lean_pick(why: str) -> Decision:
+            # D40：选卡页没有「不拿」按钮（第三十三局选拔 #339 差し入れ页只有「受け取る」，课程页另有「カード除去」/ 再抽選）。
+            # 「不想拿」= 能刷新先刷新，否则拿最不污染的（同本战 / 选拔瘦牌组规则），不取游戏推荐
+            if _budget_ok(budget, "reroll"):
+                return out(Decision(Action(ActionKind.REROLL), f"{why}：先刷新", "rule", 0.8, cands, decider="select_card"))
+            i = min(known, key=lambda k: (_pollution_key(raw[k]["card_id"], k in bad), k != recommended))
+            return out(Decision(Action.activate_effect(i), f"{why}：这一页不能不拿，拿最不污染的 {_card_label(raw[i])}"
+                                f"（{'一次性' if is_once(raw[i]['card_id']) else '可复用'}{'、会生成眠気' if _makes_sleep(raw[i]['card_id']) else ''}）",
+                                "rule", 0.75, cands, decider="select_card"))  # fmt: skip
+
+        unrated = all(not YARUKI_CARDS.get(raw[i]["card_id"]) for i in known)
         if (ps.mode == FINALS and not core) or lean_sel:
             # 本战瘦牌组（用户 2026-11-02：「本战第二轮烂的原因是牌库太大了」；小牌组是游戏重点支持的方向）：
             # 候选里没有必拿 / S·A / 核心卡 → 先刷新（本页预算内），否则拿最不污染的（一次性 > 不生成眠気 > 不冲突），不走 LLM / 游戏推荐兜底
@@ -411,11 +424,17 @@ class ProduceDeciders:
                                 "rule", 0.8, cands, decider="select_card"))  # fmt: skip
         fb = self._card_fallback(raw, known, recommended, bad)
         if self.llm is None or len(known) == 1:
+            if SELECT_NONE_LEAN and len(known) > 1 and musts_done and unrated:
+                return lean_pick("兜底：必拿已齐、候选都是社区没提到的卡")
             return self._fallback(Action.activate_effect(fb[0]), fb[1], cands, "select_card", [], source="rule" if len(known) == 1 else "fallback")
         user = {"局面": situation(ps, unknown) if has_state else "识别未提供完整局面",
                 "选卡": pick | {"候选": [r for i, r in enumerate(for_llm(rows)) if i in known], "本页预算": _budget_text(budget)}}  # fmt: skip
+        if SELECT_NONE_LEAN:
+            user["选卡"]["不想拿时"] = '这一页没有「不拿」按钮。三张都不想拿时输出 {"action": "skip"}：系统先刷新（有次数时），否则拿最不污染牌组的一张（一次性优先）'
         data, calls = self._ask(["produce_card_pick.md", "hif_produce.md", *self.playbook], user)
         act, idx = (data or {}).get("action"), _int(data, "index")
+        if SELECT_NONE_LEAN and (act in ("skip", "none", "no_pick", "pass") or (act == "pick" and idx is not None and idx < 0)):
+            return replace(lean_pick(f"LLM：不想拿（{str((data or {}).get('reason', ''))[:60]}）"), llm=[llm_trace_from_call(c) for c in calls])
         action = None
         if act == "pick" and idx in known and idx in bad and any(i not in bad for i in known):
             idx = None  # 决策-07 / 小牌组：有别的候选时不拿冲突牌、可复用的非核心牌，退回兜底（兜底把它们排在最后）
@@ -427,6 +446,9 @@ class ProduceDeciders:
             action = Action(ActionKind.REROLL)
         if action is None:
             why = f"LLM 输出无效（{data or calls[-1].get('error')}），{fb[1]}"
+            if SELECT_NONE_LEAN and musts_done and unrated:
+                return replace(lean_pick(f"LLM 输出无效（{data or calls[-1].get('error')}）；必拿已齐、候选都是社区没提到的卡"),
+                               llm=[llm_trace_from_call(c) for c in calls])
             return self._fallback(Action.activate_effect(fb[0]), why, cands, "select_card", calls)
         return out(Decision(action, str(data.get("reason", "")), "llm", None, cands, line=str(data.get("line", "")),
                             llm=[llm_trace_from_call(c) for c in calls], decider="select_card"))  # fmt: skip
@@ -622,6 +644,10 @@ class ProduceDeciders:
             seen = {h["index"]: h for h in held}
             held = [dict(seen.get(i) or {"index": i, "drink_id": d}, visible=i in seen) for i, d in enumerate(ps.drinks)]
             warn.append(f"画面只读到 {len(seen)} 瓶持有：按状态机的 {len(ps.drinks)} 瓶比较，只丢画面上能点到的")
+        if held is not None:
+            raw_drinks = [d.get("drink_id") if isinstance(d, dict) else d for d in (state.produce or {}).get("drinks") or []]
+            held, w = _resolve_held(held, list(ps.drinks) if ps is not None and ps.drinks else (raw_drinks or None))
+            warn += w
         capacity = (ps.drink_capacity if ps is not None and ps.drink_capacity else None) or 4
         full = state.page_fields.get("full")
         if full is None:
@@ -976,6 +1002,9 @@ class ProduceDeciders:
         incomings = [x for x in state.page_fields.get("incomings") or [] if x.get("drink_id")]
         if len(incomings) > 1 and held:
             return self._drink_overflow_multi(state, ps, held, incomings, warn)
+        if held and not any(h.get("drink_id") for h in held):
+            return Decision(Action.ui(ActionKind.WAIT, why="持有饮料全都没认出"), "持有饮料全都没认出：不丢（丢错会让执行找不到那一行、KAA 默认「残す」），等滚动重读",
+                            "rule", 0.3, warnings=warn, decider="drink_overflow")  # fmt: skip
         incoming = state.page_fields.get("incoming") or {}
         keep = Action(ActionKind.DISCARD_DRINK, {"discard": [], "receive": False})
         if not held or not incoming.get("drink_id"):
@@ -1707,7 +1736,40 @@ class ProduceDeciders:
                         llm=[llm_trace_from_call(c) for c in calls], decider=decider)  # fmt: skip
 
 
+def _resolve_held(held: list, state_drinks: list | None) -> tuple[list, list]:
+    """D41（第三十三局 18:18）：饮料溢出页「手持ちのドリンク」最后一行常被视口切掉，识别标 partial、按露出的效果说明给 candidates。
+    1）没认出的行先用 candidates ∩ produce.drinks[index] 认出（held 行序 = 底栏顺序）；
+    2）还认不出的行标 visible=False：不作为丢弃对象（原来按「未知 = 最差」丢它，执行找不到这一行，KAA 默认「残す」丢了新来的 特製）。"""
+    out, warn = [], []
+    # 状态机持有里还没被画面认出的瓶（多重集）：同一溢出页连着换过一瓶时 produce.drinks 的行序可能还是旧的（第三十三局 #111）
+    rest = list(state_drinks or [])
+    for h in held:
+        if h.get("drink_id") in rest:
+            rest.remove(h["drink_id"])
+    for h in held:
+        h = dict(h)
+        if not h.get("drink_id"):
+            i = h.get("index")
+            st = state_drinks[i] if state_drinks and isinstance(i, int) and 0 <= i < len(state_drinks) else None
+            cands = h.get("candidates") or []
+            alt = sorted({d for d in rest if d in cands})
+            if st and st in cands:
+                h.update(drink_id=st, method="state_match")
+                warn.append(f"第 {i + 1} 瓶没认全：按候选 ∩ 状态机持有（同一行）认成 {st}")
+            elif len(alt) == 1:
+                h.update(drink_id=alt[0], method="state_match_rest")
+                warn.append(f"第 {(i if isinstance(i, int) else -1) + 1} 瓶没认全：按候选 ∩ 状态机持有里还没对上的瓶认成 {alt[0]}")
+            else:
+                h["visible"] = False
+                warn.append(f"第 {(i if isinstance(i, int) else -1) + 1} 瓶没认出（候选 {cands or '无'}）：不作为丢弃对象")
+        out.append(h)
+    return out, warn
+
+
 SLEEP_ID = "p_card-00-acc-0_002"  # 眠気
+# D40（协调 2026-11-04，第三十三局选拔 #339）：选卡页没有「不拿」按钮。LLM 说不想拿（skip / index -1）或输出无效、且必拿已齐、候选都是社区没提到的卡时，
+# 按瘦牌组规则（能刷新先刷新，否则拿最不污染的：一次性 > 不生成眠気 > 不冲突），不取游戏推荐。行为变化，默认关
+SELECT_NONE_LEAN = True  # 开源版默认开（主仓库 D40）
 SELECTION_LEAN_PICK = False  # 选拔里必拿已齐、候选无核心卡时按瘦牌组规则选（不调 LLM；协调 2026-11-03 提速）。行为变化，默认关，等用户答复（总控 2026-11-03）
 CHANGE_JUNK_VALUE = 1.0  # card_value ≤ 它算「废牌」（冲突 0、基础卡 0.5、好印象系 1）：授業セレクトチェンジ 只在有废牌时才选
 # 授業是セレクトチェンジ 的日子 [wiki]：选拔第 10、17 天，本战第 1、4 天（step = 日程位置）
