@@ -1,6 +1,6 @@
 """培育决策器的合成用例（examples/cases/produce.json，局面手工构造、按社区攻略判对错），只用规则、不调 LLM。
 
-需要主数据（KAA game.db 同结构）：环境变量 HIRO_MASTER_DB 指定路径，或装了 KAA 时用它的 game.db；都没有就跳过。
+需要主数据（KAA game.db 同结构）：环境变量 HIRO_MASTER_DB 指定路径；没有就跳过（CI 默认跳过）。
 """
 
 import json
@@ -18,16 +18,20 @@ from hiro.contracts import Decision, GameState
 CASES = json.loads((Path(__file__).parents[1] / "examples/cases/produce.json").read_text(encoding="utf-8"))
 
 
-def _master_path() -> str | None:
-    if p := os.environ.get("HIRO_MASTER_DB"):
-        return p if Path(p).is_file() else None
-    try:
-        import kaa.db.sqlite  # noqa: F401  先导入它，避免 kaa.game_data.paths 的循环导入
-        from kaa.game_data.paths import game_db_path
-    except Exception:  # noqa: BLE001 KAA 没装
+def _usable(p: str | None) -> str | None:
+    """文件存在且真有主数据表（空库 / 别的库不算；只读打开，不会顺手建出空文件）。"""
+    if not p or not Path(p).is_file():
         return None
-    p = str(game_db_path())
-    return p if Path(p).is_file() else None
+    try:
+        with sqlite3.connect(f"file:{p}?mode=ro", uri=True) as db:
+            ok = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='IdolCard'").fetchone()
+    except sqlite3.Error:
+        return None
+    return p if ok else None
+
+
+def _master_path() -> str | None:
+    return _usable(os.environ.get("HIRO_MASTER_DB"))
 
 
 class _MasterOnly:
@@ -37,7 +41,7 @@ class _MasterOnly:
         self.path = path
 
     def master_db(self):
-        return sqlite3.connect(self.path, check_same_thread=False)
+        return sqlite3.connect(f"file:{self.path}?mode=ro", uri=True, check_same_thread=False)
 
     def __getattr__(self, name):
         return lambda *a, **k: None
@@ -47,7 +51,7 @@ class _MasterOnly:
 def _master(monkeypatch):
     path = _master_path()
     if path is None:
-        pytest.skip("没有主数据（设置 HIRO_MASTER_DB 或安装 KAA）")
+        pytest.skip("没有主数据（设置 HIRO_MASTER_DB 为 KAA game.db 的路径）")
     monkeypatch.setitem(plugins._registered, "asset_source", lambda: _MasterOnly(path))
     plugins._cache.pop("asset_source", None)
     import hiro.state.catalog as cat
