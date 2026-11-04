@@ -100,6 +100,12 @@ def pick_rental(attr: str = WANT_ATTR, tries: int = 3) -> bool:
     return False
 
 
+def progress(why: str) -> None:
+    from hiro.loop.repeat_guard import progress as _p
+
+    _p(why)
+
+
 def _pick_once(attr: str, exclude: set) -> str | None:
     """两页都从顶滑到底：遇到满级（Lv60）主属性卡立刻选；否则记下最好的一张（页、滑动次数、玩家名），回去点它。返回选中的卡名。"""
     device.click(*RENTAL_SLOT)
@@ -115,6 +121,7 @@ def _pick_once(attr: str, exclude: set) -> str | None:
             _to_top()
         last_players = None
         for screen in range(MAX_SCREENS):
+            progress(f"租借：第 {page} 页第 {screen + 1} 屏")  # 两页翻完约 55s，每屏报一次进展（D38）
             lst = _rows()
             rows = lst["rows"]
             players = [r.get("player") for r in rows]

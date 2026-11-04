@@ -147,8 +147,24 @@ class Guard:
         return self.clock() - self.progress_t
 
 
+ACTIVE: dict = {"session": None}  # watchdog() 登记的会话：主循环之外的流程（KAA 培育准备）用 progress() 报进展
+
+
+def progress(why: str = "") -> None:
+    """主循环之外的流程每做完一个动作报一次进展（D38 第三十三局：KAA 培育准备——选偶像、切编成、租借、选回忆——
+    整段 186s 页面一直 unknown、局面没变，看门狗误停）。没有登记的会话时什么都不做。"""
+    g = getattr(ACTIVE["session"], "guard", None)
+    if g is None:
+        return
+    g.touch()
+    if why:
+        logger.debug("进展：%s", why)
+
+
 def watchdog(session, *, every: float = SCREEN_EVERY, clock: Callable[[], float] = time.monotonic):
-    """kotonebot Loop 全局回调：每 every 秒用这一轮的截图采样画面；session 的局面和画面都 STALL_S 秒没进展就抛 Stalled。"""
+    """kotonebot Loop 全局回调：每 every 秒用这一轮的截图采样画面；session 的局面和画面都 STALL_S 秒没进展就抛 Stalled。
+    同时把 session 登记给 progress()。"""
+    ACTIVE["session"] = session
     last = [-1e9]
 
     def cb(loop) -> bool:

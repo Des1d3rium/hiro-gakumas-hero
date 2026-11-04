@@ -72,6 +72,12 @@ PITEM_ACQUIRE_TIMEOUT = 5.0  # 点「受け取る」后等按钮消失
 PITEM_TRIES = 2
 
 
+def _progress(why: str) -> None:
+    from hiro.loop.repeat_guard import progress
+
+    progress(why)
+
+
 def locate_idol_by_swipe(skin_id: str) -> Rect | None:
     """固定 4 列、滑动行的网格裁剪逐格查偶像图像库（KAA 的 extract_idols 轮廓检测会漏掉部分卡位，2026-10-31 实测漏掉 Campus 広）。
     先回到列表顶部，再逐页上滑，到底（画面不再变化）为止。"""
@@ -103,6 +109,7 @@ def locate_idol_by_swipe(skin_id: str) -> Rect | None:
             logger.info("偶像列表翻到底仍未找到 %s", skin_id)
             return None
         last_sig = sig
+        _progress(f"找偶像：第 {page + 1} 页没有")
         device.swipe(cx, bottom - 40, cx, bottom - 40 - SWIPE_PX, duration=0.6)
         time.sleep(SETTLE)
     logger.info("翻了 %d 页仍未找到 %s", MAX_PAGES, skin_id)
@@ -964,6 +971,28 @@ def action_commit(self, action) -> None:
     self.controller.wait_disappear(button.prefab)
 
 
+PREP_STEPS = ("step1", "step2", "step3", "step4", "_select_set", "_select_idol")  # KAA 培育准备里每一步前后各报一次进展（D38）
+
+
+def _prep_progress(fn, name: str):
+    """KAA 培育准备的一步：开始前、结束后（含异常）各报一次进展，空转看门狗不会把整段准备算成没进展。
+    单步自己卡住 STALL_S 秒照样停机。functools.wraps 带上原函数的 _hiro_* 标记，重复 apply 不会多包。"""
+    import functools
+
+    from hiro.loop.repeat_guard import progress
+
+    @functools.wraps(fn)
+    def wrapped(*a, **k):
+        progress(f"培育准备 {name} 开始")
+        try:
+            return fn(*a, **k)
+        finally:
+            progress(f"培育准备 {name} 结束")
+
+    wrapped._hiro_progress = True
+    return wrapped
+
+
 def apply() -> None:
     import importlib
 
@@ -997,4 +1026,8 @@ def apply() -> None:
     if not getattr(prep.step4, "_hiro_memory_check", False):
         prep.step4 = _check_memory_then(prep.step4)
         prep.step4._hiro_memory_check = True
+    for name in PREP_STEPS:
+        fn = getattr(prep, name, None)
+        if fn is not None and not getattr(fn, "_hiro_progress", False):
+            setattr(prep, name, _prep_progress(fn, name))
     logger.info("已启用 KAA 补丁：locate_idol 改为上滑翻页；授業换卡放宽卡片定位、阶段 2 不换保护卡；H.I.F P 道具按实测位置点击；破弃对话框只点キャンセル")

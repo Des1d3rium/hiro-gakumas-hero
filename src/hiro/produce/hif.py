@@ -509,6 +509,10 @@ class HiroHifStrategy(HifGrindStrategy):
         else:
             raw["options"] = [{**it, "name": it.get("name") or self.POUCH_NAME.get(it.get("color"))} for it in raw.get("options") or []]
         obs = self.s.observe(scene="SELECT_PITEM", img=img, fields=raw)
+        for _ in range(2):  # 页面切换还在防抖时字段没进 state（D39 第三十三局 seq 229，同 SELECT_CARD / SELECT_DRINK）：再观测让页面落定
+            if self.s.state.page.name == "SELECT_PITEM" and self.s.state.page_fields.get("pitems"):
+                break
+            obs = self.s.observe(scene="SELECT_PITEM", img=img, fields=raw)
         n = len(raw.get("options") or []) or 3
         d = self.deciders.decide("SELECT_PITEM", self.s.state, n_options=n)
         self._note_fallback("SELECT_PITEM", d)
@@ -612,7 +616,9 @@ class HiroHifStrategy(HifGrindStrategy):
     PDRINK_RETRY_WAIT = 0.5
 
     def on_pdrink_max(self, ctx):
-        """饮料满（课程 / 考试奖励溢出页）：决策器（新饮料优于最差一瓶才换）→ drink_swap.resolve_overflow；不换或识别不足时走 KAA 默认（留旧、跳过新）。"""
+        """饮料满（课程 / 考试奖励溢出页）：决策器（新饮料优于最差一瓶才换）→ drink_swap.resolve_overflow；决策不换时走 KAA 默认（留旧、跳过新）。
+        替换执行失败不落到 KAA 默认（D41）：只在看得到的已有饮料里重新决策一次，还不行停下。"""
+        from hiro.produce import drink_swap
         from hiro.produce.drink_swap import resolve_overflow
 
         t0 = time.monotonic()
@@ -630,8 +636,10 @@ class HiroHifStrategy(HifGrindStrategy):
             d = self.deciders.decide("PDRINK_MAX", self.s.state)
         if d.action.kind is not ActionKind.DISCARD_DRINK:
             self._stop("PDRINK_MAX", f"决策重试 {self.PDRINK_DECIDE_RETRIES} 次仍没给出换 / 不换（{d.action}，{d.reason}）", obs=obs, decision=d)
-        discard = d.action.args.get("discard") or []
-        if d.action.kind is ActionKind.DISCARD_DRINK and discard and d.action.args.get("receive"):
+        for attempt in range(self.PDRINK_SWAP_RETRIES + 1):
+            discard = d.action.args.get("discard") or []
+            if not (discard and d.action.args.get("receive")):
+                break  # 决策是不要新饮料：走下面 KAA 的跳过
             pf = self.s.state.page_fields
             recv = d.action.args.get("receive_indexes")
             res = resolve_overflow([int(i) for i in discard], receive_indexes=recv, action=d.action, held=pf.get("held"), incoming=pf.get("incoming"))
@@ -640,12 +648,39 @@ class HiroHifStrategy(HifGrindStrategy):
             self.s.record(obs, decision=d, execution=res, timings_ms={"total": (time.monotonic() - t0) * 1000})
             if res.ok:
                 return
-            self.s.recover("tap_no_effect", f"饮料替换没完成（{res.error}），改为跳过新饮料，留旧的")
-        else:
-            self.s.record(obs, decision=d, timings_ms={"total": (time.monotonic() - t0) * 1000})
-        # 决策是不要新饮料（或替换失败）：点 KAA 的跳过，随后的「報酬スキップ」确认由 on_pdrink_max_confirm 放行
+            # D41 第三十三局 18:18：要丢的那瓶在列表视口外（最后一行被切掉），执行失败后落到 KAA 默认「残す」= 丢掉新饮料（特製ハツボシエキス）。
+            # 改为：视口外的已有饮料标成点不到（决策不会丢它），重新观测、重新决策一次；还不行就停下，不交给 KAA
+            if attempt >= self.PDRINK_SWAP_RETRIES:
+                self._stop("PDRINK_MAX", f"饮料替换 {attempt + 1} 次都没完成（{res.error}），不落到 KAA 默认（会丢新饮料）", obs=obs, decision=d)
+            self.s.recover("tap_no_effect", f"饮料替换没完成（{res.error}），只在画面上看得到的已有饮料里重新决策")
+            sleep(self.SELECT_RETRY_WAIT)
+            device.screenshot()
+            obs = self.s.observe(scene="PDRINK_MAX")
+            self._mark_offscreen_held(drink_swap.LAST_ROWS.get("owned"))
+            d = self.deciders.decide("PDRINK_MAX", self.s.state)
+            if d.action.kind is not ActionKind.DISCARD_DRINK:
+                self._stop("PDRINK_MAX", f"替换失败后重新决策没给出换 / 不换（{d.action}，{d.reason}）", obs=obs, decision=d)
+        else:  # pragma: no cover  循环里成功 return、失败 _stop
+            return
+        self.s.record(obs, decision=d, timings_ms={"total": (time.monotonic() - t0) * 1000})
+        # 决策是不要新饮料：点 KAA 的跳过，随后的「報酬スキップ」确认由 on_pdrink_max_confirm 放行
         self._skip_incoming_drink = True
         return super().on_pdrink_max(ctx)
+
+    PDRINK_SWAP_RETRIES = 1  # 饮料替换执行失败后（只在看得到的已有饮料里）重新决策、再执行几次
+
+    def _mark_offscreen_held(self, visible_rows: int | None) -> None:
+        """溢出页「手持ちのドリンク」只看到前 visible_rows 行（列表没滚、最后一行被视口切掉）：后面的已有饮料标 visible=False，
+        决策（_drink_overflow）不会选它丢。"""
+        if visible_rows is None:
+            return
+        pf = self.s.state.page_fields
+        held = pf.get("held") or []
+        if not any(h.get("index", i) >= visible_rows for i, h in enumerate(held)):
+            return
+        marked = [{**h, "visible": False} if h.get("index", i) >= visible_rows else h for i, h in enumerate(held)]
+        self.s.state = replace(self.s.state, page_fields={**pf, "held": marked})
+        self.s.note(f"PDRINK_MAX：已有饮料只看得到前 {visible_rows} 行，其余标为点不到")
 
     def on_select_drink(self, ctx: "DrinkSelectContext"):
         if self._drink_full_skip():
@@ -861,23 +896,54 @@ class HiroHifStrategy(HifGrindStrategy):
         from hiro.loop import kaa_patches
 
         t0 = time.monotonic()
-        for _ in range(self.CHANGE_OBSERVE_TRIES):
-            obs = self.s.observe(scene=page)
-            if self.s.state.page_fields.get("cards"):
-                break
-            time.sleep(0.5)
         if page not in deciders_mod.PAGES:
-            self._stop(page, "决策器还没有这个页面（决策-08）", obs=obs)
+            self._stop(page, "决策器还没有这个页面（决策-08）")
         kind = "enhance" if page == "SKILL_CARD_ENHANCE" else "remove"
-        self._scan_change_deck(kaa_patches.CARD_OP_REGION[kind], page)  # 一屏放不下时读整副交给决策（执行按 card_id 翻屏找）
         failed = HiroHifStrategy.op_failed.setdefault(kind, set())
-        if failed:
+
+        def read():
+            """观测卡格 → 一屏放不下时读整副 → 去掉本局做不成的卡 → 按画面有没有「キャンセル」填 cancelable（False = 必选，决策 512e3c3）。"""
+            for _ in range(self.CHANGE_OBSERVE_TRIES):
+                o = self.s.observe(scene=page)
+                if self.s.state.page_fields.get("cards"):
+                    break
+                time.sleep(0.5)
+            self._scan_change_deck(kaa_patches.CARD_OP_REGION[kind], page)  # 一屏放不下时读整副交给决策（执行按 card_id 翻屏找）
             pf = self.s.state.page_fields
-            self.s.state = replace(self.s.state, page_fields={**pf, "cards": [c for c in pf.get("cards") or [] if c.get("card_id") not in failed]})
+            cards = [c for c in pf.get("cards") or [] if c.get("card_id") not in failed] if failed else pf.get("cards")
+            # cancelable 以识别填的为准（识屏 e226c6b：底部按钮判据）；识别没给（None）时用这里看到的「キャンセル」补
+            cancelable = pf.get("cancelable")
+            if cancelable is None:
+                cancelable = self._card_op_cancel() is not None
+            self.s.state = replace(self.s.state, page_fields={**pf, "cards": cards, "cancelable": cancelable})
+            return o, cancelable
+
+        obs, cancelable = read()
         d = self.deciders.decide(page, self.s.state)
+        for _ in range(self.CARD_WAIT_REREADS):
+            if d.action.kind is not ActionKind.WAIT:
+                break
+            # 必选页（没有キャンセル）卡格没读到 / 认出的都不能强化：决策等重新识别（D42），重读再决策，不盲选
+            self.s.record(obs, decision=d)
+            time.sleep(self.CARD_WAIT_INTERVAL)
+            obs, cancelable = read()
+            d = self.deciders.decide(page, self.s.state)
+        if d.action.kind is ActionKind.WAIT:
+            self._stop(page, f"必选页重读 {self.CARD_WAIT_REREADS} 次决策仍在等待：{d.reason}", obs=obs, decision=d)
         card_id = d.action.args.get("card_id") or d.action.args.get("remove_card_id")
         if d.action.args.get("cancel") or not card_id:
-            self._stop(page, f"决策没给出要操作的卡：{d.reason}", obs=obs, decision=d)
+            if not cancelable:  # 画面没有キャンセル（必选）而决策取消：停下，不盲选
+                self._stop(page, f"决策没给出要操作的卡，画面也没有「キャンセル」：{d.reason}", obs=obs, decision=d)
+            # D42 第三十三局本战：决策说没有值得操作的卡 → 点「キャンセル」退回（相談 / 上一页），不停机
+            btn = self._card_op_cancel()
+            if btn is not None:
+                device.click(btn)
+            else:  # 识别说有、这一帧 OCR 没读到：按固定位置点（识屏：11 个样本都在 x≈165、y≈1148）
+                device.click(*self.CARD_OP_CANCEL_XY)
+            result = self.s.verify(d.action, page_before=page, taps=[], retries=0)
+            self.s.record(obs, decision=d, execution=result, timings_ms={"total": (time.monotonic() - t0) * 1000})
+            logger.info("%s：%s → 点キャンセル 退回", page, d.reason)
+            return
         execute = getattr(kaa_patches, executor_name, None)
         if execute is None:
             self._stop(page, f"执行器 {executor_name} 还没有（游戏执行-06）", obs=obs, decision=d)
@@ -898,6 +964,20 @@ class HiroHifStrategy(HifGrindStrategy):
                 logger.warning("%s 连续做不成，点キャンセル 退回", executor_name)
                 return
             self._stop(page, f"{executor_name}({card_id}) 没完成（读不出 / 选中不符）", decision=d)
+
+    CARD_WAIT_REREADS = 3  # 必选强化 / 删卡页决策等待（卡格没读到）时重读几次
+    CARD_WAIT_INTERVAL = 1.0
+
+    CARD_OP_CANCEL_XY = (165, 1148)  # 强化 / 删卡对话框「キャンセル」的固定位置（720x1280）
+
+    @staticmethod
+    def _card_op_cancel():
+        """强化 / 删卡对话框底部的「キャンセル」（y > 1050）；没有（礼物强化等必须选一张）或读不了返回 None。"""
+        try:
+            return next((t.rect for t in ocr.ocr() if "キャンセル" in t.text and t.rect.center.y > 1050), None)
+        except Exception as e:  # noqa: BLE001  OCR 出错当没看到
+            logger.warning("找「キャンセル」时 OCR 出错：%r", e)
+            return None
 
     def on_skill_card_removal(self, ctx):
         self._card_event("SKILL_CARD_REMOVAL", ctx, "remove_card")
