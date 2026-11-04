@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
-# 一条命令装好实机游玩环境（macOS + PlayCover）：KAA 子模块 → .venv（Python 3.10）→ 安装 → 生成 KAA 的 R.py → 自检。
+# 一条命令装好实机游玩环境（macOS + PlayCover）：KAA 子模块 → .venv（Python 3.10）→ 安装 → 生成 KAA 的 R.py
+# → 下载 KAA 公开游戏数据（主数据 game.db + 卡图，resources/game_data）→ 自检。
 #
 #   scripts/setup.sh            # 第一次装 / 更新后重跑（已有的步骤会跳过）
 #   scripts/setup.sh --regen    # 强制重新生成 kaa/tasks/R.py（KAA 子模块换版本后）
+#   scripts/setup.sh --no-data  # 不下载游戏数据（已用 HIRO_KAA_GAME_DATA 指向别处时）
 #
 # 只装开发 / 测试（不玩实机）不需要这个脚本：uv venv && uv pip install -e ".[dev]"。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 REGEN=0
+DATA=1
 for a in "$@"; do
   case "$a" in
     --regen) REGEN=1 ;;
-    -h|--help) sed -n 2,8p "$0"; exit 0 ;;
-    *) echo "未知参数：$a（可用 --regen）" >&2; exit 2 ;;
+    --no-data) DATA=0 ;;
+    -h|--help) sed -n 2,10p "$0"; exit 0 ;;
+    *) echo "未知参数：$a（可用 --regen / --no-data）" >&2; exit 2 ;;
   esac
 done
 
@@ -22,10 +26,10 @@ step() { printf '\n==> %s\n' "$*"; }
 command -v uv >/dev/null || { echo "需要 uv（https://docs.astral.sh/uv/getting-started/installation/）" >&2; exit 1; }
 command -v git >/dev/null || { echo "需要 git" >&2; exit 1; }
 
-step "1/5 KAA 子模块 vendor/kaa"
+step "1/6 KAA 子模块 vendor/kaa"
 git submodule update --init vendor/kaa
 
-step "2/5 虚拟环境 .venv（KAA 要求 Python 3.10）"
+step "2/6 虚拟环境 .venv（KAA 要求 Python 3.10）"
 if [ ! -x .venv/bin/python ]; then
   uv venv --python 3.10 .venv
 else
@@ -33,10 +37,10 @@ else
 fi
 PY="$ROOT/.venv/bin/python"
 
-step "3/5 安装本仓库与 KAA（.[dev,play]）"
+step "3/6 安装本仓库与 KAA（.[dev,play]）"
 uv pip install --python "$PY" -e ".[dev,play]"
 
-step "4/5 生成 KAA 的 kaa/tasks/R.py（KAA 的生成文件，子模块里没有）"
+step "4/6 生成 KAA 的 kaa/tasks/R.py（KAA 的生成文件，子模块里没有）"
 if [ "$REGEN" = 1 ] || [ ! -f vendor/kaa/kaa/tasks/R.py ]; then
   # 要在 vendor/kaa 下跑（脚本用相对路径）；macOS 上先 import hiro（hiro.compat 补 ctypes.WinDLL，否则 KAA 导入失败）
   (cd vendor/kaa && "$PY" -c "import hiro, runpy, sys; sys.argv = ['make_resources.py']; runpy.run_path('tools/make_resources.py', run_name='__main__')" > "$ROOT/.setup-make-resources.log" 2>&1) \
@@ -46,7 +50,35 @@ else
   echo "已有 vendor/kaa/kaa/tasks/R.py（KAA 换版本后用 --regen 重新生成）"
 fi
 
-step "5/5 自检"
+step "5/6 KAA 公开游戏数据（game.db + 卡图 → resources/game_data，首次约 2–3 分钟，含卡图索引）"
+if [ "$DATA" = 0 ]; then
+  echo "跳过（--no-data）"
+else
+  "$PY" - <<'PY'
+import hiro  # noqa: F401  macOS 兼容层
+from kaa.game_data.updater import GameDataUpdater, apply_pending, has_usable_baseline
+
+u = GameDataUpdater()
+r = u.check_only()  # 和 KAA 图形界面同一套：kotonebot/kaa-game-data 最新 release
+if r is None:
+    print("游戏数据已是最新" if has_usable_baseline() else "没查到可下载的游戏数据（网络？）")
+else:
+    shown = {}
+
+    def progress(name, cur, total):
+        step = total // 4 if total else 0
+        if total and (cur == total or cur - shown.get(name, 0) >= step):
+            shown[name] = cur
+            print(f"  {name} {cur * 100 // total}%", flush=True)
+
+    u.download_to_staging(r, file_progress_cb=progress)
+    print("已下载并应用" if apply_pending() else "下载完成，但没能应用（见上面的日志）")
+if not has_usable_baseline():
+    raise SystemExit("游戏数据不可用：可稍后重跑本脚本，或用 HIRO_KAA_GAME_DATA 指向已有的 game_data 目录")
+PY
+fi
+
+step "6/6 自检"
 "$PY" - <<'PY'
 import sys
 
