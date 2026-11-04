@@ -12,11 +12,13 @@ from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 
 def select(sql: str, *args):
-    """主数据查询。开源版暂时走 KAA 公开主数据（kaa.db.sqlite）；插件接口 AssetSource 定下来后改成 AssetSource.master_db()。
-    KAA 没装时只有用到饮料效果文本的地方会报错，导入本模块不受影响。"""
-    from kaa.db.sqlite import select as _select  # 延迟导入：KAA 是可选依赖
+    """主数据单行查询，走插件 AssetSource.master_db()（经 hiro.state.catalog）；拿不到主数据时返回 None。"""
+    from hiro.state.catalog import CatalogUnavailable, catalog
 
-    return _select(sql, *args)
+    try:
+        return catalog().db.execute(sql, args).fetchone()
+    except CatalogUnavailable:
+        return None
 
 
 _TAG = re.compile(r"<[^>]+>")
@@ -179,11 +181,26 @@ def drink_view(slot: int, drink) -> DrinkView:
     return DrinkView(slot, drink.name, drink.id, _drink_text(drink.id))
 
 
-@lru_cache(maxsize=None)
-def kaa_cards() -> dict:
-    """(卡 id, 强化次数) → KAA SkillCard（公开主数据）。KAA 是可选依赖，没装时返回空表。"""
-    try:
-        from kaa.db.skill_card import SkillCard
-    except ImportError:
-        return {}
-    return {(c._id, c.upgrade_count or 0): c for c in SkillCard.all()}
+class _MasterCards:
+    """(卡 id, 强化次数) → 卡对象（card_view 需要的那些属性），从主数据目录现查；查不到 / 没有主数据时 get 返回 None。"""
+
+    def get(self, key, default=None):
+        from types import SimpleNamespace
+
+        from hiro.state.catalog import CatalogUnavailable, catalog
+
+        card_id, upgrade = key
+        try:
+            r = catalog().card(card_id, upgrade or 0)
+        except (CatalogUnavailable, KeyError):
+            return default
+        return SimpleNamespace(_id=r.get("id"), name=r.get("name"), upgrade_count=r.get("upgradeCount") or 0,
+                               produce_descriptions=r.get("produceDescriptions"), effect_display_text="",
+                               play_move_position_type=r.get("playMovePositionType"), cost_type=r.get("costType"),
+                               cost_value=r.get("costValue"), category=r.get("category"), stamina=r.get("stamina"),
+                               force_stamina=r.get("forceStamina"))  # fmt: skip
+
+
+def kaa_cards() -> _MasterCards:
+    """兼容主仓库的名字：卡对象从公开主数据（AssetSource.master_db）现查，不依赖 KAA。"""
+    return _MasterCards()
