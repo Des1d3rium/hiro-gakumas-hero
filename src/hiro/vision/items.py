@@ -84,9 +84,8 @@ class IconLibrary:
         scores = (self.templates @ p) / np.sqrt(var)  # N×K
         out = []
         for col in scores.T:
-            top = np.argpartition(-col, 2)[:2]
-            top = top[np.argsort(-col[top])]
-            out.append([(float(col[i]), self.keys[i]) for i in top])
+            top = np.argsort(-col)[:2]  # 自建图库可能只有一两个图标（argpartition(kth=2) 要求至少 3 个）
+            out.append([(float(col[i]), self.keys[i]) for i in top] + [(0.0, "")] * (2 - len(top)))
         return out
 
 

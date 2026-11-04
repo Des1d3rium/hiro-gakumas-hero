@@ -23,7 +23,13 @@ if not FIXTURES.exists() and os.environ.get("HIRO_FIXTURES") and Path(os.environ
 
 OPTIONAL_LAYERS = ("hiro.loop.controller", "hiro.loop.kaa_patches", "hiro.produce", "hiro.brain.state", "hiro.brain.cards",
                    "hiro.brain.deciders", "hiro.brain.rules", "hiro.brain.replay", "hiro.sim")  # fmt: skip
-KAA_USERS = re.compile(r"hiro\.vision|hiro\.perception")
+KAA_USERS = re.compile(r"hiro\.(?:vision|perception)(?:\.(\w+))?")
+KAA_FREE = {"assets", "layout", "items", "region_cache"}  # 导入时不碰 KAA 的识别层模块（items 只在读饮料时才导入 KAA）
+
+
+def _needs_kaa(src: str) -> bool:
+    """测试源码引用了要 KAA 的识别层模块（只引用 KAA_FREE 里的模块不算）。"""
+    return any(m.group(1) not in KAA_FREE for m in KAA_USERS.finditer(src))
 
 
 def _has_module(name: str) -> bool:
@@ -94,6 +100,7 @@ def _source(path: Path) -> str:
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "user_assets(*kinds): 需要自建素材（HIRO_USER_ASSETS）；kinds 见 hiro.vision.assets.USER_ASSETS")
+    config.addinivalue_line("markers", "synthetic: 只用合成图（源码里的 .png 是自己画的），不按「读样例截图」跳过")
 
 
 def _missing_user_assets(kinds) -> list[str]:
@@ -119,7 +126,7 @@ def pytest_collection_modifyitems(config, items):
         if missing:
             item.add_marker(pytest.mark.skip(reason=f"依赖的层不在仓库里：{missing}"))
             continue
-        if KAA_USERS.search(src):
+        if _needs_kaa(src):
             if kaa_ok is None:
                 kaa_ok = _kaa_ok()
             if not kaa_ok:
@@ -135,7 +142,7 @@ def pytest_collection_modifyitems(config, items):
             if MASTER_HINT.search(body):
                 item.add_marker(pytest.mark.skip(reason="需要主数据 game.db（KAA 公开数据，HIRO_KAA_GAME_DATA）"))
                 continue
-        if not FIXTURES.exists() and _needs_fixtures(item, src):
+        if not FIXTURES.exists() and not item.get_closest_marker("synthetic") and _needs_fixtures(item, src):
             item.add_marker(pytest.mark.skip(reason="没有截图样例 tests/fixtures（游戏画面不随仓库发布）"))
 
 

@@ -4,7 +4,8 @@
 
 - KAA 公开数据（kaa-game-data 的发布包，KAA 运行时下载到 resources/game_data/）：
   game.db（主数据）、skill_cards/（技能卡卡面）、drinks/（P 饮料图）。HIRO_KAA_GAME_DATA 改目录。
-- 使用者自建目录（从自己的截图 / 客户端取，不随仓库发布）：HIRO_USER_ASSETS，默认 resources/user_assets/
+- 使用者自建目录（从自己的截图 / 客户端取，不随仓库发布；效果图标 / P 道具图标用 tools/assets/capture_icons.py 从自己的考试截图生成）：
+  HIRO_USER_ASSETS，默认 resources/user_assets/
     cards/            技能卡卡面（有则优先于 KAA）
     icons/<kind>/     图标：drink（P 饮料，有则优先于 KAA）、pitem（P 道具）、status（考试效果）；RGBA 或白底 RGB，可带 index.json（资源名 → 名称）
     font/             数字字体 Campus-Alphanumeric-SemiBold.ttf（HUD 读数字形比对；没有则走 ddddocr + Apple Vision 核对）

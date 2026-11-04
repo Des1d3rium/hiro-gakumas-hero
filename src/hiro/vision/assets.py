@@ -2,7 +2,7 @@
 
 开源仓库不带游戏素材。拿不到插件、或插件对某类素材返回 None 时，这里都返回 None，调用方各自退路：
 - 卡面：匹配关闭，只按卡名 OCR；
-- 图标（P 饮料 / P 道具 / 考试效果名）：给 None；
+- 图标（P 饮料 / P 道具 / 考试效果名）：给 None（P 道具 / 考试效果图标可用 tools/assets/capture_icons.py 从自己的截图生成）；
 - 数字字体：HUD 数字、分数、手牌徽章改走 ddddocr，并用 Apple Vision / 字形个数核对（digits._number_without_font、
   digits._score_without_font、hif.read_badge）；
 - 界面 Sprite：页面签名关闭，KAA 判不出时由 scene._fallback 像素补判；

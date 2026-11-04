@@ -38,6 +38,9 @@ GLYPH_SIZES = (30, 34, 38, 42)
 PRERANK_SIZE = 2  # 粗排用的尺寸（38）
 PRERANK_KEEP = 16
 STATUS_MIN_SCORE = 0.6
+# 使用者自建的图标（tools/assets/capture_icons.py，index.json 里 source=capture）：图库往往只有几个，没收进来的图标会被
+# 「最像的那个」顶上（パラメータ上昇量増加 的上箭头配到 好印象 0.68）。实测同一图标 ≥ 0.725、领先 ≥ 0.15；不同图标 ≤ 0.70、领先 ≤ 0.09
+CAPTURED_MIN_SCORE, CAPTURED_MIN_MARGIN = 0.72, 0.12
 ENCHANT_MIN_SCORE = 0.6
 CARD_INNER = 24  # 卡面比对的缩放边长
 
@@ -235,6 +238,16 @@ def read_status_column(img: MatLike, *, cache: RegionCache | None = None) -> lis
     return out
 
 
+def _accepted(meta: dict, top: list[tuple[float, str]]) -> bool:
+    """图标匹配结果可信：分数够；第一名是自建图标时另要更高的分数与领先（见 CAPTURED_MIN_SCORE）。"""
+    score, key = top[0]
+    if score < STATUS_MIN_SCORE:
+        return False
+    if meta.get(key, {}).get("source") == "capture":
+        return score >= CAPTURED_MIN_SCORE and score - top[1][0] >= CAPTURED_MIN_MARGIN
+    return True
+
+
 def _read_slot(img: MatLike, k: int) -> dict:
     meta, _ = _icon_index()
     patch = _slot(img, k)
@@ -242,7 +255,7 @@ def _read_slot(img: MatLike, k: int) -> dict:
     if np.count_nonzero(blue) / blue.size >= BLUE_MIN_RATIO:
         top = match_status_icon(patch)
         score, key = top[0]
-        if score < STATUS_MIN_SCORE:
+        if not _accepted(meta, top):
             entry = {"slot": k, "kind": "status", "key": None, "score": round(score, 3), "candidates": [c for _, c in top]}
         else:
             info = meta.get(key, {})
@@ -256,7 +269,7 @@ def _read_slot(img: MatLike, k: int) -> dict:
         score, asset = match_enchant_card(img, k)
         card = _card_from_asset(asset) if score >= ENCHANT_MIN_SCORE else None
         grey = None if card is not None else match_status_icon(patch)
-        if grey and grey[0][0] >= STATUS_MIN_SCORE:
+        if grey and _accepted(meta, grey):
             # 培育计划的核心状态（やる気 等）为 0 时以灰底常驻、不显示数值；卡面认不出而字形能认出即是这种槽
             gscore, key = grey[0]
             info = meta.get(key, {})
