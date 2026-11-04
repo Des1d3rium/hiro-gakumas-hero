@@ -50,12 +50,19 @@ def _strategy(monkeypatch, state, decide, results):
 
 @pytest.mark.master
 def test_g33_offscreen_row_redecides_among_visible(monkeypatch):
+    """钩子行为：第一次决策要丢视口外的第 3 行（当时的决策；决策侧 D41 之后已不会这样选）→ 执行失败 → 钩子把视口外的行标成点不到 →
+    真实决策在看得到的里重选、执行成功，不落到 KAA 默认。"""
     dec = ProduceDeciders(CAMPUS_HIRO, None)
-    first = dec.decide("PDRINK_MAX", _state())
-    assert first.action.args["discard"] == [2] and first.action.args["receive"]  # 复现：决策要丢被切掉的第 3 行
-    strat, calls = _strategy(monkeypatch, _state(), lambda st: dec.decide("PDRINK_MAX", st), [False, True])
+    old = Decision(Action(ActionKind.DISCARD_DRINK, {"discard": [2], "receive": True}), "丢未知（第三十三局当时的决策）", "rule", 0.8)
+
+    def decide(st):
+        held = st.page_fields.get("held") or []
+        marked = any(h.get("visible") is False for h in held)
+        return dec.decide("PDRINK_MAX", st) if marked else old
+
+    strat, calls = _strategy(monkeypatch, _state(), decide, [False, True])
     strat.on_pdrink_max(None)
-    assert calls["resolve"][0] == [2] and len(calls["resolve"]) == 2 and calls["resolve"][1] != [2]
+    assert calls["resolve"][0] == [2] and len(calls["resolve"]) == 2 and 2 not in calls["resolve"][1]
     assert calls["kaa"] == 0 and not calls["stops"]  # 没有落到 KAA 的「残す」
     held = strat.s.state.page_fields["held"]
     assert held[2]["visible"] is False and held[0].get("visible") is not False

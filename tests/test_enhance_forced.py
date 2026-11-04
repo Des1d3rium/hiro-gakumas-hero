@@ -27,18 +27,15 @@ def decide(**extra):
     return ProduceDeciders(CAMPUS_HIRO, None).decide("SKILL_CARD_ENHANCE", _state(**extra))
 
 
-@pytest.mark.master
 def test_unknown_cancelable_keeps_cancel():
     d = decide()  # 识别没给 cancelable：照旧（可取消的 相談 强化页）
     assert d.action.args.get("cancel") is True
 
 
-@pytest.mark.master
 def test_cancelable_true_cancels():
     assert decide(cancelable=True).action.args.get("cancel") is True
 
 
-@pytest.mark.master
 def test_forced_picks_non_core_never_cancel():
     for extra in ({"cancelable": False}, {"trigger": "pitem"}):
         d = decide(**extra)
