@@ -22,6 +22,24 @@ def _pct(values: list[float], p: float) -> float | None:
     return xs[k]
 
 
+def llm_summary(llm_calls: list) -> dict:
+    """LLM 调用汇总：总输入 = 不含缓存的输入 + 缓存读 + 缓存写；费用为各次 cost_usd 之和（有才计）。"""
+    return {
+        "calls": len(llm_calls),
+        "errors": sum(1 for c in llm_calls if c.error),
+        "usage_limit": sum(1 for c in llm_calls if c.error and c.error.startswith("usage_limit")),
+        "input_tokens": sum(c.input_tokens or 0 for c in llm_calls),
+        "output_tokens": sum(c.output_tokens or 0 for c in llm_calls),
+        "cache_read": sum(getattr(c, "cache_read_input_tokens", None) or 0 for c in llm_calls),
+        "cache_creation": sum(getattr(c, "cache_creation_input_tokens", None) or 0 for c in llm_calls),
+        "total_input": sum((c.input_tokens or 0) + (getattr(c, "cache_read_input_tokens", None) or 0)
+                           + (getattr(c, "cache_creation_input_tokens", None) or 0) for c in llm_calls),
+        "cost_usd": round(sum(getattr(c, "cost_usd", None) or 0.0 for c in llm_calls), 4),
+        "seconds_median": _pct([c.seconds for c in llm_calls], 0.5),
+        "adapters": dict(Counter(f"{c.adapter}:{c.model}" for c in llm_calls)),
+    }
+
+
 def summarize(steps: list[Step], run_meta: dict | None = None) -> dict:
     decisions = [s for s in steps if s.decision is not None]
     exam_lat = [s.timings_ms["shot_to_tap"] for s in steps if "shot_to_tap" in s.timings_ms]
@@ -54,15 +72,7 @@ def summarize(steps: list[Step], run_meta: dict | None = None) -> dict:
         "final_page": steps[-1].state.page.name if steps else None,
         "exam_shot_to_tap_ms": {"n": len(exam_lat), "median": _pct(exam_lat, 0.5), "p90": _pct(exam_lat, 0.9), "max": max(exam_lat) if exam_lat else None},
         "decide_seconds": {"n": len(decide_s), "median": _pct(decide_s, 0.5), "p90": _pct(decide_s, 0.9)},
-        "llm": {
-            "calls": len(llm_calls),
-            "errors": sum(1 for c in llm_calls if c.error),
-            "usage_limit": sum(1 for c in llm_calls if c.error and c.error.startswith("usage_limit")),
-            "input_tokens": sum(c.input_tokens or 0 for c in llm_calls),
-            "output_tokens": sum(c.output_tokens or 0 for c in llm_calls),
-            "seconds_median": _pct([c.seconds for c in llm_calls], 0.5),
-            "adapters": dict(Counter(f"{c.adapter}:{c.model}" for c in llm_calls)),
-        },
+        "llm": llm_summary(llm_calls),
         "recoveries": {k: recov.get(k, 0) for k in RECOVER_KINDS},
         "execution": {
             "n": len(execs), "ok": sum(1 for e in execs if e.ok), "retries": sum(e.retries for e in execs),
@@ -91,7 +101,8 @@ def markdown(r: dict) -> str:
         f"- 步数 {r['steps']}，决策 {r['decisions']}（来源 {r['decisions_by_source']}；决策器 {r['decisions_by_decider']}）",
         f"- 页面切换 {r['page_changes']} 次，终止页面 {r['final_page']}",
         f"- 考试内截图→点击：n={lat['n']}，中位 {lat['median']} ms，p90 {lat['p90']} ms，最大 {lat['max']} ms",
-        f"- LLM：{llm['calls']} 次调用（失败 {llm['errors']}，其中用量上限 {llm.get('usage_limit', 0)}），输入 {llm['input_tokens']} / 输出 {llm['output_tokens']} token，单次中位 {llm['seconds_median']} s，适配器 {llm['adapters']}",
+        f"- LLM：{llm['calls']} 次、总输入 {llm.get('total_input', llm['input_tokens'])}（其中缓存读 {llm.get('cache_read', 0)}、缓存写 {llm.get('cache_creation', 0)}）、"
+        f"输出 {llm['output_tokens']}、费用 ${llm.get('cost_usd', 0):.4f}；失败 {llm['errors']}（用量上限 {llm.get('usage_limit', 0)}），单次中位 {llm['seconds_median']} s，适配器 {llm['adapters']}",
         f"- 故障恢复：{r['recoveries']}",
         f"- 执行：{r['execution']}",
         f"- 考试：{r['exams']}",

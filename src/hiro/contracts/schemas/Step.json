@@ -591,6 +591,24 @@
          "integer",
          "null"
         ]
+       },
+       "cache_read_input_tokens": {
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "cache_creation_input_tokens": {
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "cost_usd": {
+        "type": [
+         "number",
+         "null"
+        ]
        }
       },
       "required": [
@@ -601,7 +619,10 @@
        "error",
        "prompt_version",
        "input_tokens",
-       "output_tokens"
+       "output_tokens",
+       "cache_read_input_tokens",
+       "cache_creation_input_tokens",
+       "cost_usd"
       ],
       "additionalProperties": false,
       "description": "一次 LLM 调用。"

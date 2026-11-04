@@ -23,8 +23,11 @@ class LLMTrace:
     raw: str  # 原始回复（截断到合理长度）
     error: str | None = None
     prompt_version: str | None = None  # 提示词文件版本（brain/prompts 头部）
-    input_tokens: int | None = None
+    input_tokens: int | None = None  # 不含缓存的输入
     output_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
+    cache_creation_input_tokens: int | None = None
+    cost_usd: float | None = None
 
 
 @dataclass
@@ -115,4 +118,7 @@ def llm_trace_from_call(c: dict) -> LLMTrace:
         prompt_version=c.get("prompt_version"),
         input_tokens=c.get("input_tokens"),
         output_tokens=c.get("output_tokens"),
+        cache_read_input_tokens=c.get("cache_read_input_tokens"),
+        cache_creation_input_tokens=c.get("cache_creation_input_tokens"),
+        cost_usd=c.get("cost_usd"),
     )

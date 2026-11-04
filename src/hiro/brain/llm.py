@@ -43,6 +43,24 @@ def prompt_version(*names: str) -> str:
     return "+".join(parts)
 
 
+def _claude_usage(out: dict) -> dict:
+    """claude -p 结果 JSON → LLMResult 的用量字段。"""
+    u = out.get("usage") or {}
+    cost = out.get("total_cost_usd")
+    return {"input_tokens": u.get("input_tokens"), "output_tokens": u.get("output_tokens"),
+            "cache_read_input_tokens": u.get("cache_read_input_tokens"), "cache_creation_input_tokens": u.get("cache_creation_input_tokens"),
+            "cost_usd": float(cost) if isinstance(cost, (int, float)) else None}  # fmt: skip
+
+
+def _openai_usage(payload: dict) -> dict:
+    """OpenAI 兼容 usage → 用量字段。prompt_tokens 已含缓存命中部分（prompt_tokens_details.cached_tokens），拆开记，避免总输入重复计。"""
+    u = payload.get("usage") or {}
+    cached = (u.get("prompt_tokens_details") or {}).get("cached_tokens")
+    prompt = u.get("prompt_tokens")
+    return {"input_tokens": (prompt - cached) if isinstance(prompt, int) and isinstance(cached, int) else prompt,
+            "output_tokens": u.get("completion_tokens"), "cache_read_input_tokens": cached}  # fmt: skip
+
+
 @dataclass
 class LLMResult:
     data: dict | None
@@ -51,14 +69,19 @@ class LLMResult:
     error: str | None = None
     adapter: str = "unknown"
     model: str | None = None
-    input_tokens: int | None = None
+    input_tokens: int | None = None  # 不含缓存的输入（Claude：usage.input_tokens；OpenAI 兼容：prompt_tokens − cached_tokens）
     output_tokens: int | None = None
+    cache_read_input_tokens: int | None = None  # 命中提示缓存读进来的输入
+    cache_creation_input_tokens: int | None = None  # 写进提示缓存的输入
+    cost_usd: float | None = None  # claude -p 结果里的 total_cost_usd（有才记）
 
     def record(self, **extra) -> dict:
         """写进 BattleBrain.calls / PickDecision.calls 的一条记录（hiro.contracts.llm_trace_from_call 能读）。"""
         return {
             "seconds": round(self.seconds, 2), "error": self.error, "reply": self.data or self.raw[:500],
             "adapter": self.adapter, "model": self.model, "input_tokens": self.input_tokens, "output_tokens": self.output_tokens,
+            "cache_read_input_tokens": self.cache_read_input_tokens, "cache_creation_input_tokens": self.cache_creation_input_tokens,
+            "cost_usd": self.cost_usd,
             **extra,
         }  # fmt: skip
 
@@ -161,10 +184,8 @@ class ClaudeCLI:
             text = out["result"]
         except (json.JSONDecodeError, KeyError, TypeError):
             return LLMResult(None, proc.stdout, dt, "bad cli output", self.name, self.model)
-        usage = out.get("usage") or {}
         data = extract_json(text)
-        return LLMResult(data, text, dt, None if data is not None else "no json in reply", self.name, self.model,
-                         usage.get("input_tokens"), usage.get("output_tokens"))  # fmt: skip
+        return LLMResult(data, text, dt, None if data is not None else "no json in reply", self.name, self.model, **_claude_usage(out))
 
 
     def ask_json_image(self, system: str, user: str, image_jpeg: bytes) -> LLMResult:
@@ -197,10 +218,8 @@ class ClaudeCLI:
             detail = str((result or {}).get("result") or proc.stderr or "")[:300]
             return LLMResult(None, (proc.stdout or "")[-2000:], dt, f"exit {proc.returncode}: {detail}", self.name, self.model)
         text = str(result.get("result") or "")
-        usage = result.get("usage") or {}
         data = extract_json(text)
-        return LLMResult(data, text, dt, None if data is not None else "no json in reply", self.name, self.model,
-                         usage.get("input_tokens"), usage.get("output_tokens"))  # fmt: skip
+        return LLMResult(data, text, dt, None if data is not None else "no json in reply", self.name, self.model, **_claude_usage(result))
 
 
 class OpenAICompatible:
@@ -254,10 +273,8 @@ class OpenAICompatible:
             text = payload["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, TypeError):
             return LLMResult(None, json.dumps(payload)[:500], dt, "bad completion", self.name, self.model)
-        usage = payload.get("usage") or {}
         data = extract_json(text)
-        return LLMResult(data, text, dt, None if data is not None else "no json in reply", self.name, self.model,
-                         usage.get("prompt_tokens"), usage.get("completion_tokens"))  # fmt: skip
+        return LLMResult(data, text, dt, None if data is not None else "no json in reply", self.name, self.model, **_openai_usage(payload))
 
 
 @dataclass
