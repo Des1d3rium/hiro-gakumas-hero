@@ -1,0 +1,3 @@
+[submodule "vendor/kaa"]
+	path = vendor/kaa
+	url = https://github.com/XcantloadX/kotones-auto-assistant.git

@@ -12,6 +12,11 @@ dependencies = ["numpy", "opencv-python-headless"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
+# 实机游玩：操作层 / 识别层基于 KAA（kotones-auto-assistant，GPL-3.0），以 git 子模块 vendor/kaa 固定版本引入
+play = ["ksaa"]
+
+[tool.uv.sources]
+ksaa = { path = "vendor/kaa", editable = true }
 
 [tool.setuptools.packages.find]
 where = ["src"]
