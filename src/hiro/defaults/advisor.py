@@ -16,6 +16,7 @@ import time
 from typing import Any
 
 from hiro.brain.battle import BattleBrain
+from hiro.brain.rules import fallback
 from hiro.brain.state import IdolProfile, profile_for
 from hiro.contracts import Action, Decision, Preview
 from hiro.produce.exam_policy import expert_pick, guard_llm
@@ -77,9 +78,18 @@ class RuleLLMAdvisor:
         d = guard_llm(state, memory, self.brain, self.brain.decide(state, memory))
         out = Decision.from_battle(d, calls=self.brain.calls[n_calls:], seconds=time.monotonic() - t0)
         keys = {a.legal_key() for a in legal}
-        if legal and out.action.legal_key() not in keys:  # 只能从 legal 里选：越界时退回第一个合法动作并记下
-            out.warnings.append(f"决策 {out.action.legal_key()} 不在合法动作里，改为 {legal[0].legal_key()}")
-            out.action = legal[0]
+        if legal and out.action.legal_key() not in keys:
+            # 只能从 legal 里选；越界时不默认选第一个（项目规则），改用规则兜底重选，兜底也越界就结束回合（不打牌最安全）
+            bad = out.action.legal_key()
+            fb = Decision.from_battle(fallback(state), seconds=time.monotonic() - t0)
+            if fb.action.legal_key() in keys:
+                fb.warnings.append(f"决策 {bad} 不在合法动作里，按规则兜底重选 {fb.action.legal_key()}")
+                return fb
+            if "skip" in keys:
+                out.warnings.append(f"决策 {bad} 和规则兜底都不在合法动作里，结束回合")
+                out.action = next(a for a in legal if a.legal_key() == "skip")
+                return out
+            raise RuntimeError(f"决策 {bad} 不在合法动作里，规则兜底也选不出，且不能结束回合：{sorted(keys)}")
         return out
 
     def on_round_end(self, result: dict[str, Any] | None) -> None:

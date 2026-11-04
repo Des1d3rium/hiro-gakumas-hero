@@ -93,3 +93,17 @@ def test_prompt_explains_missing_status_icons(monkeypatch):
     assert "effect_names_unavailable" in d and "capture_icons" in d["effect_names_unavailable"]
     monkeypatch.setitem(g, "status_icons_missing", lambda: False)
     assert "effect_names_unavailable" not in st.to_prompt_dict()
+
+
+def test_out_of_legal_rechooses_by_rule_not_first(monkeypatch):
+    st, mem = _state([_card(0, "A", "c-a"), _card(1, "B", "c-b")])
+    adv = RuleLLMAdvisor(CAMPUS_HIRO)
+    from hiro.brain.rules import Decision as BD
+
+    monkeypatch.setattr(adv.brain, "decide", lambda s, m: BD("play:5", "越界", "llm"))
+    import hiro.defaults.advisor as a
+
+    monkeypatch.setattr(a, "guard_llm", lambda s, m, b, d: d)
+    legal = [Action.from_legal(x) for x in ("play:1", "skip")]  # 只有第 1 张和结束回合合法
+    d = adv.decide(st, mem, None, legal)
+    assert d.action.legal_key() in {"play:1", "skip"} and any("不在合法动作里" in w for w in d.warnings)
