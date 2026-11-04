@@ -44,3 +44,13 @@ def test_verdict_tells_reset_from_unread():
     v = verdict({**{k: "ON" for k in WANT}, "親愛度映像跳过": "OFF"})
     assert v.startswith("设置被重置") and "親愛度映像跳过" in v
     assert verdict({**{k: "ON" for k in WANT}, "未読早送り": None}).startswith("部分读不到")
+
+
+@pytest.mark.synthetic
+def test_settings_basic_tab_with_merged_separator():
+    """A5（开源版实机）：设置页停在「基本設定」，OCR 把页签间的星形分隔并进了「+ プロデュース」，以前全等匹配认不出设置页。"""
+    from check_settings import is_menu, is_settings
+
+    tab = is_settings(_boxes("settings/basic-tab-a5"))
+    assert tab is not None and 500 <= tab[0] <= 660 and abs(tab[1] - 1076) <= 30, tab
+    assert is_menu(_boxes("settings/basic-tab-a5")) is None

@@ -42,11 +42,14 @@ def read_toggles(boxes) -> dict[str, str | None]:
     return out
 
 
+TAB_JUNK = "+＋✦◆◇★☆・*•·⚙"  # 页签之间的星形分隔、标题前的齿轮图标常被 OCR 并进文字（A5：「+ プロデュース」）
+
+
 def _find(boxes, text: str, *, y_min: int = 0, y_max: int = 1280):
-    """OCR 框里文字正好是 text（去空格）、中心 y 在范围内的那个框的中心。"""
+    """OCR 框里文字是 text（去空格、去掉前面并进来的分隔符 / 图标）、中心 y 在范围内的那个框的中心。"""
     for t, _, b in boxes:
         cy = (b[1] + b[3]) // 2
-        if t.replace(" ", "") == text and y_min <= cy <= y_max:
+        if t.replace(" ", "").replace("　", "").lstrip(TAB_JUNK) == text and y_min <= cy <= y_max:
             return (b[0] + b[2]) // 2, cy
     return None
 
