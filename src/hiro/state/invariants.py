@@ -10,6 +10,7 @@ verdict：read_error（读数不合理，丢弃重读）/ model_gap（读数合�
 规则（名称即 Check.rule）：
 - range            属性 0..param_cap、体力 0..max_stamina、P 点 / 星数 ≥ 0
 - digit_count      分数 / 属性 / 星数比上一采信值少了位数，且新值是旧值去掉一位后的连续片段（37719→3771、1070→70）；
+                   考试元気只拦「四位数去掉开头一两位」（1388→388、1010→10，_genki_lost_head）；
                    P 点会正常花掉，只认「去掉末位」的情形
 - score_monotonic  同一场考试内分数不减（同一场：剩余回合不增加超过 1）
 - rank_consistency 同一帧里 玩家名次 / 玩家分数 / 对手分数 自洽：对手分数按名次不增，玩家分数夹在相邻名次之间
@@ -107,6 +108,16 @@ def _dropped_digit(old: int, new: int, *, suffix_only: bool = False) -> bool:
     if suffix_only:
         return a.startswith(b)
     return b in a
+
+
+def _genki_lost_head(old: int, new: int) -> bool:
+    """元気四位数掉首位：old ≥ 1000、new < 1000，且 new 正好是 old 去掉开头一位或两位后的尾巴（1388→388、1010→10、1283→283）。
+    元気会正常下降，所以不用 _dropped_digit 的「任意片段」（1283→28 那种当成正常值也说得通）；只拦切掉开头的特征。
+    第二十～二十五局 80 处（数据确认 d412748），读数框已放宽，这条是兜底。"""
+    if old is None or new is None or old < 1000 or new >= 1000:
+        return False
+    a = str(old)
+    return any(a[k:].lstrip("0") == str(new) or (new == 0 and set(a[k:]) <= {"0"}) for k in (1, 2))
 
 
 def _same_exam(prev_exam: dict, obs_fields: dict) -> bool:
@@ -212,6 +223,9 @@ def check_invariants(prev, obs, *, events: list[dict] | None = None, debug: bool
             old = exam["score"]
             judge(_dropped_digit(old, score), "exam.score", old, score, "digit_count", note="掉位")
             judge(score < old, "exam.score", {"min": old}, score, "score_monotonic")
+        genki, old_genki = f.get("genki"), exam.get("genki")
+        if genki is not None and same and old_genki is not None:
+            judge(_genki_lost_head(old_genki, genki), "exam.genki", old_genki, genki, "digit_count", note="四位数首位掉位（1388→388）")
         rank_bad = _rank_check(seq, f, exam, same)
         out.extend(rank_bad)
         if debug and not rank_bad and score is not None and f.get("my_rank_index") is not None:

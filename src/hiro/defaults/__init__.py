@@ -1,1 +1,1 @@
-"""插件接口的默认实现（hiro.plugins.KINDS 指向这里）。"""
+"""三个插件接口（hiro.plugins）的开源默认实现：assets.PublicAssetSource / exam_state.ScreenExamStateSource / advisor.RuleLLMAdvisor。"""
