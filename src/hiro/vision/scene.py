@@ -102,6 +102,19 @@ def _card_or_drink(img) -> str:
     return "SELECT_CARD" if CardSelectContext(ProducePage(), None).fetch_cards() else "SELECT_DRINK"
 
 
+def _fallback(img) -> str | None:
+    """KAA 判不出时的像素兜底。界面 Sprite（页面签名）是自建素材，开源默认没有：签名本来能认的几页在这里补上。
+    - quick.fallback_page：选行动页（「P手帳」标签）、Pドリンク所持上限 列表；
+    - 选饮料页饮料已满且选中了一瓶（KAA 的提示文字被详情替换）：「Pドリンク所持上限」红标。"""
+    from hiro.vision.items import drink_full_badge
+    from hiro.vision.quick import fallback_page
+
+    fb = fallback_page(img)
+    if fb is not None:
+        return fb
+    return "SELECT_DRINK" if drink_full_badge(img) else None
+
+
 def classify_current() -> SceneResult:
     """对最近一次 device.screenshot() 的画面分类。"""
     ensure_produce_session()
@@ -151,6 +164,9 @@ def classify_current() -> SceneResult:
                 return done("produce", "ACQUIRE")
         if scene is not None:
             return done("produce", scene.type.name)
+        fb = _fallback(img)
+        if fb is not None:
+            return done("produce", fb)
         if is_at_commu():
             return done("outside", "commu")
         return done("unknown", "unknown")

@@ -43,9 +43,13 @@ def _img(name: str):
 def test_ranking_scores(name):
     r = read_ranking(_img(name))
     assert (r["my_score"], r["my_rank_index"], r["npc_scores"]) == TRUTH[name]
-    assert r["my_score_read"]["method"] in ("digits", "dddd") and r["my_score_read"]["confidence"] >= 0.8
+    # 没有数字字体时：ddddocr 与 Apple Vision 互相核对，对不上而 ddddocr 位数与字形数相同时置信度 0.6（见 digits._score_without_font）
+    assert r["my_score_read"]["method"] in ("digits", "dddd") and r["my_score_read"]["confidence"] >= (
+        0.8 if digits._templates() else 0.6
+    )
 
 
+@pytest.mark.user_assets("font")
 def test_ocr_fallback_with_fewer_digits_is_rejected(monkeypatch):
     """字体比对不确定、OCR 少读一位时给 None，不交出掉位的值。"""
     monkeypatch.setattr(digits, "read_dddd", lambda img, box: 3781)
@@ -54,6 +58,7 @@ def test_ocr_fallback_with_fewer_digits_is_rejected(monkeypatch):
     assert "对不上" in r["my_score_read"]["note"]
 
 
+@pytest.mark.user_assets("font")
 def test_ocr_fills_digit_font_missed(monkeypatch):
     """字体只认出一部分、OCR 多出的位数在可疑块数以内且包含字体那串 → 用 OCR，置信度 0.6。"""
     real = digits._read_glyphs
@@ -76,5 +81,44 @@ def test_score_field_meta():
     raw = {**read_ranking(_img("q3-00200")), "remaining_turns": 1}
     obs = observation(1, 0.0, "HIF_EXAM", raw)
     assert obs.fields["score"] == 14031
-    assert obs.field_meta["score"].confidence == 0.9 and obs.field_meta["score"].note == "字体比对与 OCR 一致"
+    if digits._templates():
+        assert obs.field_meta["score"].confidence == 0.9 and obs.field_meta["score"].note == "字体比对与 OCR 一致"
+    else:
+        assert (
+            obs.field_meta["score"].confidence == 0.8
+            and obs.field_meta["score"].note == "无数字字体：ddddocr 与 Vision 一致"
+        )
     assert read_hif_exam  # 完整读取另有 test_observe 覆盖
+
+
+# ---- 没有数字字体（开源默认素材）：ddddocr 与 Apple Vision 互相核对。有字体时也跑（把字体模板换成空）
+@pytest.fixture
+def no_font(monkeypatch):
+    from hiro.vision import hif
+
+    monkeypatch.setattr(digits, "_templates", dict)
+    monkeypatch.setattr(hif, "_templates", dict)
+
+
+@pytest.mark.parametrize("name", sorted(TRUTH))
+def test_no_font_ranking_scores(no_font, name):
+    r = read_ranking(_img(name))
+    assert (r["my_score"], r["my_rank_index"], r["npc_scores"]) == TRUTH[name]
+    assert r["my_score_read"]["confidence"] >= 0.6
+
+
+def test_no_font_dropped_digit_is_rejected(no_font, monkeypatch):
+    """ddddocr 掉一位、Vision 读不出：位数（4）与整高字形数（5）对不上 → None，不交出掉位的值。"""
+    import hiro.vision.ocr as ocr_mod
+
+    monkeypatch.setattr(digits, "read_dddd", lambda img, box: 3781)
+    monkeypatch.setattr(ocr_mod, "ocr", lambda img, **kw: [])
+    r = read_ranking(_img("q2r3-00049"))
+    assert r["my_score"] is None and "对不上" in r["my_score_read"]["note"]
+
+
+def test_no_font_truncation_takes_longer(no_font, monkeypatch):
+    """ddddocr 掉末位、Vision 读全：取长的那个，置信度 0.6。"""
+    monkeypatch.setattr(digits, "read_dddd", lambda img, box: 1403)
+    r = read_ranking(_img("q3-00200"))
+    assert r["my_score"] == 14031 and r["my_score_read"]["confidence"] == 0.6

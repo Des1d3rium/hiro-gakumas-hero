@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import cv2
+import pytest
 
 import hiro  # noqa: F401
 import hiro.vision.hif as hif
@@ -22,6 +23,7 @@ def _cases():
             yield img, f"{name}.{field}", box, truth[field]
 
 
+@pytest.mark.user_assets("font")
 def test_font_reader_never_misreads():
     unsure = 0
     cases = list(_cases())

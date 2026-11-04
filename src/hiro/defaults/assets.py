@@ -4,15 +4,15 @@
 
 - KAA 公开数据（kaa-game-data 的发布包，KAA 运行时下载到 resources/game_data/）：
   game.db（主数据）、skill_cards/（技能卡卡面）、drinks/（P 饮料图）。HIRO_KAA_GAME_DATA 改目录。
-- 使用者自建目录（tools/assets/capture_icons.py 从自己的截图裁）：HIRO_USER_ASSETS，默认 resources/user_assets/
+- 使用者自建目录（从自己的截图 / 客户端取，不随仓库发布）：HIRO_USER_ASSETS，默认 resources/user_assets/
     cards/            技能卡卡面（有则优先于 KAA）
-    icons/<kind>/     图标：drink（P 饮料）、pitem（P 道具）、status（考试效果）；可带 index.json（资源名 → 名称）
-    font/             数字字体 Campus-Alphanumeric-SemiBold.ttf（HUD 读数字形比对；没有则数字全走 ddddocr）
+    icons/<kind>/     图标：drink（P 饮料，有则优先于 KAA）、pitem（P 道具）、status（考试效果）；RGBA 或白底 RGB，可带 index.json（资源名 → 名称）
+    font/             数字字体 Campus-Alphanumeric-SemiBold.ttf（HUD 读数字形比对；没有则走 ddddocr + Apple Vision 核对）
     layout.json       UI 布局（同 hiro.vision.layout 的结构；没有则用仓库里的实测框 layout_default.json）
     sprites/          界面 Sprite（页面签名 signatures.json 引用的文件名）
     support/          支援卡图（编成页识别）
 
-拿不到的项一律返回 None，识别层各自退路（见 hiro.vision.assets）。
+拿不到的项一律返回 None，识别层各自退路（见 hiro.vision.assets）；默认素材下各读数可用 / 降级 / 不可用见 docs/assets.md。
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import json
 import os
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 
 def _env_dir(name: str, default: str) -> Path:
@@ -113,7 +113,7 @@ class PublicAssetSource:
             return None
         return {r["id"]: {"name": r["name"], "rarity": r["rarity"], "plan": r["planType"], "asset": r["assetId"]} for r in rows}
 
-    SCENARIO = {"qualify": "produce-007", "main": "produce-008", "produce-007": "produce-007", "produce-008": "produce-008"}
+    SCENARIO: ClassVar[dict[str, str]] = {"qualify": "produce-007", "main": "produce-008", "produce-007": "produce-007", "produce-008": "produce-008"}
 
     def schedule(self, scenario: str) -> list[dict[str, Any]] | None:
         """H.I.F 培育日程（选拔 20 项 / 本战 9 项，位置从 1 起；选行动页必需）。scenario：qualify / main 或 produce-007 / produce-008。

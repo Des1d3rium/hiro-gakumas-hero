@@ -47,8 +47,10 @@ class IconLibrary:
         keys, rows, masks = [], [], []
         for png in sorted(folder.glob("*.png")):
             im = cv2.imread(str(png), cv2.IMREAD_UNCHANGED)
-            if im is None or im.shape[2] != 4:
+            if im is None or im.ndim != 3 or im.shape[2] not in (3, 4):
                 continue
+            if im.shape[2] == 3:
+                im = _white_bg_to_alpha(im)  # KAA 公开数据的饮料图：白底 RGB
             im = cv2.resize(im, (size, size), interpolation=cv2.INTER_AREA)
             m = np.repeat((im[:, :, 3] > 128)[:, :, None], 3, axis=2).ravel().astype(np.float32)
             t = _highpass(im[:, :, :3]).ravel()
@@ -86,6 +88,19 @@ class IconLibrary:
             top = top[np.argsort(-col[top])]
             out.append([(float(col[i]), self.keys[i]) for i in top])
         return out
+
+
+def _white_bg_to_alpha(bgr: np.ndarray, tol: int = 12) -> np.ndarray:
+    """白底图标 → RGBA：从四边漫水填充出与边相连的近白区域当背景（图标内部的白色部分保留），收 1px 去掉白边。"""
+    h, w = bgr.shape[:2]
+    mask = np.zeros((h + 2, w + 2), np.uint8)
+    flags = 4 | cv2.FLOODFILL_MASK_ONLY | cv2.FLOODFILL_FIXED_RANGE | (255 << 8)
+    for x, y in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]:
+        if (bgr[y, x] >= 255 - tol).all() and not mask[y + 1, x + 1]:
+            cv2.floodFill(bgr.copy(), mask, (x, y), 0, (tol,) * 3, (tol,) * 3, flags)
+    alpha = np.where(mask[1:-1, 1:-1] > 0, 0, 255).astype(np.uint8)
+    alpha = cv2.erode(alpha, np.ones((3, 3), np.uint8))
+    return np.dstack([bgr, alpha])
 
 
 def _highpass(bgr: MatLike) -> np.ndarray:
@@ -150,7 +165,7 @@ def _read_drink_slots(img: MatLike) -> list[dict]:
         if (score >= MIN_SCORE and score - second >= MIN_MARGIN) or (score >= LOW_SCORE and score - second >= LOW_MARGIN):
             drink = Drink.from_asset_id(asset)
             sat = float(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)[:, :, 1].mean())
-            entry.update(state="drink", drink_id=drink.id if drink else None, asset=asset, name=lib.names.get(asset),
+            entry.update(state="drink", drink_id=drink.id if drink else None, asset=asset, name=lib.names.get(asset) or (drink.name if drink else None),  # KAA 图库没有名称表：按主数据取
                          available=sat >= GREY_SAT_MAX, confidence=round(score, 3))  # fmt: skip
         elif score < EMPTY_MAX:
             entry.update(state="empty", confidence=round(1 - score, 3))
@@ -166,16 +181,20 @@ def read_held_drinks(img: MatLike) -> dict:
     """培育页底栏已有的饮料 → {held, full}。
     held：[{index, drink_id, name, center, method, confidence}]，index = 底栏格号（0–3，点它打开详情「捨てる」），格式同 PDRINK_MAX.held；
     空槽不列，图标没把握的格 drink_id / name 为 None。full：「Pドリンク所持上限」红标在（选饮料页，饮料满时「受け取る」不可点）。"""
-    from hiro.vision.ocr import ocr_boxes
-
     held = [{"index": d["slot"], "drink_id": d["drink_id"], "name": d["name"], "center": d["center"], "method": "icon",
              "confidence": d["confidence"]} for d in read_drink_slots(img) if d["state"] != "empty"]  # fmt: skip
+    return {"held": held, "full": drink_full_badge(img)}
+
+
+def drink_full_badge(img: MatLike) -> bool:
+    """选饮料页「受け取る」下方的红标「Pドリンク所持上限」在不在（饮料满）。"""
+    from hiro.vision.ocr import ocr_boxes
+
     x1, y1, x2, y2 = FULL_BADGE
     hsv = cv2.cvtColor(img[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
     h, sat, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
     red = int((((h < 5) | (h >= 170)) & (sat >= 120) & (v >= 170)).sum())  # 红标实测 4600–4700；可点的橙色「受け取る」≤ 50
-    full = red >= FULL_BADGE_MIN_PX and any("上限" in t for t, _, _ in ocr_boxes(img[y1:y2, x1:x2]))
-    return {"held": held, "full": full}
+    return red >= FULL_BADGE_MIN_PX and any("上限" in t for t, _, _ in ocr_boxes(img[y1:y2, x1:x2]))
 
 
 def read_bar_drinks(img: MatLike) -> dict:
@@ -325,7 +344,7 @@ def read_pdrink_max(img: MatLike) -> dict | None:
             score, second, asset = _match_drink_icon(img, OVERFLOW_ICON_X, y)
             drink = Drink.from_asset_id(asset) if score >= OVERFLOW_MIN and score - second >= OVERFLOW_MARGIN else None
             if drink is not None:
-                entry.update(drink_id=drink.id, name=lib.names.get(asset), method="icon", score=round(score, 3), margin=round(score - second, 3))
+                entry.update(drink_id=drink.id, name=lib.names.get(asset) or drink.name, method="icon", score=round(score, 3), margin=round(score - second, 3))
         return entry
 
     new = [r for r in rows if r[0][0] < hy]

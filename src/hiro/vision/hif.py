@@ -734,6 +734,7 @@ def read_badge(img: MatLike, cx: int, next_cx: int | None = None) -> dict:
     fill = cv2.morphologyEx(fill, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     n, lab, st, _ = cv2.connectedComponentsWithStats(fill)
     kernel = np.ones((7, 7), np.uint8)
+    tpl = _templates()  # 没有数字字体（开源默认素材）时为空：白描边字形记为「#」（是数字、不知道是几），整串交给 ddddocr
     glyphs = []  # (x, w, 字符或 None, 色相, 是否白描边)，原始像素
     for i in range(1, n):
         x, y, w, h, area = st[i]
@@ -743,19 +744,27 @@ def read_badge(img: MatLike, cx: int, next_cx: int | None = None) -> dict:
         ring = (cv2.dilate(m, kernel) > 0) & (m == 0)
         outlined = white[ring].mean() >= BADGE_RING_WHITE  # 否：卡面插图、底色，或描边被压浅的字
         ch = None
-        if outlined:
-            score, best = max((_iou(_scale(lab[y : y + h, x : x + w] == i), t), c) for c, t in _templates().items())
+        if outlined and not tpl:
+            ch = "#"
+        elif outlined:
+            score, best = max((_iou(_scale(lab[y : y + h, x : x + w] == i), t), c) for c, t in tpl.items())
             ch = best if score >= 0.7 and best.isdigit() else None
         hue = int(np.median(hsv[:, :, 0][m > 0]))
         glyphs.append((x / s, w / s, ch, hue, outlined))
     glyphs.sort()
-    start = next((k for k, g in enumerate(glyphs) if g[2] is not None), None)
-    if start is None:
-        return none
 
     def same_hue(a: int, b: int) -> bool:
         d = abs(a - b)
         return min(d, 180 - d) <= BADGE_HUE_TOL
+
+    if tpl:
+        start = next((k for k, g in enumerate(glyphs) if g[2] is not None), None)
+    else:  # 没有字体分不出「是不是数字」：取同色白描边字形最多的那种颜色，从它的第一个起（前面异色的属性图标等不算）
+        marked = [k for k, g in enumerate(glyphs) if g[2] is not None]
+        votes = {k: sum(same_hue(glyphs[j][3], glyphs[k][3]) for j in marked) for k in marked}
+        start = min((k for k in marked if votes[k] == max(votes.values())), default=None)
+    if start is None:
+        return none
 
     # 从第一个认得出的字起，向右取同色、连续的一串：字距 ≤ 1.5 个字距为相邻；1.5–2.6 个字距说明中间有一位没取到。
     # 串的前后紧挨着同色、字大小但认不出的连通域（描边被压浅、被特效盖住）也说明可能少了一位。这些情况整串不可信
@@ -771,10 +780,18 @@ def read_badge(img: MatLike, cx: int, next_cx: int | None = None) -> dict:
         run.append(g)
     before = [g for g in glyphs[:start] if same_hue(g[3], run[0][3]) and run[0][0] - g[0] <= BADGE_PITCH * 1.5]
     unsure = unsure or bool(before)
-    text = "".join(g[2] or "?" for g in run)
-    visible = text.replace("?", "") or None
     width = x2 - x1
     last_right = run[-1][0] + run[-1][1]
+    if not tpl:  # 没有字体：按这串字形的范围裁图交给 ddddocr，位数与字形数一致才用
+        from hiro.vision.digits import read_dddd
+
+        span = (max(0, x1 + int(run[0][0]) - 4), y1, min(img.shape[1], x1 + int(last_right) + 5), y2)
+        value = read_dddd(img, span)
+        if value is None or len(str(value)) != len(run):
+            return {"badge_score": None, "badge_text": None}
+        run = [(*g[:2], c, *g[3:]) for g, c in zip(run, str(value))]
+    text = "".join(g[2] or "?" for g in run)
+    visible = text.replace("?", "") or None
     if unsure or None in [g[2] for g in run]:
         return {"badge_score": None, "badge_text": visible}
     if last_right >= width - 3:

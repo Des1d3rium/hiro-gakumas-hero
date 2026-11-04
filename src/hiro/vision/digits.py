@@ -16,7 +16,6 @@ from functools import cache
 import cv2
 import numpy as np
 from cv2.typing import MatLike
-from PIL import Image, ImageDraw, ImageFont
 
 from hiro.vision import assets
 
@@ -36,6 +35,8 @@ def _templates() -> dict[str, np.ndarray]:
     path = assets.font_path()
     if path is None:
         return {}  # 没有游戏数字字体：字形比对关闭，read_number 全走 ddddocr
+    from PIL import Image, ImageDraw, ImageFont  # 只有渲染字体模板时用（Pillow 随可选组 play 装）
+
     font = ImageFont.truetype(str(path), 160)
     out = {}
     for ch in CHARS:
@@ -46,6 +47,12 @@ def _templates() -> dict[str, np.ndarray]:
         glyph = a[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
         out[ch] = _scale(glyph > 127)
     return out
+
+
+def _best_char(glyph: np.ndarray) -> tuple[float, str | None]:
+    """字形（_scale 过的掩码）与字体模板比对的 (最高分, 字符)；没有字体时为 (0.0, None)。"""
+    tpl = _templates()
+    return max((_iou(glyph, t), c) for c, t in tpl.items()) if tpl else (0.0, None)
 
 
 def _scale(mask: np.ndarray) -> np.ndarray:
@@ -75,9 +82,9 @@ def read_text(img: MatLike, box: tuple[int, int, int, int], *, align: bool = Fal
 
 
 def _read_glyphs(img: MatLike, box: tuple[int, int, int, int], *, align: bool = False) -> tuple[str, bool, dict | None]:
-    """read_text 的实现；另返回所取那组字形的信息 {span: (x1, y1, x2, y2) 原图坐标, glyphs: 字形个数, occluded: 是否疑似漏字}。"""
-    if not _templates():
-        return "", True, None  # 没有字体模板：一律「不确定」，交给 ddddocr
+    """read_text 的实现；另返回所取那组字形的信息 {span: (x1, y1, x2, y2) 原图坐标, glyphs: 字形个数, occluded: 是否疑似漏字}。
+    没有数字字体（开源默认素材）时照常按描边切出字形、给出 span 和字形个数，只是每个字都记为没认出（整串「不确定」），
+    由调用方交给 ddddocr；read_score 用字形个数核对 OCR 的位数。"""
     bx1, by1, bx2, by2 = box
     x1, y1 = max(0, bx1 - MARGIN), max(0, by1 - MARGIN // 2)
     x2, y2 = min(img.shape[1], bx2 + MARGIN), min(img.shape[0], by2 + MARGIN // 2)
@@ -112,6 +119,8 @@ def _read_glyphs(img: MatLike, box: tuple[int, int, int, int], *, align: bool = 
         boxes = _aligned(boxes, labels, (by2 - by1) * scale) or boxes
     tallest = max(b[4] for b in boxes)
     boxes = [b for b in boxes if b[4] >= tallest * MIN_HEIGHT_RATIO]
+    # 最左一个整高白块的左缘（无字体时裁 OCR 框的左边用）：不分组，描边被闪光盖住 / 压在角标上的白字（rejected）也算
+    left = x1 + min(stats[i][cv2.CC_STAT_LEFT] for i in comps + rejected if stats[i][cv2.CC_STAT_HEIGHT] >= tallest * MIN_HEIGHT_RATIO) // scale
     # 扩边会带进相邻数字：按水平间距分组（同一个数内字距远小于字高），取与原框重叠最多的一组
     groups, last_right = [], None
     for b in boxes:
@@ -127,11 +136,12 @@ def _read_glyphs(img: MatLike, box: tuple[int, int, int, int], *, align: bool = 
     group = max(groups, key=overlap)
     gx1, gy1 = min(b[1] for b in group), min(b[2] for b in group)
     gx2, gy2 = max(b[1] + b[3] for b in group), max(b[2] + b[4] for b in group)
-    info = {"span": (x1 + gx1 // scale, y1 + gy1 // scale, x1 + -(-gx2 // scale), y1 + -(-gy2 // scale)), "glyphs": len(group), "occluded": False}
+    info = {"span": (x1 + gx1 // scale, y1 + gy1 // scale, x1 + -(-gx2 // scale), y1 + -(-gy2 // scale)), "glyphs": len(group), "occluded": False,
+            "left": left}
     info["parts"] = []
     for i, x, y, w, h in group:
         glyph = _scale(labels[y : y + h, x : x + w] == i)
-        score, ch = max((_iou(glyph, t), c) for c, t in _templates().items())
+        score, ch = _best_char(glyph)
         info["parts"].append((ch, round(score, 2), w, h))
         if score >= MIN_SCORE:
             out.append(ch)
@@ -152,6 +162,8 @@ def _aligned(boxes: list[tuple], labels: np.ndarray, box_h: int) -> list[tuple]:
     """以同一行认得出的字最多的那组为准，只留顶边对齐、高度相近的连通域（read_text(align=True)）。
     浅色地面、元气角标底边等背景块也带深色描边，会混进数字串让整串判为不确定；它们与数字不在同一行。
     被特效遮住的字仍与数字对齐，照样留下并判为不确定。没有任何字认得出时返回空列表（交回原逻辑）。"""
+    if not _templates():
+        return []  # 没有字体：认不出任何字，交回原逻辑
     sized = [b for b in boxes if b[4] <= box_h * MAX_GLYPH_BOX]
 
     def row(ref: tuple) -> list[tuple]:
@@ -197,7 +209,7 @@ def read_leading_int(img: MatLike, box: tuple[int, int, int, int]) -> tuple[int 
     数字之后紧跟的第一个连通域若是「%」的小圈记为 "%"，否则记为 "text"（由调用方按上下文决定是否可信）。
     数字左侧有疑似被遮挡的字，或一个数字都没认出时返回 (None, None)。"""
     if not _templates():
-        return "", True, None  # 没有字体模板：一律「不确定」，交给 ddddocr
+        return None, None  # 没有字体：没把握，调用方退回 ddddocr
     bx1, by1, bx2, by2 = box
     x1, y1 = max(0, bx1 - MARGIN), max(0, by1 - MARGIN // 2)
     x2, y2 = min(img.shape[1], bx2 + MARGIN), min(img.shape[0], by2 + MARGIN // 2)
@@ -285,7 +297,35 @@ def read_number(img: MatLike, box: tuple[int, int, int, int], *, align: bool = F
     """先按游戏字体比对；字体比对没把握（字被特效遮挡）时退回 ddddocr。
     回归集上字体比对从不读错，只会说不确定，所以合起来既快又避免 23→25 这类静默误读。"""
     value = read_int(img, box, align=align)
-    return value if value is not None else read_dddd(img, box)
+    if value is not None:
+        return value
+    if not _templates():
+        return _number_without_font(img, box, align=align)
+    return read_dddd(img, box)
+
+
+CIRCLED = str.maketrans("⓪①②③④⑤⑥⑦⑧⑨", "0123456789")
+
+
+def _number_without_font(img: MatLike, box: tuple[int, int, int, int], *, align: bool) -> int | None:
+    """没有数字字体时的 read_number：整框和「左边收到最左一个白字」各让 ddddocr 读一次。
+    元気框为了不切掉首位左扩过 20，整框会把体力条右端的深色圆头读成「1」（元気 0→10）；收左边又会在白点花纹背景上丢掉首位（1283→283）。
+    两次一致就用；不一致时用 Apple Vision（整框放大 6 倍，⓪ 等圈字按数字算）判哪个对，都不对给 None。
+    58 帧考试画面（回合 / 元気 / 体力 174 个读数）与有字体时的结果全部一致。"""
+    whole = read_dddd(img, box)
+    _, _, info = _read_glyphs(img, box, align=align)
+    if info is None:
+        return whole
+    trimmed_box = (max(box[0], info["left"] - SPAN_PAD), *box[1:])
+    trimmed = read_dddd(img, trimmed_box) if trimmed_box != box else whole
+    if whole == trimmed:
+        return whole
+    from hiro.vision.ocr import ocr
+
+    x1, y1, x2, y2 = box
+    text = re.sub(r"\D", "", "".join(t for t, _ in ocr(img[y1:y2, x1:x2], scale=6.0)).translate(CIRCLED))
+    vision = int(text) if text else None
+    return vision if vision is not None and vision in (whole, trimmed) else None
 
 
 SPAN_PAD = 4  # ddddocr 兜底时字形组外多取的像素
@@ -316,6 +356,8 @@ def read_score(img: MatLike, box: tuple[int, int, int, int]) -> tuple[int | None
         return None, {"method": None, "confidence": None, "note": "没有找到数字字形"}
     x1, y1, x2, y2 = info["span"]
     span = (max(0, x1 - SPAN_PAD), max(0, y1 - SPAN_PAD), min(img.shape[1], x2 + SPAN_PAD), min(img.shape[0], y2 + SPAN_PAD))
+    if not _templates():
+        return _score_without_font(img, span, info)
     value = read_dddd(img, span)
     font = re.sub(r"\D", "", text)
     noise = sum(1 for _, score, *_ in info["parts"] if score < MIN_SCORE)
@@ -328,3 +370,38 @@ def read_score(img: MatLike, box: tuple[int, int, int, int]) -> tuple[int | None
     if 0 < extra <= noise + (1 if info["occluded"] else 0) and _subsequence(font, ocr_text):
         return value, {"method": "dddd", "confidence": 0.6, "note": f"字体只认出 {font or '无'}，OCR 补出 {ocr_text}"}
     return None, {"method": None, "confidence": None, "note": f"字体认出 {font or '无'}、OCR 读到 {ocr_text}，对不上，丢弃"}
+
+
+def _full_glyphs(parts: list[tuple]) -> int:
+    """字形组里「整高、正常宽」的字形个数，近似数字位数：背景亮块、白框碎片要么矮、要么宽得多。"""
+    if not parts:
+        return 0
+    hs = sorted(h for *_, w, h in parts)
+    ws = sorted(w for *_, w, h in parts)
+    mh, mw = hs[len(hs) // 2], ws[len(ws) // 2]
+    return sum(1 for *_, w, h in parts if h >= 0.85 * mh and w <= 1.6 * mw)
+
+
+def _score_without_font(img: MatLike, span: tuple[int, int, int, int], info: dict) -> tuple[int | None, dict]:
+    """没有数字字体（开源默认素材）时的分数读法：字形组的范围裁图，ddddocr 与 Apple Vision（放大 9 倍，同 hif._ocr_int）各读一次互相核对。
+    排名栏 11 帧回归：两者一致 10 帧；不一致的 1 帧（Vision 22511 / ddddocr 22311）ddddocr 位数与整高字形数相同，取 ddddocr。
+    - 一致 → 0.8
+    - 一个是另一个掉了首 / 末位 → 取长的，0.6
+    - 不一致 → ddddocr 位数等于整高字形数时取 ddddocr，0.6；否则 None（不交出可能掉位的值）"""
+    from hiro.vision.ocr import ocr
+
+    dddd = read_dddd(img, span)
+    x1, y1, x2, y2 = span
+    m = re.fullmatch(r"\d+", "".join(t for t, _ in ocr(img[y1:y2, x1:x2], scale=9.0)).replace(",", "").replace(" ", ""))
+    vision = int(m.group()) if m else None
+    full = _full_glyphs(info["parts"])
+    note = f"无数字字体：ddddocr {dddd}、Vision {vision}、整高字形 {full} 个"
+    if dddd is not None and dddd == vision:
+        return dddd, {"method": "dddd", "confidence": 0.8, "note": "无数字字体：ddddocr 与 Vision 一致"}
+    if dddd is not None and vision is not None:
+        a, b = sorted((str(dddd), str(vision)), key=len)
+        if len(a) < len(b) and (b.startswith(a) or b.endswith(a)):
+            return int(b), {"method": "dddd", "confidence": 0.6, "note": note}
+    if dddd is not None and len(str(dddd)) == full:
+        return dddd, {"method": "dddd", "confidence": 0.6, "note": note}
+    return None, {"method": None, "confidence": None, "note": note + "，对不上，丢弃"}

@@ -39,6 +39,7 @@ def test_unrecognized_status_slot_buffs_none(name):
     assert obs.fields["buffs"] is None
 
 
+@pytest.mark.user_assets("status")
 def test_normal_frame_keeps_hand_and_buffs():
     raw, obs = _obs("hif_hud/01694.jpg")
     assert obs.fields["hand"] and isinstance(obs.fields["buffs"], dict)

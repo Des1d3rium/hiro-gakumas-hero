@@ -7,14 +7,22 @@ from pathlib import Path
 import cv2
 
 import hiro  # noqa: F401
+from hiro.vision import assets
 from hiro.vision.hif import is_hif_exam, read_hif_exam
 from hiro.vision.offline import load
 
 FIX = Path(__file__).with_name("fixtures") / "hif_hud"
 
 
+USER_ASSET_KEYS = {
+    "statuses": "status",
+    "pitem_names": "pitem",
+}  # 这些字段的名称来自自建图标；素材不在时不比（数值照比）
+
+
 def evaluate() -> list[str]:
     errors = []
+    skip = {k for k, kind in USER_ASSET_KEYS.items() if not assets.available(kind)}
     for name, truth in json.loads((FIX / "truth.json").read_text()).items():
         img = load(cv2.imread(str(FIX / f"{name}.jpg")))
         if not is_hif_exam(img):
@@ -24,7 +32,12 @@ def evaluate() -> list[str]:
         got["statuses"] = [[e.get("name"), e.get("value")] for e in got["statuses"]]
         got["drink_names"] = [d and d["name"] for d in got["drinks"]]
         got["pitem_names"] = [p["name"] for p in got["pitems"]]
+        if "statuses" in skip:  # 没有状态图标：状态名给 None，只比数值
+            got["statuses"] = [v for _, v in got["statuses"]]
+            truth = {**truth, "statuses": [v for _, v in truth.get("statuses", [])]} if "statuses" in truth else truth
         for k, want in truth.items():
+            if k in skip - {"statuses"}:
+                continue
             if got.get(k) != want:
                 errors.append(f"{name} {k}: want {want} got {got.get(k)}")
     return errors
@@ -126,3 +139,17 @@ def test_multiplier_occluded_first_digit():
     assert read(clear)[0] == 1481
     assert read(occluded)[0] == 1481
     hif._MULT_SEEN.clear()
+
+
+def test_no_font_hud_numbers(monkeypatch):
+    """没有数字字体（开源默认素材）：HUD 数字走 ddddocr（整框 / 收左边两次，不一致用 Apple Vision 判）。
+    元気 0 曾被整框读成 10（体力条右端的圆头当成「1」）；白点花纹背景上收左边会丢首位（1283→283）。"""
+    from hiro.vision import digits, hif
+
+    monkeypatch.setattr(digits, "_templates", dict)
+    monkeypatch.setattr(hif, "_templates", dict)
+    root = FIX.parent
+    for rel, genki in (("exam_none/status-unknown-slot-00385.jpg", 0), ("finals/exam-r1-t9.jpg", 0), ("genki/m25r1-202-1283.jpg", 1283),
+                       ("hif_hud/01714.jpg", 23)):  # fmt: skip
+        img = cv2.imread(str(root / rel))
+        assert digits.read_number(img, hif.BOX_GENKI, align=True) == genki, rel

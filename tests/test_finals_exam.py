@@ -225,3 +225,13 @@ def test_vote_truncated(votes, want):
 def test_finals_hud_six_digit_score():
     r = read_hif_exam(load(cv2.imread(str(FIX / "hud-score-main9-00198.jpg"))), cache=None)
     assert (r["finals"], r["my_score"], r["remaining_turns"]) == (True, 204412, 1)
+
+
+def test_six_digit_badge_without_font(monkeypatch):
+    """没有数字字体：白描边同色字形串交给 ddddocr，位数与字形数一致才用；卡名前异色的属性图标不当起点。"""
+    from hiro.vision import digits, hif
+
+    monkeypatch.setattr(digits, "_templates", dict)
+    monkeypatch.setattr(hif, "_templates", dict)
+    r = read_hif_exam(load(cv2.imread(str(FIX / "badge-6digit-main8-00155.jpg"))), cache=None)
+    assert [(c["name"], c["badge_score"]) for c in r["hand"]] == [("ゆめみごこち+", None), ("きらきら紙吹雪+", 45431), ("届いて！+", 106837)]

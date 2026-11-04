@@ -29,6 +29,7 @@ def test_produce_observation_matches_schedule():
         assert options == SCHEDULE[obs["step"]], name
 
 
+@pytest.mark.user_assets("status")
 def test_battle_observation_builds_state():
     exam = read_hif_exam(load(cv2.imread(str(FIX / "hif_hud" / "01782.jpg"))))
     state = BattleState.build(ExamMemory("qualify-1"), profile_for("i_card-shro-3-007"), **battle_observation(exam))
@@ -95,6 +96,7 @@ def test_select_card_observation():
         assert all(c["card_id"] for c in obs.fields["candidates"]), name
 
 
+@pytest.mark.user_assets("status")
 def test_hif_exam_field_meta():
     from hiro.vision.observe import observation
 
@@ -117,6 +119,7 @@ def test_status_absent_is_zero_only_when_column_fully_read():
     assert (battle_observation(legacy)["motivation"], battle_observation(legacy)["impression"]) == (8, 4)
 
 
+@pytest.mark.user_assets("status")
 def test_hif_exam_contract_fields():
     """契约 d1e05bc：attr 用 Vo/Da/Vi、千分比倍率、对手分数与名次、statuses{type,name,value,unit}。"""
     from hiro.vision.extract import extract
@@ -162,6 +165,7 @@ def test_select_pitem_page():
     assert obs.fields["selected"] is None and obs.fields["confirm_enabled"] is False
 
 
+@pytest.mark.user_assets("support")
 def test_start_confirm_supports():
     from hiro.vision.extract import extract
     from hiro.vision.observe import observation

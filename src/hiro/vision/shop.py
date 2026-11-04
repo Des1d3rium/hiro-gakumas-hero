@@ -83,7 +83,7 @@ def _drink(img: MatLike, x: int, y: int = DRINK_Y) -> dict:
     (score, asset), (second, _) = max(lib.match_many(crops), key=lambda t: t[0][0])
     ok = score >= DRINK_MIN and score - second >= DRINK_MARGIN
     drink = Drink.from_asset_id(asset) if ok else None
-    return {"kind": "drink", "drink_id": drink.id if drink else None, "name": lib.names.get(asset) if ok else None,
+    return {"kind": "drink", "drink_id": drink.id if drink else None, "name": (lib.names.get(asset) or (drink.name if drink else None)) if ok else None,
             "confidence": round(score, 3), "margin": round(score - second, 3)}  # fmt: skip
 
 

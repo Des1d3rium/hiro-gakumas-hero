@@ -92,9 +92,25 @@ def _source(path: Path) -> str:
     return _SRC[path]
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "user_assets(*kinds): 需要自建素材（HIRO_USER_ASSETS）；kinds 见 hiro.vision.assets.USER_ASSETS")
+
+
+def _missing_user_assets(kinds) -> list[str]:
+    try:
+        from hiro.vision import assets
+    except Exception:  # noqa: BLE001
+        return list(kinds)
+    return [k for k in kinds if not assets.available(k)]
+
+
 def pytest_collection_modifyitems(config, items):
     kaa_ok = None
     for item in items:
+        marker = item.get_closest_marker("user_assets")
+        if marker is not None and (missing := _missing_user_assets(marker.args)):
+            item.add_marker(pytest.mark.skip(reason=f"需要自建素材（HIRO_USER_ASSETS）：{', '.join(missing)}"))
+            continue
         path = Path(str(item.fspath))
         src = _source(path)
         missing = [m for m in OPTIONAL_LAYERS if m in src and not _has_module(m)]
