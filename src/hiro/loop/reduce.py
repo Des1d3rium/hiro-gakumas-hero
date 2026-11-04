@@ -25,7 +25,8 @@ SECTION = {"ACTION_SELECT": "produce", "DECK_LIST": "produce", "HIF_EXAM": "exam
 # 考试页面里整段替换（不逐项合并）的列表 / 字典字段
 REPLACE_WHOLE = {"hand", "drinks", "buffs", "pitems", "params", "growth_permil", "deck"}
 MAX_CONFLICTS = 20
-ANY_PAGE_PRODUCE = {"drinks", "drink_capacity"}  # 不在 produce 分区的页面（CONSULT 等）读到也写进 produce
+# 不在 produce 分区的页面（CONSULT 等）读到也写进 produce：底栏的持有饮料、头部的体力 / P 点（D43：识屏 140621f 相談页读头部）
+ANY_PAGE_PRODUCE = {"drinks", "drink_capacity", "stamina", "max_stamina", "produce_point"}
 
 
 def reduce(state: GameState, obs: Observation) -> GameState:

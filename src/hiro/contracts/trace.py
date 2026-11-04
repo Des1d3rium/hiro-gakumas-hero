@@ -52,9 +52,18 @@ class TraceWriter:
     def __init__(self, root: Path = TRACES, name: str | None = None, meta: dict[str, Any] | None = None):
         self.dir = root / (name or datetime.now().strftime("%Y%m%d-%H%M%S"))
         (self.dir / "frames").mkdir(parents=True, exist_ok=True)
+        # 续写同名 trace（run_hif resume --trace <同名>）：seq 接着已有的往下编，不覆盖已有的帧（D43：第三十三局本战续跑从 1 重编，
+        # 前两段的 frames/000NN.jpg 被覆盖）；run.json 保留第一次的，这一次记进 segments
+        self.seq = _last_seq(self.dir)
         self._steps = (self.dir / "steps.jsonl").open("a", encoding="utf-8")
-        self.seq = 0
-        (self.dir / "run.json").write_text(json.dumps({"started": time.time(), **(meta or {})}, ensure_ascii=False, indent=1))
+        run = self.dir / "run.json"
+        this = {"started": time.time(), **(meta or {})}
+        try:
+            old = json.loads(run.read_text(encoding="utf-8")) if run.exists() else None
+        except (OSError, ValueError):
+            old = None
+        data = this if old is None else {**old, "segments": [*old.get("segments", []), {**this, "first_seq": self.seq + 1}]}
+        run.write_text(json.dumps(data, ensure_ascii=False, indent=1))
 
     def next_seq(self) -> int:
         self.seq += 1
@@ -73,6 +82,23 @@ class TraceWriter:
 
     def close(self) -> None:
         self._steps.close()
+
+
+def _last_seq(trace_dir: Path) -> int:
+    """已有 trace 的最大序号（steps.jsonl 的 seq 与 frames/ 文件名取大的）；新目录为 0。"""
+    last = 0
+    steps = trace_dir / "steps.jsonl"
+    if steps.exists():
+        with steps.open(encoding="utf-8") as f:
+            for line in f:
+                try:
+                    last = max(last, int(json.loads(line).get("seq") or 0))
+                except (ValueError, AttributeError):
+                    continue
+    for fr in (trace_dir / "frames").glob("*.jpg"):
+        if fr.stem.isdigit():
+            last = max(last, int(fr.stem))
+    return last
 
 
 def read_steps(trace_dir: Path | str) -> Iterator[Step]:

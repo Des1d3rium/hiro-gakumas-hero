@@ -142,6 +142,7 @@ class HiroHifStrategy(HifGrindStrategy):
 
         self.deciders.picked_musts |= set(MEMORY_CARDS) | self._picked_cards_from_trace()  # 回忆带的卡算已有
         self._load_finals_context()
+        self._seed_produce_from_trace()
         # 同一进程内崩溃重启（run_hif 的 _supervised_resume）时沿用已完成的场次；跨进程续跑用 run_hif --exams-done
         self.exam_count = HiroHifStrategy.exams_done
         self.lesson_count = HiroHifStrategy.lessons_done
@@ -583,12 +584,56 @@ class HiroHifStrategy(HifGrindStrategy):
 
         from hiro.state.finals_context import CONTEXT_FILE, load_context
 
-        cur = Path(self.s.trace.dir)
-        base = re.sub(r"-r\d+$", "", cur.name)
-        for d in sorted(cur.parent.glob(base + "*")):
-            if d != cur and (d / CONTEXT_FILE).exists() and re.fullmatch(re.escape(base) + r"(-r\d+)?", d.name):
+        for d in self._prior_trace_dirs():
+            if (d / CONTEXT_FILE).exists():
                 load_context(d)
                 logger.info("续跑：读回本战上下文 %s", d / CONTEXT_FILE)
+
+    def _prior_trace_dirs(self) -> list[Path]:
+        """同一局之前的 trace 段：<基名>、<基名>-rN（不含当前目录），再加上当前目录里已有的步骤（run_hif resume --trace 同名续写，
+        D43 第三十三局本战）。按时间顺序，当前目录排最后。"""
+        import re
+
+        cur = Path(self.s.trace.dir)
+        base = re.sub(r"-r\d+$", "", cur.name)
+        dirs = [d for d in sorted(cur.parent.glob(base + "*")) if d != cur and re.fullmatch(re.escape(base) + r"(-r\d+)?", d.name)]
+        steps = cur / "steps.jsonl"
+        if steps.exists() and steps.stat().st_size > 0:
+            dirs.append(cur)
+        return dirs
+
+    def _seed_produce_from_trace(self) -> None:
+        """续跑：画面还没读到 P / 体力 / 模式（续跑停在相談等不读头部的页面）时，用之前 trace 段最后一个有 produce 的状态打底
+        （D43：第三十三局本战续跑进相談，state.produce 全空，决策只能不买）。来源记 infer（优先级最低），画面一读到就覆盖。"""
+        import json
+
+        from hiro.contracts import Source
+
+        last, last_seq = None, 0
+        for d in self._prior_trace_dirs():
+            try:
+                with (d / "steps.jsonl").open(encoding="utf-8") as f:
+                    for line in f:
+                        try:
+                            step = json.loads(line)
+                        except ValueError:
+                            continue
+                        st = step.get("state_after") or step.get("state") or {}
+                        if st.get("produce"):
+                            last, last_seq = st, int(step.get("seq") or 0)
+            except OSError:
+                continue
+        if last is None:
+            return
+        cur = self.s.state
+        produce = {**last["produce"], **{k: v for k, v in (cur.produce or {}).items() if v is not None}}
+        sources = {**{f"produce.{k}": Source("infer", last_seq) for k in last["produce"]}, **cur.sources}
+        mode = cur.mode if cur.mode != "unknown" else last.get("mode", cur.mode)
+        self.s.state = replace(cur, produce=produce, sources=sources, mode=mode)
+        p = last["produce"]
+        self.s.note(f"续跑：用之前 trace 的最后状态打底（seq {last_seq}：P {p.get('produce_point')}、体力 {p.get('stamina')}/{p.get('max_stamina')}），"
+                    "画面读到就覆盖")  # fmt: skip
+        logger.info("续跑：produce 用之前 trace 的最后状态打底（seq %d）", last_seq)
 
     def _deck_size(self) -> int | None:
         """状态机记账的牌组张数（选卡对话框多屏拼接核对用，识屏 0d1136c：拼出张数与它差 >2 就 complete=False、取消不交决策）；
@@ -603,9 +648,7 @@ class HiroHifStrategy(HifGrindStrategy):
         from hiro.kaa_env import MEMORY_CARDS
         from hiro.loop.ledger import owned_cards, steps_of
 
-        cur = Path(self.s.trace.dir)
-        base = re.sub(r"-r\d+$", "", cur.name)
-        dirs = [d for d in sorted(cur.parent.glob(base + "*")) if d != cur and re.fullmatch(re.escape(base) + r"(-r\d+)?", d.name)]
+        dirs = self._prior_trace_dirs()
         if not dirs:
             return set()
         owned = owned_cards(steps_of(dirs), MEMORY_CARDS)
@@ -1130,6 +1173,8 @@ class HiroHifStrategy(HifGrindStrategy):
 
     MAX_SHOP_STEPS = 8
 
+    CONSULT_P_REREADS = 2  # 相談页 P 点没进状态时重读几次
+
     def on_consult(self, ctx: "ConsultContext"):
         """相談：每步 observe → 决策器（github-d9）→ execute_shop（github-8f）→ 重新 observe，直到 ShopEnd。
         同一天的相談里（重新进入也算）记住：买失败的格子（确认框商品不符算 2 次，其他失败每次 1 次，满 2 次标成已购、不再选）、
@@ -1145,6 +1190,11 @@ class HiroHifStrategy(HifGrindStrategy):
         for step in range(self.MAX_SHOP_STEPS):
             t0 = time.monotonic()
             obs = self.s.observe_complete("CONSULT", ("shelf",), tries=4, interval=0.8)
+            for _ in range(self.CONSULT_P_REREADS):  # 要用 P 判断买不买：读不到先重读（D43），还读不到由决策按「未识别」处理
+                if (self.s.state.produce or {}).get("produce_point") is not None:
+                    break
+                sleep(self.SELECT_RETRY_WAIT)
+                obs = self.s.observe(scene="CONSULT")
             blocked = {i for i, n in fails.items() if n >= 2}
             if blocked:  # 买不成的格子标成已购，决策不会再选
                 pf = self.s.state.page_fields
