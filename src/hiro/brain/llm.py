@@ -1,3 +1,4 @@
+# 来源：digital-hiro src/hiro/brain/llm.py @ c3fc27f（GPL-3.0-or-later）
 """LLM 适配层：决策层只依赖 LLMAdapter 协议（ask_json），换模型只改适配器 / 配置。
 
 - ClaudeCLI：本机 Claude Code CLI（claude -p），走用户订阅额度，无需 API key。
@@ -166,6 +167,42 @@ class ClaudeCLI:
                          usage.get("input_tokens"), usage.get("output_tokens"))  # fmt: skip
 
 
+    def ask_json_image(self, system: str, user: str, image_jpeg: bytes) -> LLMResult:
+        """带一张图的单次调用（认不出的画面交 LLM 看图，hiro.loop.rescue）：stream-json 输入，消息里放 base64 图片。
+        不做用量上限的长等待（兜底场景宁可快速失败、退回停机报警）。"""
+        import base64
+
+        env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
+        msg = {"type": "user", "message": {"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(image_jpeg).decode()}},
+            {"type": "text", "text": user}]}}  # fmt: skip
+        cmd = ["claude", "-p", "--model", self.model, "--system-prompt", system, "--setting-sources", "project", "--tools", "",
+               "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]  # fmt: skip
+        t0 = time.monotonic()
+        try:
+            proc = subprocess.run(cmd, input=json.dumps(msg, ensure_ascii=False) + "\n", capture_output=True, text=True, timeout=self.timeout,
+                                  env=env, cwd=self.cwd)  # fmt: skip
+        except subprocess.TimeoutExpired:
+            return LLMResult(None, "", time.monotonic() - t0, "timeout", self.name, self.model)
+        dt = time.monotonic() - t0
+        result = None
+        for line in (proc.stdout or "").splitlines():
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(d, dict) and d.get("type") == "result":
+                result = d
+        if proc.returncode != 0 or result is None or result.get("is_error"):
+            detail = str((result or {}).get("result") or proc.stderr or "")[:300]
+            return LLMResult(None, (proc.stdout or "")[-2000:], dt, f"exit {proc.returncode}: {detail}", self.name, self.model)
+        text = str(result.get("result") or "")
+        usage = result.get("usage") or {}
+        data = extract_json(text)
+        return LLMResult(data, text, dt, None if data is not None else "no json in reply", self.name, self.model,
+                         usage.get("input_tokens"), usage.get("output_tokens"))  # fmt: skip
+
+
 class OpenAICompatible:
     """OpenAI Chat Completions 兼容接口。要求 JSON 回复（response_format json_object，不支持的端点也靠 extract_json 兜底）。"""
 
@@ -181,7 +218,13 @@ class OpenAICompatible:
         self.json_mode = json_mode
         self.extra_headers = extra_headers or {}
 
-    def ask_json(self, system: str, user: str) -> LLMResult:
+    def ask_json_image(self, system: str, user: str, image_jpeg: bytes) -> LLMResult:
+        import base64
+
+        url = "data:image/jpeg;base64," + base64.b64encode(image_jpeg).decode()
+        return self.ask_json(system, [{"type": "image_url", "image_url": {"url": url}}, {"type": "text", "text": user}])
+
+    def ask_json(self, system: str, user) -> LLMResult:
         body = {
             "model": self.model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -226,6 +269,9 @@ class MockLLM:
     model: str | None = "mock"
     seconds: float = 0.01
     calls: list[tuple[str, str]] = field(default_factory=list)
+
+    def ask_json_image(self, system: str, user: str, image_jpeg: bytes) -> LLMResult:
+        return self.ask_json(system, user)
 
     def ask_json(self, system: str, user: str) -> LLMResult:
         self.calls.append((system, user))
