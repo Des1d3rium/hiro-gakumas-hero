@@ -402,10 +402,16 @@ class ProduceDeciders:
 
         def lean_pick(why: str) -> Decision:
             # D40：选卡页没有「不拿」按钮（第三十三局选拔 #339 差し入れ页只有「受け取る」，课程页另有「カード除去」/ 再抽選）。
-            # 「不想拿」= 能刷新先刷新，否则拿最不污染的（同本战 / 选拔瘦牌组规则），不取游戏推荐
-            if _budget_ok(budget, "reroll"):
-                return out(Decision(Action(ActionKind.REROLL), f"{why}：先刷新", "rule", 0.8, cands, decider="select_card"))
-            i = min(known, key=lambda k: (_pollution_key(raw[k]["card_id"], k in bad), k != recommended))
+            # 「不想拿」= 有一次性 / 不污染的候选就直接拿它（协调 2026-11-04：同 test_small_deck，不刷新）；
+            # 候选全部会污染牌组（冲突 / 好印象系 / 可复用的非核心）时才先刷新，刷新用完再拿最不污染的。不取游戏推荐
+            def polluting(k: int) -> bool:
+                cid = raw[k]["card_id"]
+                return k in bad or bool(conflict_like(cid)) or is_once(cid) is not True
+
+            clean = [k for k in known if not polluting(k)]
+            if not clean and _budget_ok(budget, "reroll"):
+                return out(Decision(Action(ActionKind.REROLL), f"{why}：候选都会污染牌组，先刷新", "rule", 0.8, cands, decider="select_card"))
+            i = min(clean or known, key=lambda k: (_pollution_key(raw[k]["card_id"], k in bad), k != recommended))
             return out(Decision(Action.activate_effect(i), f"{why}：这一页不能不拿，拿最不污染的 {_card_label(raw[i])}"
                                 f"（{'一次性' if is_once(raw[i]['card_id']) else '可复用'}{'、会生成眠気' if _makes_sleep(raw[i]['card_id']) else ''}）",
                                 "rule", 0.75, cands, decider="select_card"))  # fmt: skip
