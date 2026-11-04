@@ -77,8 +77,30 @@ def _enter(s: GameState, page: str, area: str, seq: int, *, frames: int = 1) -> 
             del s.sources[k]
     if page == "HIF_EXAM_RESULT":
         s.exam_session.brief_permil = None  # 一场考试结束：说明页倍率作废（下一场没拍到说明页时不拿旧值比，数据确认 a41939a）
+    if prev in EXAM_PAGES and page not in EXAM_PAGES:
+        _sync_exam_drinks(s, seq)
     if s.mode == "produce" and s.produce is None:
         s.produce = {}
+
+
+def _sync_exam_drinks(s: GameState, seq: int) -> None:
+    """离开考试（R1 结束进轮间、R2 结束）：用考试里最后读到的饮料栏（exam.drinks）覆盖 produce.drinks。
+    考试里喝饮料只改 exam.drinks（考试页字段进 exam 分区），produce.drinks 一直停在开局的值（第二十九局 seq 115 起是开局 4 瓶的
+    pending 旧值，轮间按它决策）。exam.drinks 里有认不出的饮料（没有 drink_id）时不覆盖，宁可留旧值等下一次看到饮料栏。"""
+    drinks = (s.exam or {}).get("drinks")
+    if not isinstance(drinks, list) or s.produce is None:
+        return
+    ids = [d.get("drink_id") if isinstance(d, dict) else d for d in drinks]
+    if any(not isinstance(i, str) or not i for i in ids):
+        _note(s, f"seq {seq}: 离开考试时饮料栏有认不出的饮料，produce.drinks 保持原值")
+        return
+    old = s.produce.get("drinks")
+    s.produce["drinks"] = sorted(ids)
+    src = s.sources.get("exam.drinks")
+    s.sources["produce.drinks"] = Source(src.origin if src is not None else "screen", seq)
+    s.field_status["produce.drinks"] = "observed"
+    if old is not None and sorted(old) != sorted(ids):
+        _note(s, f"seq {seq}: 离开考试，produce.drinks 按考试饮料栏更新 {sorted(old)} → {sorted(ids)}")
 
 
 def _reduce_fields(s: GameState, obs: Observation) -> None:

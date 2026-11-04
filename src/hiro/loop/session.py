@@ -14,7 +14,7 @@ from hiro.loop.reduce import reduce
 from hiro.loop.transitions import is_transient, successors
 
 # 故障恢复的类别（notes 前缀 recover:<kind>），报告按此统计
-RECOVER_KINDS = ("page_misjudged", "missing_fields", "llm_invalid", "tap_no_effect", "dialog", "crash_restart", "date_change", "unhandled")
+RECOVER_KINDS = ("page_misjudged", "missing_fields", "llm_invalid", "tap_no_effect", "dialog", "crash_restart", "date_change", "unhandled", "llm_rescue")
 
 
 def _default_shoot():
@@ -52,6 +52,13 @@ class Session:
         self.img = None  # 最近一次 observe 的截图
         self.steps = 0
         self._last_exec_t: float | None = None  # 上一个有执行结果的步落盘时刻（time.time），算过场耗时
+        from hiro.loop.repeat_guard import Guard
+
+        from hiro.loop.pause_flag import active_clock
+
+        # 防空转：重复无效动作 + 没进展（hiro.loop.repeat_guard）；录屏暂停期间不计时（测试注入了 clock 时用注入的）
+        self.guard = Guard(clock=active_clock if self.clock is time.monotonic else self.clock)
+        self.repeat_streak = 0  # 最近一个决策步：同一局面同一动作连续第几次
         self.advance_taps = 0  # 上一个决策步之后主循环点空白推进的次数（HiroController）
         self._buffer: list[Observation] = []  # 上一条 Step 之后并入状态的全部观测（重放用）
         self._decision_state: GameState | None = None  # 第一次执行校验开始时的状态 = 决策输入（Step.state）
@@ -97,6 +104,9 @@ class Session:
         self.state = self._reduce_checked(obs)
         self.last = obs
         self._buffer.append(obs)
+        from hiro.loop.repeat_guard import state_sig
+
+        self.guard.seen(self.state.page.name, state_sig(self.state.page.name, self.state.page_fields, self.state.exam, self.state.produce))
         if img is not None:
             self.img = img
         return obs
@@ -215,6 +225,18 @@ class Session:
             timings_ms.setdefault("advance_taps", self.advance_taps)
         if decision is not None:
             self.advance_taps = 0
+        repeated = None
+        if decision is not None and execution is not None and decision.action.kind.name not in ("WAIT", "NOOP"):
+            from hiro.loop.repeat_guard import REPEAT_MAX, action_key, state_sig
+
+            page = obs.page.name
+            self.repeat_streak = self.guard.attempt(page, state_sig(page, state_in.page_fields, state_in.exam, state_in.produce), action_key(decision.action))
+            if self.repeat_streak >= REPEAT_MAX:
+                repeated = f"重复无效动作：{page} 同一局面下 {decision.action.kind.value}{decision.action.args} 连续 {self.repeat_streak} 次"
+                self.recover("tap_no_effect", repeated)
+                self.note("blunder:repeat_no_effect " + repeated)
+        elif decision is not None:
+            self.repeat_streak = 0
         # 模型倍率核对每场 3 条，一致的也留（证明这场核对过）
         checks = self._checks if self.debug_recog else [c for c in self._checks if c.verdict in ("read_error", "model_gap") or c.rule == "model_permil"]
         events, preds = self._events, self._new_predictions
@@ -228,12 +250,20 @@ class Session:
         self.notes = []
         self.trace.write(step)
         self.steps += 1
+        if repeated and obs.page.name != "HIF_EXAM":
+            # 考试外没有「本回合禁用」：停机报警（考试里由 battle 本回合禁用该动作，见 run_exam）
+            from hiro.loop.repeat_guard import RepeatedNoEffect
+
+            raise RepeatedNoEffect(repeated + "，停机报警")
         return step
 
     # ---------------------------------------------------------------- 校验
     def verify(self, action, *, page_before: str, taps: list[list[int]] | None = None, expect: set[str] | None = None,
-               timeout: float = 8.0, interval: float = 0.4, retries: int = 0, stay_ok: bool = False) -> ExecutionResult:  # fmt: skip
+               timeout: float = 8.0, interval: float = 0.4, retries: int = 0, stay_ok: bool = False,
+               left_ok: bool = False) -> ExecutionResult:  # fmt: skip
         """动作下发后轮询页面直到离开 page_before（或 stay_ok 时任一稳定页面）。只记页面，不提字段。
+        left_ok：画面一离开 page_before 就算生效（过渡 / 读取 / 认不出的帧也算），不再等下一个稳定页面——
+        调用方已有执行生效的证据（KAA commit 正常返回）时用。第二十一局选拔：选行动后课程动画全是过渡帧，每步空等到 8s 超时。
 
         expected_transition：执行后页面是否在转移图允许的后继里；不在就记 recover:page_misjudged。
         """
@@ -246,6 +276,9 @@ class Session:
         while True:
             img = self.shoot()
             scene, area = self.classify()
+            if left_ok and is_transient(scene) and scene != page_before:
+                page_after = None  # 已离开，去向待主循环判
+                break
             if not is_transient(scene):
                 page_after = scene
                 if scene != page_before or stay_ok:
@@ -256,12 +289,12 @@ class Session:
             self.sleep(interval)
         waited = self.clock() - t0
         allowed = expect if expect is not None else successors(page_before)
-        expected = page_after in allowed
+        expected = None if page_after is None else page_after in allowed
         ok = page_after != page_before or stay_ok
         err = None
         if not ok:
             err = f"{timeout:.0f}s 内页面仍是 {page_before}"
-        elif not expected:
+        elif expected is False:
             err = f"执行后到了 {page_after}，不在 {page_before} 的允许后继里"
             self.recover("page_misjudged", err)
         return ExecutionResult(action=action, ok=ok, taps=list(taps or []), waited_s=round(waited, 3), page_before=page_before,

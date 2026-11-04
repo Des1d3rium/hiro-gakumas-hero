@@ -1,0 +1,129 @@
+"""凌晨日切换「日付変更」（hiro.loop.date_change）：识别、KAA Loop 回调打断、回首页流程。"""
+
+import pytest
+
+pytest.importorskip("kotonebot")  # 操作层：要装 KAA / kotonebot（pip install -e ".[play]"）
+
+from pathlib import Path
+
+import cv2
+import numpy as np
+import pytest
+
+import hiro  # noqa: F401
+from hiro.loop import date_change as dc
+from hiro.produce import ops
+
+import importlib.util as _iu
+from pathlib import Path as _P
+
+
+def _real(*rel):
+    """用实机截图的用例：截图放在 tests/fixtures/…（开源仓库不带，用自己的截图），识别层（hiro.vision.ocr）也要装。"""
+    have = all((_P(__file__).parent / "fixtures" / r).exists() for r in rel) and _iu.find_spec("hiro.vision.ocr") is not None
+    return pytest.mark.skipif(not have, reason="需要实机截图 tests/fixtures/" + ", ".join(rel) + " 和识别层")
+
+
+FIX = Path(__file__).parent / "fixtures" / "date_change"
+
+
+def box(t, x, y):
+    return (t, 1.0, (x - 40, y - 15, x + 40, y + 15))
+
+
+@_real('date_change/date-change-20261030.png')
+def test_real_frame_detected_with_strip_ocr():
+    img = cv2.imread(str(FIX / "date-change-20261030.png"))
+    pos = dc.date_change_button(dc.strip_boxes(img, ops.ocr_boxes))
+    assert pos and abs(pos[0] - 379) < 15 and abs(pos[1] - 1159) < 15
+
+
+def test_not_triggered_by_other_pages():
+    assert dc.date_change_button([box("タイトルへ", 360, 1160)]) is None  # 没有「日付変更」标题
+    assert dc.date_change_button([box("日付変更", 120, 970)]) is None  # 没有按钮
+
+
+class FakeLoop:
+    def __init__(self, img):
+        self.screenshot = img
+
+
+def test_loop_callback_raises_and_is_throttled():
+    t = {"now": 0.0}
+    calls = []
+
+    def ocr(img):
+        calls.append(1)
+        return [box("日付変更", 120, 90), box("タイトルへ", 380, 280)]  # 横条内坐标
+
+    cb = dc.loop_callback(ocr, every=5.0, clock=lambda: t["now"])
+    with pytest.raises(dc.DateChanged):
+        cb(FakeLoop(np.zeros((1280, 720, 3), np.uint8)))
+    t["now"] = 2.0
+    assert cb(FakeLoop(np.zeros((1280, 720, 3), np.uint8))) is False and len(calls) == 1  # 5 秒内不再 OCR
+
+
+def test_loop_callback_quiet_on_normal_frames():
+    cb = dc.loop_callback(lambda img: [box("次へ", 360, 200)], every=0.0, clock=lambda: 1.0)
+    assert cb(FakeLoop(np.zeros((1280, 720, 3), np.uint8))) is False
+
+
+class Screens:
+    """日期切换 → 标题（TAP TO START）→ 登录奖励（点空白）→ 购买推荐框（只认閉じる）→ 首页。"""
+
+    def __init__(self):
+        self.seq = [
+            ("date", [box("日付変更", 120, 973), box("日付が変わりました。", 176, 1057), box("タイトルへ", 379, 1159)]),
+            ("title", [box("TAP TO START", 360, 1000)]),
+            ("bonus", [box("ログインボーナス", 360, 300)]),
+            ("promo", [box("ジュエルパック 購入", 360, 600), box("閉じる", 360, 1160)]),
+            ("home", []),
+        ]
+        self.i, self.clicks = 0, []
+
+    def shoot(self):
+        return self.i
+
+    def ocr(self, i):
+        return self.seq[i][1]
+
+    def click(self, x, y):
+        self.clicks.append((self.seq[self.i][0], (x, y)))
+        if self.seq[self.i][0] == "promo" and (x, y) != (360, 1160):
+            raise AssertionError("购买框上只能点閉じる")
+        self.i = min(self.i + 1, len(self.seq) - 1)
+
+
+def test_recover_to_home_full_flow_never_taps_purchase():
+    s = Screens()
+    t = {"now": 0.0}
+    ok = dc.recover_to_home(s.shoot, s.click, s.ocr, lambda i: s.seq[i][0] == "home",
+                            clock=lambda: t["now"], sleep=lambda x: t.__setitem__("now", t["now"] + x))  # fmt: skip
+    assert ok
+    assert [c[0] for c in s.clicks] == ["date", "title", "bonus", "promo"]
+    assert s.clicks[0][1] == (379, 1159) and s.clicks[2][1] == dc.BLANK_TAP and s.clicks[3][1] == (360, 1160)
+
+
+def test_recover_waits_on_purchase_screen_without_close():
+    clicks = []
+    t = {"now": 0.0}
+    ok = dc.recover_to_home(lambda: 0, lambda x, y: clicks.append((x, y)), lambda i: [box("ジュエル購入", 360, 600)], lambda i: False,
+                            clock=lambda: t["now"], sleep=lambda x: t.__setitem__("now", t["now"] + x), timeout=10)  # fmt: skip
+    assert not ok and clicks == []  # 有购买字样又没有閉じる：一下都不点
+
+
+def test_landscape_frame_skipped_no_crash():
+    """q14：LIVE 横屏帧（720x1280 宽 > 高）切空图 OCR 抛 cv2.error，主循环连崩。横屏直接跳过。"""
+    import numpy as np
+
+    from hiro.loop import date_change as dc
+
+    called = []
+    img = np.zeros((720, 1280, 3), np.uint8)
+    assert dc.strip_boxes(img, lambda im: called.append(im) or []) == [] and called == []
+
+    def boom(_):
+        raise RuntimeError("ocr failed")
+
+    cb = dc.loop_callback(boom, every=0, clock=lambda: 0.0)
+    assert cb(type("L", (), {"screenshot": np.zeros((1280, 720, 3), np.uint8)})()) is False
