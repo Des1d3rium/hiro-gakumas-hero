@@ -61,3 +61,18 @@ def recommended_effect_group(idol_row: dict) -> str:
 
 def is_recommended(card_row: dict, idol_row: dict) -> bool:
     return recommended_effect_group(idol_row) in (card_row.get("effectGroupIds") or [])
+
+# ---- 日程行动（seesaawiki / wikiwiki 表格）
+SUB_PARAMETER_MAJOR = 0.75  # wikiwiki 统计：副属性在剩余两项里，流行顺序靠前的约 75%
+OUTING_RECOVER_PERMIL = 600  # 外出：回复最大体力 60%
+PRESENT_POINTS = 80  # 差し入れ：P 点 +80（另有 SR/SSR 饮料 + 技能卡）
+# 授業的属性值：选拔 3/6 日 120、10/17 日 150；本战 1/4 日 180（不套成长加成）
+CLASS_PARAMETER = {("produce-007", 3): 120, ("produce-007", 6): 120, ("produce-007", 10): 150, ("produce-007", 17): 150,
+                   ("produce-008", 1): 180, ("produce-008", 4): 180}  # fmt: skip
+CLASS_GAIN_DAYS = {("produce-007", 3), ("produce-007", 6)}  # 这两天授業是「选择获得」（未强化），其余是セレクトチェンジ
+
+
+def sub_parameter_weights(main: str, trend_order) -> dict[str, float]:
+    """课程主属性 main → 副属性的概率；trend_order 为偶像的流行顺序（如 ("Vo", "Da", "Vi")）。"""
+    rest = [a for a in trend_order if a != main]
+    return {rest[0]: SUB_PARAMETER_MAJOR, rest[1]: 1 - SUB_PARAMETER_MAJOR}

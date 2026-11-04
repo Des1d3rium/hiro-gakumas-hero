@@ -177,3 +177,13 @@ def _drink_text(drink_id: str) -> str:
 def drink_view(slot: int, drink) -> DrinkView:
     """KAA Drink → DrinkView。"""
     return DrinkView(slot, drink.name, drink.id, _drink_text(drink.id))
+
+
+@lru_cache(maxsize=None)
+def kaa_cards() -> dict:
+    """(卡 id, 强化次数) → KAA SkillCard（公开主数据）。KAA 是可选依赖，没装时返回空表。"""
+    try:
+        from kaa.db.skill_card import SkillCard
+    except ImportError:
+        return {}
+    return {(c._id, c.upgrade_count or 0): c for c in SkillCard.all()}
