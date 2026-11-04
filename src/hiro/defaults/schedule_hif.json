@@ -1,0 +1,339 @@
+{
+ "_note": "H.I.F（初星アイドルフェスティバル）培育日程。由 KAA 公开主数据（game.db，版本 fc6afb8b5ba4）的日程表编出；选行动位置的可选行动已与 2026-11 的实机记录逐项核对（每个位置 15–27 局，0 处不一致）。位置从 1 起。",
+ "_master_version": "fc6afb8b5ba4b5b3e0f041edb5f33f53db2f6a64",
+ "produce-007": [
+  {
+   "day": 1,
+   "kind": "choice",
+   "options": [
+    "shop",
+    "gift",
+    "special_guidance"
+   ],
+   "rest_when_wounded": true
+  },
+  {
+   "day": 2,
+   "training_focus": "star",
+   "kind": "choice",
+   "options": [
+    "training"
+   ],
+   "open_lesson_ids": [
+    "p_step_open_lesson-produce_007-01-star-sp-sub_da",
+    "p_step_open_lesson-produce_007-01-star-sp-sub_vi",
+    "p_step_open_lesson-produce_007-01-star-sp-sub_vo",
+    "p_step_open_lesson-produce_007-01-star-sub_da",
+    "p_step_open_lesson-produce_007-01-star-sub_vi",
+    "p_step_open_lesson-produce_007-01-star-sub_vo"
+   ],
+   "base_p_points": 30,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 3,
+   "kind": "choice",
+   "options": [
+    "class"
+   ],
+   "class_base_parameter": 120,
+   "class_hp_cost": 5,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 4,
+   "training_focus": "parameter",
+   "kind": "choice",
+   "options": [
+    "training"
+   ],
+   "open_lesson_ids": [
+    "p_step_open_lesson-produce_007-01-parameter-sp-sub_da",
+    "p_step_open_lesson-produce_007-01-parameter-sp-sub_vi",
+    "p_step_open_lesson-produce_007-01-parameter-sp-sub_vo",
+    "p_step_open_lesson-produce_007-01-parameter-sub_da",
+    "p_step_open_lesson-produce_007-01-parameter-sub_vi",
+    "p_step_open_lesson-produce_007-01-parameter-sub_vo"
+   ],
+   "base_p_points": 30,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 5,
+   "kind": "choice",
+   "options": [
+    "outing",
+    "shop"
+   ],
+   "rest_when_wounded": true
+  },
+  {
+   "day": 6,
+   "kind": "choice",
+   "options": [
+    "class"
+   ],
+   "class_base_parameter": 120,
+   "class_hp_cost": 5,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 7,
+   "exam_number": 1,
+   "kind": "exam",
+   "options": [
+    "exam"
+   ]
+  },
+  {
+   "day": 8,
+   "kind": "choice",
+   "options": [
+    "outing",
+    "gift"
+   ],
+   "rest_when_wounded": true
+  },
+  {
+   "day": 9,
+   "training_focus": "star",
+   "kind": "choice",
+   "options": [
+    "training"
+   ],
+   "open_lesson_ids": [
+    "p_step_open_lesson-produce_007-02-star-sp-sub_da",
+    "p_step_open_lesson-produce_007-02-star-sp-sub_vi",
+    "p_step_open_lesson-produce_007-02-star-sp-sub_vo",
+    "p_step_open_lesson-produce_007-02-star-sub_da",
+    "p_step_open_lesson-produce_007-02-star-sub_vi",
+    "p_step_open_lesson-produce_007-02-star-sub_vo"
+   ],
+   "base_p_points": 30,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 10,
+   "kind": "choice",
+   "options": [
+    "class"
+   ],
+   "class_base_parameter": 150,
+   "class_hp_cost": 5,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 11,
+   "training_focus": "parameter",
+   "kind": "choice",
+   "options": [
+    "training"
+   ],
+   "open_lesson_ids": [
+    "p_step_open_lesson-produce_007-02-parameter-sp-sub_da",
+    "p_step_open_lesson-produce_007-02-parameter-sp-sub_vi",
+    "p_step_open_lesson-produce_007-02-parameter-sp-sub_vo",
+    "p_step_open_lesson-produce_007-02-parameter-sub_da",
+    "p_step_open_lesson-produce_007-02-parameter-sub_vi",
+    "p_step_open_lesson-produce_007-02-parameter-sub_vo"
+   ],
+   "base_p_points": 30,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 12,
+   "kind": "choice",
+   "options": [
+    "shop",
+    "special_guidance"
+   ],
+   "rest_when_wounded": true
+  },
+  {
+   "day": 13,
+   "exam_number": 2,
+   "kind": "exam",
+   "options": [
+    "exam"
+   ]
+  },
+  {
+   "day": 14,
+   "kind": "choice",
+   "options": [
+    "outing",
+    "gift"
+   ],
+   "rest_when_wounded": true
+  },
+  {
+   "day": 15,
+   "training_focus": "star",
+   "kind": "choice",
+   "options": [
+    "training"
+   ],
+   "open_lesson_ids": [
+    "p_step_open_lesson-produce_007-03-star-sp-sub_da",
+    "p_step_open_lesson-produce_007-03-star-sp-sub_vi",
+    "p_step_open_lesson-produce_007-03-star-sp-sub_vo",
+    "p_step_open_lesson-produce_007-03-star-sub_da",
+    "p_step_open_lesson-produce_007-03-star-sub_vi",
+    "p_step_open_lesson-produce_007-03-star-sub_vo"
+   ],
+   "base_p_points": 30,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 16,
+   "kind": "choice",
+   "options": [
+    "outing",
+    "shop",
+    "gift"
+   ],
+   "rest_when_wounded": true
+  },
+  {
+   "day": 17,
+   "kind": "choice",
+   "options": [
+    "class"
+   ],
+   "class_base_parameter": 150,
+   "class_hp_cost": 5,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 18,
+   "training_focus": "parameter",
+   "kind": "choice",
+   "options": [
+    "training"
+   ],
+   "open_lesson_ids": [
+    "p_step_open_lesson-produce_007-03-parameter-sp-sub_da",
+    "p_step_open_lesson-produce_007-03-parameter-sp-sub_vi",
+    "p_step_open_lesson-produce_007-03-parameter-sp-sub_vo",
+    "p_step_open_lesson-produce_007-03-parameter-sub_da",
+    "p_step_open_lesson-produce_007-03-parameter-sub_vi",
+    "p_step_open_lesson-produce_007-03-parameter-sub_vo"
+   ],
+   "base_p_points": 30,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 19,
+   "kind": "choice",
+   "options": [
+    "shop",
+    "special_guidance"
+   ],
+   "rest_when_wounded": true
+  },
+  {
+   "day": 20,
+   "exam_number": 3,
+   "kind": "exam",
+   "options": [
+    "exam"
+   ]
+  }
+ ],
+ "produce-008": [
+  {
+   "day": 1,
+   "kind": "choice",
+   "options": [
+    "class"
+   ],
+   "class_base_parameter": 180,
+   "class_hp_cost": 5,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 2,
+   "training_focus": "star",
+   "kind": "choice",
+   "options": [
+    "training"
+   ],
+   "open_lesson_ids": [
+    "p_step_open_lesson-produce_007-04-star-sp-sub_da",
+    "p_step_open_lesson-produce_007-04-star-sp-sub_vi",
+    "p_step_open_lesson-produce_007-04-star-sp-sub_vo",
+    "p_step_open_lesson-produce_007-04-star-sub_da",
+    "p_step_open_lesson-produce_007-04-star-sub_vi",
+    "p_step_open_lesson-produce_007-04-star-sub_vo"
+   ],
+   "base_p_points": 50,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 3,
+   "kind": "choice",
+   "options": [
+    "outing",
+    "gift"
+   ],
+   "rest_when_wounded": true
+  },
+  {
+   "day": 4,
+   "kind": "choice",
+   "options": [
+    "class"
+   ],
+   "class_base_parameter": 180,
+   "class_hp_cost": 5,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 5,
+   "training_focus": "parameter",
+   "kind": "choice",
+   "options": [
+    "training"
+   ],
+   "open_lesson_ids": [
+    "p_step_open_lesson-produce_007-04-parameter-sp-sub_da",
+    "p_step_open_lesson-produce_007-04-parameter-sp-sub_vi",
+    "p_step_open_lesson-produce_007-04-parameter-sp-sub_vo",
+    "p_step_open_lesson-produce_007-04-parameter-sub_da",
+    "p_step_open_lesson-produce_007-04-parameter-sub_vi",
+    "p_step_open_lesson-produce_007-04-parameter-sub_vo"
+   ],
+   "base_p_points": 50,
+   "rest_when_wounded": true
+  },
+  {
+   "day": 6,
+   "kind": "choice",
+   "options": [
+    "shop"
+   ],
+   "rest_when_wounded": true
+  },
+  {
+   "day": 7,
+   "kind": "round1",
+   "options": [
+    "round1"
+   ]
+  },
+  {
+   "day": 7,
+   "kind": "interval",
+   "options": [
+    "interval"
+   ]
+  },
+  {
+   "day": 7,
+   "kind": "round2",
+   "options": [
+    "round2"
+   ]
+  }
+ ]
+}

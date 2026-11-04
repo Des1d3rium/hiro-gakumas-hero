@@ -21,6 +21,10 @@ ksaa = { path = "vendor/kaa", editable = true }
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# 识别层的界面文字小模板与实测数据、默认实现的日程表（都不是游戏原始素材）
+hiro = ["vision/*.json", "vision/templates/*.png", "defaults/*.json"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"

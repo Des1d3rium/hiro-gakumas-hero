@@ -5,3 +5,10 @@ __pycache__/
 /reports/
 /datasets/
 .temp/
+
+# 游戏数据 / 自建素材（KAA 公开数据下载目录、使用者自建素材包）：只在本机，绝不提交
+/resources/
+# 截图样例（游戏画面，不随仓库发布）
+/tests/fixtures
+# 识别层运行时缓存（卡面索引等）
+/cache/
