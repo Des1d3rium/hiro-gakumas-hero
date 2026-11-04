@@ -19,8 +19,9 @@
 | 不按「破棄」「リタイア」，不放弃进行中的培育 | `loop/kaa_patches.py`（NeverConfirmDiscard）、`loop/rescue.py` |
 | 在别的设备开着的培育：开局确认页绝不按「開始する」（会破弃另一台设备的进度），停下来 | `loop/resume.py`、`loop/controller.py` |
 | 通信错误弹窗不点「タイトルへ」 | `loop/comm_error.py`、`loop/rescue.py` |
-| LLM 兜底只能点 OCR 识别出的文字框或固定空白处；选择页、考试画面不点 | `loop/rescue.py` |
+| LLM 兜底只能点 OCR 识别出的文字框或固定空白处；选择页、考试画面不点；点之前重新截图核对；次数有上限 | `loop/rescue.py` |
 | 再挑戦只用免费次数 / 再挑戦チケット，最多 3 次 | `produce/hif.py` |
+| 不默认选第一个：换卡 / 删卡认不出或全是保护卡就キャンセル；租借格挑不到就停；考试决策越界时按规则重选，不退回第一个合法动作 | `produce/`、`defaults/advisor.py` |
 
 另外：
 
@@ -75,15 +76,47 @@
 
 ## 四、跑一局
 
-> 入口脚本正在从私有仓库迁移（`run_hif` / `play_game`），迁完后这一节补上命令。
+跑之前确认：游戏停在首页；没有别的设备上进行中的培育；AP 够或有 APドリンク；游戏里已经编好支援卡和回忆的编成。
 
-跑之前确认：游戏停在首页；没有别的设备上进行中的培育；AP 够或有 APドリンク。
+```bash
+# 整局（选拔 → 本战）
+HIRO_SUPPORT_SET=<支援卡编成号> HIRO_MEMORY_SET=<回忆编成号> \
+  python tools/play_game.py --idol <偶像卡 skin id> --main-attr <Vo|Da|Vi>
+
+# 只打本战（已经有选拔得到的回忆）
+HIRO_SUPPORT_SET=… HIRO_MEMORY_SET=… \
+  python tools/play_game.py --main-only --idol <…> --main-attr <…> [--memory Vo,Da,Vi]
+
+# 底层单段命令（play_game 就是把这两段串起来）
+PYTHONPATH=src python -m hiro.run_hif new    --mode qualify|main --idol <…> --main-attr <…>
+PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进行中的培育
+```
+
+`play_game` 的 `--` 之后的参数原样交给 `run_hif`（例如 `-- --no-llm` 只用规则）。
+
+| 环境变量 | 作用 |
+|---|---|
+| `HIRO_SUPPORT_SET` / `HIRO_MEMORY_SET` | **必填**，游戏里的编成号。没设就在碰游戏前退出（码 2）。写 `auto` 等于 KAA「おまかせ」，支援卡会直接确认列表第一张租借卡，只在你明确想这样时用 |
+| `HIRO_LLM` | LLM，如 `claude:sonnet`（默认，走 `claude -p`）、`openai:<model>`（OpenAI 兼容）。`--no-llm` 只用规则 |
+| `HIRO_KAA_GAME_DATA` | KAA 公开数据目录（含 `game.db`），默认 `resources/game_data` |
+| `HIRO_USER_ASSETS` | 自建素材目录（`capture_icons` 的产出），可选 |
+| `HIRO_ASSET_SOURCE` / `HIRO_EXAM_STATE_SOURCE` / `HIRO_EXAM_ADVISOR` | 换插件实现（`包.模块:类名`） |
+| `HIRO_STRATEGY` | 换培育策略类（KAA `HifGrindStrategy` 子类），默认 `hiro.produce.hif:HiroHifStrategy` |
+| `HIRO_PAUSE_FLAG` | 外部暂停旗标文件路径：文件存在就暂停对局 |
+| `HIRO_RESCUE_LLM=0` | 关掉认不出画面时的 LLM 看图兜底（默认开） |
+| `HIRO_DEBUG_RECOG=1` | 把全部识别互验写进 trace，页面变化都存帧 |
+
+固定编成时，租借格按 `--main-attr` 挑主属性、等级最高的一张；挑不到就停下（不开局）。
+
+别的设备上有进行中的培育时，`run_hif new` 会停下（退出码 3）。只有使用者明确同意放弃那一份进度，才加 `--allow-discard`。
 
 运行中：
 
 - 每一步写进 `traces/<run>/steps.jsonl`（截图在同目录）。
 - 看门狗：画面和局面 3 分钟没有进展就停机报警（`loop/repeat_guard.py`），不会自动重启。
 - 外部暂停：设了 `HIRO_PAUSE_FLAG=<文件路径>` 时，那个文件存在就暂停对局，删掉就继续（录屏中断时用）。
+- 日志 `reports/live/<trace>.log`，每局报告 `reports/runs/<trace>.json`（含 LLM 调用次数、输入 / 缓存 / 输出 token、费用）。
+- 选拔进程非 0 退出时 `play_game` 不会自动续跑本战：先看日志，确认没问题再 `run_hif resume`。
 
 ## 五、出问题怎么查
 
