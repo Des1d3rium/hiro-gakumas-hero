@@ -60,7 +60,8 @@ from kaa.game_data.updater import GameDataUpdater, apply_pending, has_usable_bas
 
 u = GameDataUpdater()
 r = u.check_only()  # 和 KAA 图形界面同一套：kotonebot/kaa-game-data 最新 release
-if r is None:
+missing = r is not None and (r.needs_db or any(r.category_missing.values()))
+if r is None or not (r.needs_update or missing):
     print("游戏数据已是最新" if has_usable_baseline() else "没查到可下载的游戏数据（网络？）")
 else:
     shown = {}
