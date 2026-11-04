@@ -57,7 +57,27 @@ def _collect_ignore() -> list[str]:
             out.append(f.name)
         elif not FIXTURES.exists() and re.search(r"^[A-Z_]+\s*=.*\b(FIX|fixtures)\b.*read_text|^[A-Z_]+\s*=\s*json\.load", top, re.M):
             out.append(f.name)
+        elif _top_import_missing_optional(top):
+            out.append(f.name)
     return out
+
+
+OPTIONAL_DEPS = ("kaa", "kotonebot", "Vision", "Quartz", "AppKit")  # 可选组 play / macOS 系统框架（pyobjc）
+
+
+def _top_import_missing_optional(top: str) -> bool:
+    """顶层导入的 hiro 模块在导入时就要 KAA / macOS 框架，而本机没装：整个文件不收集（CI 不装 play 组）。"""
+    import importlib
+
+    for m in re.finditer(r"^(?:from|import) (hiro(?:\.\w+)*)", top, re.M):
+        try:
+            importlib.import_module(m.group(1))
+        except ModuleNotFoundError as e:
+            if (e.name or "").split(".")[0] in OPTIONAL_DEPS:
+                return True
+        except Exception:  # noqa: BLE001 其他导入错误交给 pytest 正常报出来
+            pass
+    return False
 
 
 collect_ignore = _collect_ignore()
