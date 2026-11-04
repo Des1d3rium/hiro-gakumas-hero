@@ -7,7 +7,7 @@ read_error 的字段用 filter_observation 去掉后再 reduce，统计：
 - 牌组在每个决策点是否已知（produce.deck）——事件记账接上前应全部为「未知」，用来列缺口；
 - 改变牌组 / P 点的决策（选卡、授業 / 外出、相談、删卡、换卡、轮间）清单：事件表需要覆盖的动作。
 
-    PYTHONPATH=src .venv/bin/python -m hiro.state.invariants_replay traces/lead35-qualify6-20261031-232418 [...]
+    PYTHONPATH=src .venv/bin/python -m hiro.state.invariants_replay traces/<run> [...]
     （传一局的第一段即可，后续 -rN 段自动接上；--json 输出明细）
 """
 

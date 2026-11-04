@@ -126,12 +126,9 @@ def test_debug_lists_consistent_checks():
 
 
 # ------------------------------------------------------------ 实机 trace 回放验收（H1）
-CASES = [
-    ("lead35-qualify2-20261031-115639", "lead35-qualify2-20261031-115639-r3", 48, "exam.score", 3771),
-    ("lead35-qualify2-20261031-115639", "lead35-qualify2-20261031-115639-r2", 125, "produce.params.Da", 73),
-    ("lead35-qualify3-20261031-142043", "lead35-qualify3-20261031-142043", 200, "exam.score", 1403),
-    ("lead35-qualify3-20261031-142043", "lead35-qualify3-20261031-142043-r2", 13, "exam.score", 2231),
-    ("lead35-qualify6-20261031-232418", "lead35-qualify6-20261031-232418", 290, "produce.params.Da", 70),
+CASES: list[tuple[str, str, int, str, int]] = [
+    # (run, segment, seq, field, value)：本机实机 trace 里已知的读错，用来验收不变量能抓到。
+    # 开源仓库不带实机 trace；自己的项目可以在这里登记，trace 不在本机时自动跳过。
 ]
 
 

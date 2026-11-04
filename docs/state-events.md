@@ -131,7 +131,7 @@
 | 考试结算 HIF_EXAM_RESULT | `EXAM_RESULT` | exam score rank passed | True | 26（结算页停留很久、中间被打断时会再发一次，按 exam 去重） |
 | 牌组页看全 DECK_LIST | `DECK_REVIEW`（origin=review） | deck、deck_size | True | 只有 KAA 参考图；比较用 `deck.deck_diff(expected, observed)` |
 | 三选一 / 删卡 / 强化 / 换卡页的选中项 | 不成事件 | 动作事件用 `selection_args(obs)` 取 card_id upgrade deck_index | — | — |
-| 选饮料页饮料满（SELECT_DRINK `held` `full`） | 不成事件 | 执行器先丢后领用 | — | qualify6 #409 |
+| 选饮料页饮料满（SELECT_DRINK `held` `full`） | 不成事件 | 执行器先丢后领用 | — | — |
 | 随机强化（支援卡事件） | 认不出（画面不说是哪张） | — | — | — |
 | 考试后自动处理基础卡 | 认不出（还没有样本） | — | — | — |
 | 授業 / 外出眠気 | 选项 `choices[].trouble`；拿到时出获得弹窗 → CARD_ACQUIRE | — | — | — |

@@ -3,8 +3,8 @@
 输入一局的 trace 基名（自动带上 -rN 续跑段；同一局开局失败重开的几个基名可以一起传），输出「低级失误报告」：
 每类次数、步号（段 + seq）/ 帧路径、估计影响。
 
-    .venv/bin/python -m tools.audit.blunders lead35-qualify11-20261101-142200
-    .venv/bin/python -m tools.audit.blunders lead35-main10-20261101-123827 lead35-main10-20261101-124830 --name main10
+    .venv/bin/python -m tools.audit.blunders <run>
+    .venv/bin/python -m tools.audit.blunders <run-a> <run-b> --name <game>
     .venv/bin/python -m tools.audit.blunders --baseline          # 第九–十二局基线汇总表
 
 输出 reports/analysis/<名>-blunders.{md,json}；--baseline 另出 reports/analysis/blunders-baseline.md。
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field
@@ -729,12 +730,15 @@ def write(name: str, segs: list[Segment], findings: list[Finding], out_dir: Path
 
 
 # ------------------------------------------------------------------ 基线
+PREFIX = os.environ.get("HIRO_TRACE_PREFIX", "run")  # trace 基名前缀：<PREFIX>-<qualify|main><N>-<日期>-<时间>
+
+
 def games(traces: Path, numbers=range(9, 13), modes=("qualify", "main")) -> dict[str, list[str]]:
     """第 N 局 → 基名列表（同一局开局失败重开的几个基名放一起）。"""
     out: dict[str, list[str]] = {}
     for mode in modes:
         for n in numbers:
-            bases = sorted({re.sub(r"-r\d+$", "", p.name) for p in traces.glob(f"lead35-{mode}{n}-*")})
+            bases = sorted({re.sub(r"-r\d+$", "", p.name) for p in traces.glob(f"{PREFIX}-{mode}{n}-*")})
             if bases:
                 out[f"{mode}{n}"] = bases
     return out

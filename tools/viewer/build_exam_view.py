@@ -1,8 +1,8 @@
 """考试复盘页：把一局的 trace（含 -rN 续跑段）生成单个本地 HTML，逐回合展示出牌、饮料、专家候选、状态曲线，并可在步骤上写批注导出。
 
 用法：
-    .venv/bin/python tools/viewer/build_exam_view.py lead35-main11-20261101-153423
-    .venv/bin/python tools/viewer/build_exam_view.py lead35-qualify12-20261101-164908 --out reports/viewer
+    .venv/bin/python tools/viewer/build_exam_view.py <run>
+    .venv/bin/python tools/viewer/build_exam_view.py <run> --out reports/viewer
 
 数据都嵌在 HTML 里（含截图缩略图），可以单独拷到手机上打开。
 
@@ -274,7 +274,7 @@ def _turns(steps: list[dict]) -> list[dict]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("base", help="trace 基名（不带 -rN），例如 lead35-main11-20261101-153423")
+    ap.add_argument("base", help="trace 基名（不带 -rN），例如 run-main11-20261101-153423")
     ap.add_argument("--traces", default=str(ROOT / "traces"))
     ap.add_argument("--out", default=str(ROOT / "reports" / "viewer"))
     ap.add_argument("--blunders", help="低级失误报告 json（默认在 reports/analysis 里找 segments 含本局的）")
