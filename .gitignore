@@ -12,3 +12,10 @@ __pycache__/
 /tests/fixtures
 # 识别层运行时缓存（卡面索引等）
 /cache/
+
+# KAA 运行时生成（配置 / 日志 / 转储，可能含账号信息）
+/conf/
+/logs/
+/dumps/
+# 测试运行时存的标定帧（来自截图样例）
+/tests/.calib-test/

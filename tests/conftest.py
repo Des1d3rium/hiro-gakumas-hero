@@ -71,13 +71,30 @@ def _collect_ignore() -> list[str]:
 OPTIONAL_DEPS = ("kaa", "kotonebot", "Vision", "Quartz", "AppKit")  # 可选组 play / macOS 系统框架（pyobjc）
 
 
+def _body_needs_optional(item) -> bool:
+    """用例函数体里导入的 hiro 模块（操作层大多在导入时就要 KAA）本机导入不了，且缺的是 KAA / macOS 框架。"""
+    import inspect
+
+    try:
+        body = inspect.getsource(item.function)
+    except (OSError, TypeError):
+        return False
+    lines = "\n".join(line.strip() for line in body.splitlines())
+    return _top_import_missing_optional(lines)
+
+
 def _top_import_missing_optional(top: str) -> bool:
     """顶层导入的 hiro 模块在导入时就要 KAA / macOS 框架，而本机没装：整个文件不收集（CI 不装 play 组）。"""
     import importlib
 
-    for m in re.finditer(r"^(?:from|import) (hiro(?:\.\w+)*)", top, re.M):
+    names = []
+    for m in re.finditer(r"^(?:from|import) (hiro(?:\.\w+)*)(?: import \(?([\w ,]+))?", top, re.M):
+        names.append(m.group(1))
+        # from hiro.produce import ops, shop：被导入的名字可能是子模块，也要试
+        names += [f"{m.group(1)}.{n.strip().split(' as ')[0]}" for n in (m.group(2) or "").split(",") if n.strip()]
+    for name in names:
         try:
-            importlib.import_module(m.group(1))
+            importlib.import_module(name)
         except ModuleNotFoundError as e:
             if (e.name or "").split(".")[0] in OPTIONAL_DEPS:
                 return True
@@ -101,6 +118,8 @@ def _source(path: Path) -> str:
 def pytest_configure(config):
     config.addinivalue_line("markers", "user_assets(*kinds): 需要自建素材（HIRO_USER_ASSETS）；kinds 见 hiro.vision.assets.USER_ASSETS")
     config.addinivalue_line("markers", "synthetic: 只用合成图（源码里的 .png 是自己画的），不按「读样例截图」跳过")
+    config.addinivalue_line("markers", "fixtures: 要读 tests/fixtures 的截图样例（经类 / 多层辅助函数间接读，自动判断看不出来时显式标）")
+    config.addinivalue_line("markers", "master: 要主数据 game.db（经决策器 / 识别层间接查，自动判断看不出来时显式标）")
 
 
 def _missing_user_assets(kinds) -> list[str]:
@@ -126,12 +145,18 @@ def pytest_collection_modifyitems(config, items):
         if missing:
             item.add_marker(pytest.mark.skip(reason=f"依赖的层不在仓库里：{missing}"))
             continue
-        if _needs_kaa(src):
+        if _needs_kaa(src) or _body_needs_optional(item):
             if kaa_ok is None:
                 kaa_ok = _kaa_ok()
             if not kaa_ok:
                 item.add_marker(pytest.mark.skip(reason="需要 KAA（pip install -e '.[play]'）"))
                 continue
+        if item.get_closest_marker("master") is not None and not _master_ok():
+            item.add_marker(pytest.mark.skip(reason="需要主数据 game.db（KAA 公开数据，HIRO_KAA_GAME_DATA）"))
+            continue
+        if item.get_closest_marker("fixtures") is not None and not FIXTURES.exists():
+            item.add_marker(pytest.mark.skip(reason="没有截图样例 tests/fixtures（游戏画面不随仓库发布）"))
+            continue
         if MASTER_HINT.search(src) and not _master_ok():
             try:
                 import inspect

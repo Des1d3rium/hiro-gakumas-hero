@@ -1055,6 +1055,7 @@ def run_exam(
     last_action = None
     UNPLAYABLE["hit"] = False
     result_info: dict = {}
+    last_state = None
     try:
         for _ in Loop(interval=0.1):
             img = device.screenshot()
@@ -1117,6 +1118,7 @@ def run_exam(
                 animating = True
                 continue
             wait_state.reset()
+            last_state = state
             obs = session.last if session is not None else None
             # ---- 决策（插件）
             t_decide = time.monotonic()
@@ -1208,6 +1210,13 @@ def run_exam(
         result_info = {"exam": exam, "turns": memory.turn, "history": memory.history}
     finally:
         rec.log("exam_brain_end", exam=exam, turns=memory.turn, history=memory.history)
+        if last_state is not None:  # 本战 R1：剩下的饮料和三属性倍率记进 finals_context，轮间 / R2 决策用（只记 r1）
+            from hiro.state.finals_context import CONTEXT, note_exam
+
+            seen = getattr(memory, "attr_permil", None) or {}
+            permil = {**{k: v for k, v in seen.items() if v}, **(CONTEXT.get("permil") or {})} if exam == "r1" else seen
+            note_exam(exam, drinks=[x.drink_id for x in last_state.drinks if getattr(x, "drink_id", None)], permil=permil,
+                      trace_dir=session.trace.dir if session is not None else None)  # fmt: skip
         source.end(result_info or None)
         advisor.on_round_end(result_info or None)
         if session is not None:

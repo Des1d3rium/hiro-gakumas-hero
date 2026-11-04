@@ -108,7 +108,7 @@ def test_controller_quick_tap(monkeypatch):
 def test_battle_drinks_no_kaa_on_empty_slots(monkeypatch):
     """考试中饮料栏全空：识别层每格都有把握（empty），不再退回 KAA（它在空槽上每格报「Mismatched drink: ビタミンドリンク」，每帧约 0.3 秒）。
     有拿不准的格（unknown）时才退回。"""
-    from hiro.produce import battle
+    from hiro.exec import exam as battle  # 考试执行原语（主仓库 hiro.produce.battle 的开源部分）
 
     calls = []
     monkeypatch.setattr(battle, "locate_all_drinks_in_3_drink_slots", lambda img: calls.append(1) or [])
