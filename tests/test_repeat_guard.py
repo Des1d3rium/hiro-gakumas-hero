@@ -7,10 +7,6 @@ from hiro.contracts import Action, ActionKind, Decision, ExecutionResult, TraceW
 from hiro.loop import repeat_guard as rg
 from hiro.loop.session import Session
 
-import hiro.loop.session as _sess
-
-NEED_GUARD = pytest.mark.skipif("guard" not in _sess.Session.__init__.__code__.co_names,
-                                reason="开源 hiro.loop.session 还没接防空转（Session.guard），等核心同步")
 
 def _session(tmp_path, t):
     tw = TraceWriter(root=tmp_path, name="t", meta={"test": True})
@@ -19,7 +15,7 @@ def _session(tmp_path, t):
 
 
 def _step(s, page, fields, action, ok=True):
-    obs = s.observe(scene=page, fields=fields, save_frame=False)
+    obs = s.observe(scene=page, fields=fields, save_frame=False, ready=True)  # 直接给契约字段，不经识别层映射
     d = Decision(action, "测试", "rule")
     return s.record(obs, decision=d, execution=ExecutionResult(action=action, ok=ok))
 
@@ -31,7 +27,6 @@ def test_state_sig_ignores_volatile():
     assert rg.state_sig("HIF_EXAM", a) != rg.state_sig("HIF_EXAM", {**a, "score": 11})
 
 
-@NEED_GUARD
 def test_non_exam_repeat_stops_on_third(tmp_path):
     t = [0.0]
     s = _session(tmp_path, t)
@@ -44,7 +39,6 @@ def test_non_exam_repeat_stops_on_third(tmp_path):
     assert s.recoveries["tap_no_effect"] == 1
 
 
-@NEED_GUARD
 def test_changed_state_or_action_resets(tmp_path):
     t = [0.0]
     s = _session(tmp_path, t)
@@ -54,7 +48,6 @@ def test_changed_state_or_action_resets(tmp_path):
     assert s.repeat_streak == 1
 
 
-@NEED_GUARD
 def test_exam_repeat_does_not_raise_but_flags(tmp_path):
     t = [0.0]
     s = _session(tmp_path, t)
@@ -96,7 +89,6 @@ def test_watchdog_raises_after_stall():
     assert "unhandled" in notes
 
 
-@NEED_GUARD
 def test_page_change_between_attempts_resets(tmp_path):
     """第十六局选拔：连续拿到几瓶饮料，饮料满确认框连着出现、每次都处理成功（中间回到过 PDRINK_MAX）——不算重复无效。"""
     t = [0.0]
