@@ -65,13 +65,18 @@
 
 只支持 macOS（Apple Silicon）+ PlayCover 跑 iOS 版游戏；Android（ADB）留了接口，还没实现。
 
-1. 拉代码和子模块：`git clone --recurse-submodules …`，或已有仓库里 `git submodule update --init`。
-2. Python 3.10+：`uv venv && uv pip install -e ".[dev,play]"`（`play` 组装 KAA）。
-3. 游戏窗口：PlayCover 里打开游戏，保持竖屏窗口在前台；截图走 MaaTools（KAA 文档有说明）。
-4. 素材（见 `docs/assets.md`）：
-   - KAA 第一次运行会下载公开数据到 `resources/game_data/`；也可以设 `HIRO_KAA_GAME_DATA` 指到别处。
-   - **强烈建议**打一两场考试后跑一次 `tools/assets/capture_icons.py`，补齐考试效果名（やる気、好印象…）和 P 道具名。
-     不跑的话这两个字段一直是 `None`，策略层只能用保守规则，分数会明显低。
+1. 装环境（一条命令，可重复跑，做过的步骤会跳过；需要 uv、git 和网络）：
+   ```bash
+   git clone --recurse-submodules https://github.com/matto49/hiro-gakumas-hero && cd hiro-gakumas-hero
+   scripts/setup.sh      # 子模块 → .venv（Python 3.10）→ 安装 → 生成 KAA 的 R.py → 下载 KAA 公开数据 + 卡图索引 → 自检
+   ```
+   从零约 4 分钟。KAA 换版本后加 `--regen` 重新生成；已用 `HIRO_KAA_GAME_DATA` 指向现成数据时加 `--no-data`。
+   自检最后会打印插件来源、有没有主数据和自建素材，以及开局命令。
+2. 游戏窗口：PlayCover 里打开游戏，保持竖屏窗口在前台；截图走 MaaTools（KAA 文档有说明）。
+   macOS 要给运行它的终端 / 程序「屏幕录制」权限；截图报 `could not create image from display` 时先查这个权限和显示器状态。
+3. 素材（见 `docs/assets.md`）：**强烈建议**打一两场考试后跑一次 `tools/assets/capture_icons.py`，补齐考试效果名（やる気、好印象…）
+   和 P 道具名。不跑的话这两个字段一直是 `None`，策略层只能用保守规则，分数会明显低。
+4. 游戏内设置：`PYTHONPATH=src .venv/bin/python tools/check_settings.py` 检查快进 / 跳过演出是否全开。
 5. LLM：`HIRO_LLM` 选适配器（`claude-cli:sonnet`、OpenAI 兼容 API 等，见 `hiro/brain/llm.py`）。
 
 ## 四、跑一局
