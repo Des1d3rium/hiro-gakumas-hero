@@ -12,6 +12,8 @@ from hiro.brain.deciders import ProduceDeciders
 from hiro.brain.state import CAMPUS_HIRO
 from hiro.contracts import ActionKind, GameState
 
+pytestmark = pytest.mark.master  # 退选要按主数据判断卡能不能强化
+
 FIX = json.loads((Path(__file__).parent / "data" / "q33_enhance_forced.json").read_text(encoding="utf-8"))
 
 

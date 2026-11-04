@@ -47,7 +47,7 @@ FIELD_CATALOG: dict[str, tuple[str, ...]] = {
     "STUDY": ("choices", "selected", "effect", "complete"),
     "OUTING": ("choices", "selected", "effect", "complete"),
     "DECK_LIST": ("deck", "deck_size", "cards", "complete", "problems"),
-    "SKILL_CARD_REMOVAL": ("cards", "selected", "selected_card", "agree", "confirm", "deck_complete", "deck_screens"),
+    "SKILL_CARD_REMOVAL": ("cards", "selected", "selected_card", "agree", "confirm", "deck_complete", "deck_screens", "cancelable"),
     "SKILL_CARD_ENHANCE": ("cards", "selected", "selected_card", "agree", "confirm", "upgradable", "deck_complete", "deck_screens", "cancelable", "trigger"),
     "SKILL_CARD_CHANGE_2": ("cards", "selected", "selected_card", "agree", "confirm", "deck_complete", "deck_screens"),
     "SKILL_CARD_CHANGE_1": ("candidates", "recommended", "rerolls_left", "excludes_left", "complete"),

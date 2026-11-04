@@ -122,6 +122,10 @@ P 点、体力、饮料栏、牌组仍从 `GameState.produce` 取（`produce_poi
 ```
 
 - 一次可能来两瓶新饮料：`incomings` 是全部新饮料（从上到下），`incoming` 只是最下面那瓶；`select_left` 是「あと N個選択」。
+- `held` 的行序与底栏饮料顺序一致（第三十三局两次核对）。列表会滚动：`complete=False` 时下面还有没看到的已有饮料，
+  最后一行常被视口切掉（D41）——这一行带 `partial: true` 与 `candidates`（按露出的效果说明开头匹配的 drink_id，可能多个）；
+  只剩一个候选时已填 `drink_id`（`method: "effect_prefix"`）。多个候选时用 `produce.drinks[index]` 核对；仍认不出的瓶**不要当最差的丢**，
+  应先滚动列表看全再决策（第三十三局 18:18 因此执行失败，KAA 默认「残す」把新来的 特製ハツボシエキス 丢了）。
 - `held` 缺失时用 `produce.drinks`。输出 `DiscardDrink{discard: [index], receive: true}`（丢掉第 index 瓶再收下新的）
   或 `DiscardDrink{discard: [], receive: false}`（不收）。按社区优先表（`knowledge.DRINK_PRIORITY`）比较，表外饮料最差。
 

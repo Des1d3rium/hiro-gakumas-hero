@@ -148,7 +148,7 @@ def test_acquire_over_consult():
 
 @pytest.mark.parametrize(
     ("name", "incoming", "held", "complete"),
-    [("pdrink_max-q4-00069", "特製ハツボシエキス", ["ブーストエキス", "烏龍茶", None], False),  # 第 3 瓶被列表视口切掉：不猜
+    [("pdrink_max-q4-00069", "特製ハツボシエキス", ["ブーストエキス", "烏龍茶", "センブリソーダ"], False),  # 第 3 瓶被视口切掉：露出的效果说明开头只对得上一瓶（D41，下一帧 00073 核实）
      ("pdrink_max-q4-00073", "初星水", ["ブーストエキス", "烏龍茶", "センブリソーダ"], False)],
 )  # fmt: skip
 def test_pdrink_max_hif_real(name, incoming, held, complete):
@@ -156,7 +156,7 @@ def test_pdrink_max_hif_real(name, incoming, held, complete):
     scene, raw, _ = _page(f"pages/{name}.jpg")
     assert scene == "PDRINK_MAX"
     assert raw["incoming"]["name"] == incoming and [h["name"] for h in raw["held"]] == held
-    assert raw["complete"] is complete and all(h["method"] in ("effect", None) for h in raw["held"])
+    assert raw["complete"] is complete and all(h["method"] in ("effect", "effect_prefix", None) for h in raw["held"])
     obs = observation(1, 0.0, scene, raw)
     assert obs.problems(strict=True) == [] and obs.fields["held"][0]["index"] == 0
 
@@ -313,3 +313,39 @@ def test_comm_error_forced_title(monkeypatch):
     monkeypatch.setattr(O, "ocr_boxes", lambda img, *a, **k: fake)
     c = read_comm_error(_comm_error_img(), 973)
     assert c["forced_title"] is True and c["retry"] is None and c["title"] is None and c["close"] == [360, 1178]
+
+
+@pytest.mark.parametrize(
+    ("name", "names", "cands"),
+    [("pdrink_max-cut-q33-00111", ["特製ハツボシエキス", "厳選初星ブレンド", None], ["センブリソーダ", "ブーストエキス"]),
+     ("pdrink_max-cut-q33-00390", ["パワフル漢方ドリンク", "センブリソーダ"], ["センブリソーダ"])],
+)  # fmt: skip
+def test_pdrink_max_cut_row(name, names, cands):
+    """D41（第三十三局 18:18 / 18:30）：「手持ちのドリンク」最后一行被列表视口切掉，只露出效果说明开头，原来读成未知饮料，
+    决策按「未知最差」丢它、执行找不到这一行而失败，KAA 默认「残す」把新饮料丢了。现在标 partial、给前缀候选，唯一候选直接认出。"""
+    from hiro.vision.items import _drink_effects, read_pdrink_max
+
+    r = read_pdrink_max(cv2.imread(str(FIX / "pages" / f"{name}.jpg")))
+    assert r["complete"] is False
+    assert [h["name"] for h in r["held"]] == names
+    last = r["held"][-1]
+    assert last["partial"] is True and [_drink_effects()[c][0] for c in last["candidates"]] == cands
+    assert all("partial" not in h for h in r["held"][:-1])
+    obs = observation(1, 0.0, "PDRINK_MAX", r)
+    assert obs.fields["held"][-1]["partial"] is True and obs.fields["held"][-1]["candidates"] == last["candidates"]
+
+
+@pytest.mark.parametrize(
+    ("rel", "page", "cancelable"),
+    [("enhance/forced-main33-00070.jpg", "SKILL_CARD_ENHANCE", False),  # P 道具触发的必选强化：只有居中的「強化」
+     ("interval_enhance/main17-r1-deck-bottom.jpg", "SKILL_CARD_ENHANCE", True),
+     ("events/removal-none-00141.jpg", "SKILL_CARD_REMOVAL", True)],
+)  # fmt: skip
+def test_card_dialog_cancelable(rel, page, cancelable):
+    """D42（第三十三局本战 #70 停机）：强化 / 删卡对话框有没有「キャンセル」→ page_fields.cancelable；False 时决策不能给取消。"""
+    from hiro.vision.extract import extract
+
+    raw, _ = extract(page, load(cv2.imread(str(FIX / rel))))
+    assert raw["cancelable"] is cancelable
+    obs = observation(1, 0.0, page, raw)
+    assert obs.fields["cancelable"] is cancelable and obs.problems(strict=True) == []

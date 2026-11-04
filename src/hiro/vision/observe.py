@@ -275,6 +275,8 @@ def _card_dialog_observation(fields: dict) -> dict:
     cards = [_deck_card_fields(c) for c in fields.get("cards") or []]
     out = {"cards": cards, "selected": fields.get("selected"), "selected_card": fields.get("selected_card"),
            "agree": fields.get("agree"), "confirm": fields.get("confirm")}  # fmt: skip
+    if "cancelable" in fields:
+        out["cancelable"] = fields["cancelable"]  # D42：False = 必选（没有キャンセル），None = 按钮行没读到
     if "upgradable" in fields:
         out["upgradable"] = fields["upgradable"]  # 强化对话框：选中的卡能不能强化（详情框「強化できません / これ以上強化不可能」→ False）
     for k in ("deck_complete", "deck_screens"):
@@ -302,7 +304,8 @@ def _pdrink_max_observation(fields: dict) -> dict:
     complete（列表滚到底 / 不滚动；False 时下面可能还有没看到的已有饮料）。
     格式见 docs/llm-context.md「PDRINK_MAX」；认不出的瓶 drink_id / name 为 None。"""
     keep = ("index", "drink_id", "name", "y", "center", "method")
-    held = [{k: d.get(k) for k in keep} for d in fields.get("held") or []]
+    # partial / candidates：最后一行被视口切掉时才有（D41，见 items.read_pdrink_max）
+    held = [{**{k: d.get(k) for k in keep}, **{k: d[k] for k in ("partial", "candidates") if k in d}} for d in fields.get("held") or []]
     inc = fields.get("incoming")
     return {"held": held if "held" in fields else None, "incoming": {k: inc.get(k) for k in keep} if inc else None,
             "incomings": [{k: d.get(k) for k in keep} for d in fields.get("incomings") or []] if "incomings" in fields else None,
@@ -373,8 +376,10 @@ FIELD_METHODS: dict[str, dict[str, str]] = {
     **{page: {"cards": "template", "selected": "template", "selected_card": "derived", "agree": "derived", "confirm": "ocr",
               "deck_complete": "derived", "deck_screens": "derived"}
        for page in ("SKILL_CARD_REMOVAL", "SKILL_CARD_ENHANCE", "SKILL_CARD_CHANGE_2")},
+    "SKILL_CARD_REMOVAL": {"cards": "template", "selected": "template", "selected_card": "derived", "agree": "derived", "confirm": "ocr",
+                           "deck_complete": "derived", "deck_screens": "derived", "cancelable": "ocr"},
     "SKILL_CARD_ENHANCE": {"cards": "template", "selected": "template", "selected_card": "derived", "agree": "derived", "confirm": "ocr", "upgradable": "ocr",
-                           "deck_complete": "derived", "deck_screens": "derived"},
+                           "deck_complete": "derived", "deck_screens": "derived", "cancelable": "ocr"},
     "SKILL_CARD_CHANGE_1": {"candidates": "kaa", "recommended": "ocr", "rerolls_left": "ocr", "excludes_left": "ocr", "complete": "derived"},
     "PDRINK_MAX": {"held": "ocr", "incoming": "ocr", "incomings": "ocr", "select_left": "ocr", "complete": "template"},
     "SPECIAL_GUIDANCE": {"cards": "template", "selected": "template", "selected_card": "ocr", "agree": "template", "scrollable": "template", "complete": "template",

@@ -281,6 +281,21 @@ def _drink_by_effect(text: str) -> tuple[str | None, float, float]:
     return (did if best >= OVERFLOW_TEXT_MIN and best - second >= OVERFLOW_TEXT_MARGIN else None), best, best - second
 
 
+PARTIAL_GAP = 60  # 最后一行已有饮料的末行文字离视口下缘不到这么多：这一行多半被视口切掉了（只露出效果说明的开头）
+PREFIX_MIN = 0.9
+
+
+def _drinks_by_prefix(text: str) -> list[str]:
+    """被视口切掉的行只露出效果说明的开头：与每瓶饮料效果说明的同长前缀比，够像的都列出来（drink_id，按相似度降序）。"""
+    import difflib
+
+    norm = _norm_effect(text)
+    if len(norm) < 4:
+        return []
+    sims = sorted(((difflib.SequenceMatcher(None, norm, eff[: len(norm)]).ratio(), did) for did, (_, eff) in _drink_effects().items()), reverse=True)
+    return [did for sim, did in sims if sim >= PREFIX_MIN]
+
+
 def _match_drink_icon(img: MatLike, cx: int, cy: int) -> tuple[float, float, str]:
     lib = _library("pdrink", 56)
     crops = []
@@ -333,6 +348,7 @@ def read_pdrink_max(img: MatLike) -> dict | None:
         else:
             rows.append([(y, t)])
     lib = _library("pdrink", 56)
+    complete = _scroll_complete(img)
 
     def row(index: int, part: list[tuple[int, str]]) -> dict:
         y = (part[0][0] + part[-1][0]) // 2
@@ -347,10 +363,19 @@ def read_pdrink_max(img: MatLike) -> dict | None:
         return entry
 
     new = [r for r in rows if r[0][0] < hy]
-    held = [row(i, r) for i, r in enumerate(r for r in rows if r[0][0] > hy)]
+    held_rows = [r for r in rows if r[0][0] > hy]
+    held = [row(i, r) for i, r in enumerate(held_rows)]
+    if held and held[-1]["drink_id"] is None and not complete and bottom - held_rows[-1][-1][0] < PARTIAL_GAP:
+        # 第三十三局 D41：最后一行被视口切掉，只露出「パラメータ上昇量増加」，效果说明和图标都认不出。
+        # 标 partial、给前缀候选；只剩一个候选才当认出。已有饮料的行序与底栏饮料顺序一致，调用方可用底栏（state.produce.drinks）核对候选。
+        cands = _drinks_by_prefix("".join(t for _, t in held_rows[-1]))
+        held[-1]["partial"] = True
+        held[-1]["candidates"] = cands
+        if len(cands) == 1:
+            held[-1].update(drink_id=cands[0], name=_drink_effects()[cands[0]][0], method="effect_prefix")
     incomings = [row(i, r) for i, r in enumerate(new)]
     left = next((t for t, _ in boxes if "あと" in t and "選択" in t), None)
     m = re.search(r"あと(\d+)", left or "")
     return {"held": held, "incoming": incomings[-1] if incomings else None, "incomings": incomings, "select_left": int(m.group(1)) if m else None,
-            "complete": _scroll_complete(img)}  # fmt: skip
+            "complete": complete}  # fmt: skip
 

@@ -92,6 +92,26 @@ def _card_dialog(img: MatLike) -> dict:
     return {**read_card_dialog(img), "confirm": read_confirm_dialog(img)}
 
 
+CARD_DIALOG_BUTTON_ROW = (1100, 1200)  # 删卡 / 强化对话框底部按钮行（720x1280）
+
+
+def dialog_cancelable(img: MatLike) -> bool | None:
+    """删卡 / 强化对话框能不能取消（D42）：底部有「キャンセル」（x≈160，右边是 x≈485 的「強化 / 削除」）→ True；
+    只有居中的「強化 / 削除」（x≈350，P 道具等触发的必选强化 / 删除，第三十三局本战 #70 #81）→ False；两样都没读到 → None。"""
+    from hiro.vision.ocr import ocr
+
+    texts = [t.replace(" ", "") for t, _ in ocr(img[CARD_DIALOG_BUTTON_ROW[0] : CARD_DIALOG_BUTTON_ROW[1]], scale=2)]
+    if any("キャンセル" in t for t in texts):
+        return True
+    if any("強化" in t or "削除" in t for t in texts):
+        return False
+    return None
+
+
+def _removal_dialog(img: MatLike) -> dict:
+    return {**_card_dialog(img), "cancelable": dialog_cancelable(img)}
+
+
 from hiro.vision.deck import ENHANCE_GRID  # noqa: E402  强化页上方有两个详情框，卡格从 y≈698 起（删卡页 398 起）
 
 
@@ -99,7 +119,7 @@ def _enhance_dialog(img: MatLike) -> dict:
     """强化：卡格区域与删卡页不同（KAA 参考图 screenshot_skill_card_enhance_dialog*.png，12 格都在 ENHANCE_GRID 内）。"""
     from hiro.vision.ocr import ocr
 
-    out = {**read_card_dialog(img, ENHANCE_GRID), "confirm": read_confirm_dialog(img)}
+    out = {**read_card_dialog(img, ENHANCE_GRID), "confirm": read_confirm_dialog(img), "cancelable": dialog_cancelable(img)}
     # 下方「强化后」详情框：选了满级的卡显示「強化できません」，底部提示「これ以上強化不可能なスキルカードです」（main10 相談強化）
     x1, y1, x2, y2 = ENHANCE_RESULT_BOX
     text = "".join(t for t, _ in ocr(img[y1:y2, x1:x2], scale=2)).replace(" ", "")
@@ -129,7 +149,7 @@ EXTRACTORS = {
     "OUTING": read_event_choices,
     "ACTION_SELECT": _action_select,
     "DECK_LIST": read_deck_list,
-    "SKILL_CARD_REMOVAL": _card_dialog,
+    "SKILL_CARD_REMOVAL": _removal_dialog,
     "SKILL_CARD_ENHANCE": _enhance_dialog,
     "SKILL_CARD_CHANGE_1": lambda img: __import__("hiro.vision.deck", fromlist=["read_change_candidates"]).read_change_candidates(img),
     "SKILL_CARD_CHANGE_2": _card_dialog,
