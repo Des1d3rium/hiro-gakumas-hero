@@ -19,3 +19,5 @@ __pycache__/
 /dumps/
 # 测试运行时存的标定帧（来自截图样例）
 /tests/.calib-test/
+# scripts/setup.sh 生成 KAA R.py 的日志
+/.setup-make-resources.log
