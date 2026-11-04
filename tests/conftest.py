@@ -20,6 +20,13 @@ TESTS = Path(__file__).parent
 FIXTURES = TESTS / "fixtures"
 if not FIXTURES.exists() and os.environ.get("HIRO_FIXTURES") and Path(os.environ["HIRO_FIXTURES"]).is_dir():
     FIXTURES.symlink_to(Path(os.environ["HIRO_FIXTURES"]).resolve(), target_is_directory=True)
+HAVE_FIXTURES = FIXTURES.is_dir() and any(FIXTURES.iterdir())  # 空目录 / 断链都算没有样例
+
+if os.environ.get("HIRO_KAA_GAME_DATA"):
+    try:  # 先把 KAA 的数据目录指过去（hiro.vision 导入时做）：别的测试模块先导入 KAA 会在当前目录建空的 resources/game_data
+        import hiro.vision  # noqa: F401
+    except Exception:  # noqa: BLE001 没装识别依赖：照常收集
+        pass
 
 OPTIONAL_LAYERS = ("hiro.loop.controller", "hiro.loop.kaa_patches", "hiro.produce", "hiro.brain.state", "hiro.brain.cards",
                    "hiro.brain.deciders", "hiro.brain.rules", "hiro.brain.replay", "hiro.sim")  # fmt: skip
@@ -54,6 +61,31 @@ def _top_level(src: str) -> str:
     return "\n".join(line for line in src.splitlines() if line and not line[0].isspace() and not line.startswith(("#", '"', "'")))
 
 
+_TOP_PATH = re.compile(r"^([A-Z_][A-Z0-9_]*)\s*=\s*(Path\(__file__\)\S.*?)\s*(?:#.*)?$", re.M)
+_TOP_READ = re.compile(r"\(([^()]*(?:\([^()]*\)[^()]*)*)\)\.read_text\(")
+
+
+def _missing_top_files(f: Path, top: str) -> list[Path]:
+    """模块顶层就要读的文件（`X = Path(__file__)…` 常量拼出来的 `(…).read_text()`）哪些不在。
+    按具体文件判断：tests/fixtures 是空目录、或只放了部分样例时，缺 action/truth.json 的 test_action.py 不收集，别的照常。
+    只对路径表达式求值（不给 builtins），算不出来的读法不管（交给 pytest 正常报错）。"""
+    ns: dict = {"Path": Path, "__file__": str(f)}
+    for m in _TOP_PATH.finditer(top):
+        try:
+            ns[m.group(1)] = eval(m.group(2), {"__builtins__": {}}, ns)  # noqa: S307 只有测试文件里的路径常量
+        except Exception:  # noqa: BLE001
+            continue
+    missing = []
+    for m in _TOP_READ.finditer(top):
+        try:
+            path = eval(m.group(1), {"__builtins__": {}}, ns)  # noqa: S307
+        except Exception:  # noqa: BLE001
+            continue
+        if isinstance(path, Path) and not path.is_file():
+            missing.append(path)
+    return missing
+
+
 def _collect_ignore() -> list[str]:
     """导入时就会失败的测试文件（顶层导入了不在仓库里的层 / 顶层读样例截图），不收集。"""
     out = []
@@ -61,7 +93,7 @@ def _collect_ignore() -> list[str]:
         top = _top_level(f.read_text(encoding="utf-8"))
         if any(re.search(rf"^(from|import) {re.escape(m)}\b", top, re.M) and not _has_module(m) for m in OPTIONAL_LAYERS):
             out.append(f.name)
-        elif not FIXTURES.exists() and re.search(r"^[A-Z_]+\s*=.*\b(FIX|fixtures)\b.*read_text|^[A-Z_]+\s*=\s*json\.load", top, re.M):
+        elif _missing_top_files(f, top):
             out.append(f.name)
         elif _top_import_missing_optional(top):
             out.append(f.name)
@@ -154,7 +186,7 @@ def pytest_collection_modifyitems(config, items):
         if item.get_closest_marker("master") is not None and not _master_ok():
             item.add_marker(pytest.mark.skip(reason="需要主数据 game.db（KAA 公开数据，HIRO_KAA_GAME_DATA）"))
             continue
-        if item.get_closest_marker("fixtures") is not None and not FIXTURES.exists():
+        if item.get_closest_marker("fixtures") is not None and not HAVE_FIXTURES:
             item.add_marker(pytest.mark.skip(reason="没有截图样例 tests/fixtures（游戏画面不随仓库发布）"))
             continue
         if MASTER_HINT.search(src) and not _master_ok():
@@ -167,7 +199,7 @@ def pytest_collection_modifyitems(config, items):
             if MASTER_HINT.search(body):
                 item.add_marker(pytest.mark.skip(reason="需要主数据 game.db（KAA 公开数据，HIRO_KAA_GAME_DATA）"))
                 continue
-        if not FIXTURES.exists() and not item.get_closest_marker("synthetic") and _needs_fixtures(item, src):
+        if not HAVE_FIXTURES and not item.get_closest_marker("synthetic") and _needs_fixtures(item, src):
             item.add_marker(pytest.mark.skip(reason="没有截图样例 tests/fixtures（游戏画面不随仓库发布）"))
 
 
