@@ -1,77 +1,90 @@
-# hiro-gakumas-hero · 数字小广（digital-hiro）开源框架
+# hiro-gakumas-hero · 数字小广
 
-「数字小广」是一个让大模型自己玩《学园偶像大师》H.I.F 模式的实验项目：从截图识别、状态推算、决策，到点击执行和逐回合复盘，全部自动化，目标是在没有人工介入的情况下稳定打完选拔和本战。
+让大模型自己玩《学园偶像大师》（学マス）的 H.I.F 模式：从截图识别、状态推算、决策，到点击执行和逐回合复盘，
+全部自动化。角色是 Campus 模式的篠澤広。
 
-**进展（2026-11-03）**：第 21 局第一次全自动打完整局并夺冠——选拔三场全部满星，本战 R1 541,016、R2 659,534（第一次过 60 万线），两轮合计 1,200,550，第 1 名；考试每步从截图到点击中位 2.3 秒。前一局（只打本战）也已夺冠。
+> 非官方的个人研究项目，与游戏的开发商和运营方无关。仓库**不含任何游戏素材**（卡面、图标、字体、界面图、主数据原文件），
+> 素材由使用者从公开数据和自己的客户端准备。
 
-这个仓库开源的是**与具体游戏无关的工程框架**，以及我们用来逐步改进系统的复盘工具和设计文档。能直接操作游戏的部分（截图识别实现、点击执行器、存档读取、游戏素材）**不包含在内**，见文末「不包含的内容」。
+## 成绩
 
-## 架构
+截至 2026-11-04，H.I.F 本战（两轮合计第 1 名）共夺冠 5 次。培育和考试的每一步都是自动完成的（个别局夺冠后的 LIVE 开始页 / 结算由人点过一次，已修）：
+
+| 局 | 形式 | 两轮合计 | R1 | R2 |
+|---|---|---|---|---|
+| 20 | 只打本战 | 1,108,753 | 678,478 | 430,275 |
+| 21 | **整局**（选拔三场全满星 → 本战） | 1,200,550 | 541,016 | 659,534 |
+| 22 | 只打本战 | 1,228,979 | 620,481 | 608,498 |
+| 31 | 只打本战 | **1,303,847** | 538,425 | 765,422 |
+| 32 | 只打本战 | 1,135,657 | 549,384 | 586,273 |
+
+对手第一名（十王星南）两轮合计稳定在约 108 万。上面的成绩用的是作者的完整系统（含不开源的模拟器和预演专家，见下文）；
+只用本仓库的默认实现也能打完一局，但考试决策没有那么强。
+
+## 它是怎么工作的
 
 ```
-截图 ──► 识别（不开源）──► Observation（契约）
-                                │
-                       reduce(state, obs)：纯函数，防抖 + 来源优先级 + 页面转移校验
-                                │
-事件 Event ──► apply_event ──► Prediction ──► check(prediction, obs) ──► Check（读错 / 推算缺口 / 一致）
-                                │
-                           GameState（契约）──► 决策（规则 + 模拟 + LLM 兜底）──► Decision（契约）
-                                │                                          │
-                           Step（截图 + 观测 + 状态 + 决策 + 执行结果）◄── ExecutionResult（契约）
-                                │
-                     trace/ 落盘 ──► 离线重放 · 低级失误审计 · 复盘页 · 用户标注 ──► 黄金用例（门禁）
+                       ┌───────────── 策略层 hiro.brain / hiro.defaults.advisor ─────────────┐
+                       │ 社区攻略先验（docs/hif-playbook.md）→ 规则链 → LLM 兜底             │
+                       └──────────────▲────────────────────────────────┬──────────────────┘
+                                      │ 状态（契约）                    │ 决策（契约）
+截图 ─► 识别层 hiro.vision ─► Observation ─► reduce（纯函数，可重放）─► 状态 hiro.state
+           ▲ 素材：插件 AssetSource                              │
+设备 ◄── 操作层 hiro.device / exec / loop / produce ◄── 执行器（点击、等稳、补点、弹窗、恢复、安全拦截）
+                                      │
+                 trace（每一步：截图 + 观测 + 状态 + 决策 + 执行结果）
+                                      ▼
+                 复盘页 tools/viewer · 低级失误审计 tools/audit · 离线回放
 ```
 
-核心思路：
+- **三层**：识别层（看）、策略层（想）、操作层（动）。层与层之间只交换数据契约（`hiro.contracts`），读不到的字段是 `None`，不猜。
+- **状态只由纯函数修改**：同样的观测序列永远得到同样的状态，每一局都能离线重放、逐步比对。
+- **记账 + 互验**：每个动作先推算下一步应该读到什么，再和识别读数对照；明显不合理的读数（掉位、越界、倒退）丢弃重读。
+- **三个插件**（`hiro/plugins.py`），换实现不用改主循环：
 
-1. **数据契约是唯一的接口**（`hiro.contracts`）。识别、状态、决策、执行之间只交换 Observation / GameState / Action / Decision / Preview / ExecutionResult / Step / Event / Prediction / Check，每个对象有 schema、版本号和往返测试。读不到的字段是 `None`，不猜。
-2. **状态只由纯函数修改**（`hiro.loop.reduce`）。同样的观测序列永远得到同样的状态，所以每一局都能离线重放、逐步比对。
-3. **状态机记账 + 识别互验**（`hiro.loop.events`、`hiro.state.invariants`）。每个动作和事件先推算下一步应该读到什么，再和识别读数对照：明显不合理的读数（掉位、越界、倒退）直接丢弃重读，不交给决策；读数合理但和推算对不上，就标成「待复核」，触发主动查看。
-4. **决策与模型无关**（`hiro.brain.llm`）。LLM 只通过一个适配器调用，换模型只改一处配置；非法输出走规则兜底。
-5. **每一步可审计**。每局自动生成逐回合复盘页（开局牌库、手牌、候选动作的期望分、饮料、状态曲线），人可以在任意一步标注「应该怎么做」（自动保存）；标注拉回本地后变成黄金用例，用例不通过就不恢复实机。
+  | 插件 | 回答什么 | 本仓库的默认实现 |
+  |---|---|---|
+  | `asset_source` | 素材和主数据从哪来 | KAA 公开数据 + 使用者自建素材 |
+  | `exam_state_source` | 考试局面从哪来 | 画面识别 + 状态机记账 |
+  | `exam_advisor` | 考试每一步怎么打 | 社区规则链 + LLM 兜底 |
 
-## 决策是怎么做的（方法说明，实现不在本仓库）
+- **安全拦截写在代码里**：不用ジュエル、不破棄、不按跨端培育的「開始する」、通信错误不点タイトルへ、LLM 兜底只能点识别出的文字框
+  （完整列表见 [AGENTS.md](AGENTS.md)）。
+- **每一步可审计**：每局自动生成逐回合复盘页（开局牌库、手牌、候选动作、状态曲线），人可以在任意一步标注「应该怎么做」，
+  标注变成回归用例。
 
-- **出牌：预演专家**。每一步把所有合法动作放进若干「确定化世界」（只打乱看不到的信息：牌堆顺序、未公开的回合属性），回合内搜索 + 续打到考试结束，比期望终局分和配对差；时间预算内按轮加世界，领先显著就提前停。
-- **续打策略决定估值质量**。预演、资源估值都依赖「之后怎么打」的续打策略；我们踩过的最大的坑是续打太粗糙，导致「现在就喝 / 现在就打」被系统性高估。修法是把社区打法和按类别的使用时机写进续打，再用整局配对验证。
-- **资源决策：合成下一场开局 + 配对模拟**。拿饮料、相談、轮间买卖 / 刷新 / 回体力，都把「做完之后的局面」合成为下一场考试的开局，同一批种子配对打完整局比较。
-- **社区规则是先验，模拟显著才偏离**。默认按社区攻略；模拟好过 2 个标准误才偏离，并记录偏离，定期给人复核。
-- **LLM 只做拿不准的事**（选行动、个别选卡），非法输出走规则兜底。
+### 作者的完整系统里多出来的部分（不在本仓库）
 
-## 运行中的度量
-
-`tools/audit/blunders.py`（低级失误：有牌却结束回合、读数被不变量拦下、页面认不出、点击没生效、运行中断等）、`tools/audit/transitions.py`（过场 / 动画耗时）、`tools/preview_stats.py`（每步预演耗时与实际世界数）都只读 trace，可以直接用在你自己的项目上。
-
-## 目录
-
-| 路径 | 内容 |
-|---|---|
-| `src/hiro/contracts/` | 数据契约（dataclass + JSON schema + 往返 / 校验） |
-| `src/hiro/loop/` | `reduce`（状态合成）、`transitions`（页面转移图）、`session`（观测 → reduce → 记录 → 校验，截图 / 分类 / 提取可注入）、`replay`（离线重放）、`events` / `ledger`（事件记账与预测）、`report`（每局度量） |
-| `src/hiro/state/` | 培育状态结构、不变量检验（读错检测）与回放 |
-| `src/hiro/brain/llm.py` | LLM 适配器：`claude -p` CLI、OpenAI 兼容 API、Mock；提示词带版本号 |
-| `src/hiro/vision/observe.py` | 把任意识别器的原始输出打包成契约 Observation 的通用接口（适配器注册表） |
-| `tools/viewer/` | 逐回合复盘页生成器（单个 HTML，数据内嵌；含开局牌库面板、标注自动保存）、标注后端（标准库 HTTP 服务）、发布 / 拉取脚本 |
-| `tools/audit/` | `blunders.py` 低级失误审计（出牌 / 识别 / 执行 / 流程 / 资源五类）；`transitions.py` 过场耗时统计 |
-| `tools/preview_stats.py` | 预演耗时与世界数汇总 |
-| `examples/` | 合成的演示 trace 生成器（不含游戏素材），用来离线试用复盘页 |
-| `docs/` | 契约、状态机、状态推算与互验方案、LLM 上下文格式 |
+考试存档读取、模拟器、预演专家和价值表不开源，只说明方法：每一步把合法动作放进若干「确定化世界」（只打乱看不到的信息：
+牌堆顺序、未公开的回合属性），回合内搜索后续打到考试结束，按配对差比较期望终局分；轮间买卖、饮料时机等资源决策用同一批种子配对模拟。
+社区攻略是先验，模拟显著更好（约 2 个标准误）才偏离。它们通过上面的插件接口接入，你也可以写自己的实现。
 
 ## 快速开始
 
+只支持 macOS（Apple Silicon）+ PlayCover 运行的游戏客户端。
+
 ```bash
-uv venv -p 3.10 && uv pip install -e ".[dev]"
-PYTHONPATH=src .venv/bin/python -m pytest -q tests
+git clone --recurse-submodules https://github.com/matto49/hiro-gakumas-hero
+cd hiro-gakumas-hero
+uv venv -p 3.10 && uv pip install -e ".[dev,play]"     # play 组装 KAA（vendor/kaa 子模块）
+PYTHONPATH=src .venv/bin/python -m pytest -q            # 没有截图样例时，读截图的用例会跳过
 ```
 
-接入自己的游戏：
+1. **素材**：KAA 首次运行会下载公开数据到 `resources/game_data/`。打一两场考试后跑一次
+   `tools/assets/capture_icons.py`，补齐考试效果名（やる気、好印象…）和 P 道具名。详见 [docs/assets.md](docs/assets.md)。
+2. **打一局**（游戏停在首页，已编好支援卡 / 回忆编成）：
 
-1. 实现识别器，用 `hiro.vision.observe.register_adapter(scene, fn)` 注册每个页面的字段转换；
-2. 在 `hiro.loop.transitions` 里登记页面和合法转移；
-3. 用 `hiro.loop.session.Session(trace, shoot=..., classify=..., extract=...)` 跑「观测 → reduce → 决策 → 执行 → 校验」；
-4. 实现游戏专用的预测器 `predict(state, event)`，传给 `apply_event(..., predictor=...)`；没有预测器时只做不变量检验。
+   ```bash
+   HIRO_SUPPORT_SET=<支援卡编成号> HIRO_MEMORY_SET=<回忆编成号> \
+     python tools/play_game.py --idol <偶像卡 skin id> --main-attr <Vo|Da|Vi>
+   ```
 
-先用合成数据试一下复盘页：
+3. **看复盘**：`python tools/viewer/build_exam_view.py <trace>`，打开生成的 HTML。
+
+更完整的说明（环境变量、续跑、出问题怎么查）在 [AGENTS.md](AGENTS.md)。这份文件也是给 AI 看的：把仓库交给一个 AI 会话，
+让它读 `AGENTS.md` 和 `skills/`，它就能装环境、开局和排查问题。
+
+没有游戏也可以先看复盘页长什么样：
 
 ```bash
 python examples/make_demo_trace.py
@@ -79,26 +92,36 @@ python tools/viewer/build_exam_view.py demo-run --traces examples/traces --out /
 open /tmp/hiro-view/demo-run.html
 ```
 
-接到自己的 trace 和服务器：
+## 默认素材下能读到什么
 
-```bash
-python tools/viewer/build_exam_view.py <trace 基名> --traces traces --out reports/viewer [--api https://你的域名/hiro-view/api/notes]
-HIRO_VIEW_HOST=<ssh 主机名> python tools/viewer/publish.py          # rsync 到服务器
-HIRO_VIEW_HOST=<ssh 主机名> tools/viewer/deploy_notes.sh             # 部署标注后端（systemd + nginx）
-HIRO_VIEW_HOST=<ssh 主机名> python tools/viewer/pull_notes.py --out datasets/annotations
-```
+| 读数 | 默认（只有 KAA 公开数据） |
+|---|---|
+| 判页、HUD（剩余回合 / 元気 / 体力）、考试分数、名次、手牌、P 饮料、主数据、日程 | 可用 |
+| 考试效果名（やる気、好印象…）、P 道具名 | 跑一次 `capture_icons` 后可用 |
+| 开始确认页的支援卡、支援卡效果、考试要求 / 倍率 / 星级基准 | 不可用（策略层走规则退路） |
 
-## 不包含的内容
+完整表和退路说明见 [docs/assets.md](docs/assets.md)。
 
-为避免分发游戏素材和规避客户端保护，下列部分不在这个仓库里：
+## 目录
 
-- 截图识别的具体实现（页面签名、卡面 / 饮料 / 图标模板、游戏字体比对）以及游戏素材；
-- 点击执行器、页面处理逻辑，以及对 KAA（kotones-auto-assistant）的扩展和补丁；
-- 本地存档读取、资源解密，以及基于存档的考试模拟器；
-- 游戏专用的决策规则、社区知识表和提示词（仓库里的提示词只是示例）；
-- 实机 trace、截图、数据集和账号数据。
+| 路径 | 内容 |
+|---|---|
+| `src/hiro/contracts/` | 数据契约（dataclass + JSON schema） |
+| `src/hiro/vision/`、`perception/` | 识别层 |
+| `src/hiro/state/`、`loop/reduce.py` | 状态、记账、不变量 |
+| `src/hiro/brain/`、`defaults/advisor.py` | 策略层：规则、社区先验、LLM 适配（`claude -p`、OpenAI 兼容） |
+| `src/hiro/exec/`、`loop/`、`produce/`、`device.py` | 操作层：执行器、主循环、页面处理、恢复、安全拦截 |
+| `src/hiro/plugins.py`、`defaults/` | 插件接口与默认实现 |
+| `tools/play_game.py`、`src/hiro/run_hif.py` | 入口 |
+| `tools/viewer/`、`tools/audit/` | 复盘页、低级失误审计、过场耗时 |
+| `tools/assets/capture_icons.py` | 从自己的截图补齐图标素材 |
+| `docs/` | 契约、状态机、素材与退路、H.I.F 社区打法 |
+| `vendor/kaa` | KAA（kotones-auto-assistant），子模块，固定版本 |
 
-## 声明
+## 致谢与许可
 
-- 本项目是个人研究，与游戏的开发商和运营方无关。请遵守游戏的用户协议，不要把相关技术用于破坏公平性或损害他人利益的用途。
-- 许可证：GPL-3.0-or-later。原项目基于 KAA（GPL-3.0）构建，为保持一致，这里也采用 GPL-3.0。
+- 操作层与识别层建立在 [KAA（kotones-auto-assistant）](https://github.com/XcantloadX/kotones-auto-assistant)
+  之上，KAA 以 GPL-3.0 发布；本仓库随之采用 **GPL-3.0-or-later**。从 KAA 派生的文件在文件头注明。
+- H.I.F 打法整理自社区攻略（seesaawiki、wikiwiki 等），出处写在 `docs/hif-playbook.md` 和 `hiro/brain/hif_rules.py`。
+- 《学園アイドルマスター》及相关名称、图像的权利属于其权利人。本仓库不分发游戏素材；请遵守游戏的用户协议，
+  不要把相关技术用于破坏公平性或损害他人利益的用途。
