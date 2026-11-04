@@ -67,11 +67,11 @@
 ```bash
 git clone --recurse-submodules https://github.com/matto49/hiro-gakumas-hero
 cd hiro-gakumas-hero
-uv venv -p 3.10 && uv pip install -e ".[dev,play]"     # play 组装 KAA（vendor/kaa 子模块）
+scripts/setup.sh                                        # 装依赖、生成 KAA 文件、下载公开游戏数据、自检（约 4 分钟）
 PYTHONPATH=src .venv/bin/python -m pytest -q            # 没有截图样例时，读截图的用例会跳过
 ```
 
-1. **素材**：KAA 首次运行会下载公开数据到 `resources/game_data/`。打一两场考试后跑一次
+1. **素材**：公开游戏数据由 `setup.sh` 下载。打一两场考试后跑一次
    `tools/assets/capture_icons.py`，补齐考试效果名（やる気、好印象…）和 P 道具名。详见 [docs/assets.md](docs/assets.md)。
 2. **打一局**（游戏停在首页，已编好支援卡 / 回忆编成）：
 
