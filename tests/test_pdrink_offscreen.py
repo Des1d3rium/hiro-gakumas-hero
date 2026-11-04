@@ -13,7 +13,7 @@ from hiro.brain.deciders import ProduceDeciders
 from hiro.brain.state import CAMPUS_HIRO
 from hiro.contracts import Action, ActionKind, Decision, GameState
 
-FIX = Path(__file__).parent / "fixtures" / "replay" / "g33-seq111-pdrink-max.json"
+FIX = Path(__file__).parent / "data" / "g33-seq111-pdrink-max.json"  # 实机状态（page_fields 文本），随仓库发布
 
 
 def _state():
@@ -48,6 +48,7 @@ def _strategy(monkeypatch, state, decide, results):
     return strat, calls
 
 
+@pytest.mark.master
 def test_g33_offscreen_row_redecides_among_visible(monkeypatch):
     dec = ProduceDeciders(CAMPUS_HIRO, None)
     first = dec.decide("PDRINK_MAX", _state())

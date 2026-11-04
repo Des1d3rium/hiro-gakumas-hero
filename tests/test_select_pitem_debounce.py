@@ -12,7 +12,7 @@ from hiro.contracts import GameState, Observation
 from hiro.loop import transitions
 from hiro.loop.reduce import reduce
 
-FIX = Path(__file__).parent / "fixtures" / "replay" / "g33-seq229-select-pitem.json"
+FIX = Path(__file__).parent / "data" / "g33-seq229-select-pitem.json"  # 实机状态（page_fields 文本），随仓库发布
 
 
 def _load():

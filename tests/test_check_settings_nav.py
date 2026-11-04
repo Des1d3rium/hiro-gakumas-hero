@@ -4,31 +4,33 @@
 import sys
 from pathlib import Path
 
-import cv2
+import json
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-FIX = Path(__file__).parent / "fixtures/settings"
+BOXES = json.loads((Path(__file__).parent / "data" / "g33-ocr-boxes.json").read_text(encoding="utf-8"))  # 菜单 / 设置页实机帧的 OCR 框（随仓库发布）
 
 
-def _boxes(name):
-    from hiro.produce.ops import ocr_boxes
-
-    return ocr_boxes(cv2.resize(cv2.imread(str(FIX / name)), (720, 1280)))
+def _boxes(key):
+    return [(t, c, tuple(b)) for t, c, b in BOXES[key]]
 
 
+@pytest.mark.synthetic
 def test_menu_frame_finds_settings_icon_not_settings_page():
     from check_settings import is_menu, is_settings
 
-    b = _boxes("menu-g33.jpg")
+    b = _boxes("settings/menu-g33")
     pos = is_menu(b)
     assert pos is not None and abs(pos[0] - 605) <= 30 and abs(pos[1] - 938) <= 30, pos
     assert is_settings(b) is None
 
 
+@pytest.mark.synthetic
 def test_settings_frame_finds_produce_tab():
     from check_settings import is_menu, is_settings
 
-    b = _boxes("03-produce-01.png")
+    b = _boxes("settings/03-produce-01")
     tab = is_settings(b)
     assert tab is not None and abs(tab[0] - 582) <= 30 and abs(tab[1] - 1076) <= 30, tab
     assert is_menu(b) is None

@@ -14,7 +14,7 @@ from hiro.brain.deciders import ProduceDeciders
 from hiro.brain.state import CAMPUS_HIRO
 from hiro.contracts import ExecutionResult, GameState
 
-FIX = Path(__file__).parent / "fixtures" / "replay" / "g33-main-seq81-enhance.json"
+FIX = Path(__file__).parent / "data" / "g33-main-seq81-enhance.json"  # 实机状态（page_fields 文本），随仓库发布
 
 
 def _state():
@@ -27,11 +27,13 @@ def _with(st, **pf):
     return replace(st, page_fields={**st.page_fields, **pf})
 
 
+@pytest.mark.master
 def test_g33_gift_enhance_cancels_only_when_cancel_exists():
     d = ProduceDeciders(CAMPUS_HIRO, None).decide("SKILL_CARD_ENHANCE", _with(_state(), cancelable=True))
     assert d.action.args.get("cancel")  # 有キャンセル时照旧：不值得就不强化
 
 
+@pytest.mark.master
 def test_g33_gift_enhance_without_cancel_picks_a_card():
     st = _with(_state(), cancelable=False)
     d = ProduceDeciders(CAMPUS_HIRO, None).decide("SKILL_CARD_ENHANCE", st)

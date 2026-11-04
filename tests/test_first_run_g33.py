@@ -4,6 +4,7 @@
 - コミュ早送り設定 / 演出スキップ設定：skip_settings 照常处理；
 - サポートイベント設定：HiroController._first_run_settings 选「強化済みで獲得する」→「決定」（这一下就开始培育）。"""
 
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace as NS
@@ -13,13 +14,21 @@ import pytest
 
 from hiro.loop import skip_settings as ss
 
-FIX = Path(__file__).parent / "fixtures" / "first_run"
+FIX = Path(__file__).parent / "fixtures" / "first_run"  # 实机帧（不随仓库发布）
+BOXES = json.loads((Path(__file__).parent / "data" / "g33-ocr-boxes.json").read_text(encoding="utf-8"))  # 同一批帧的 OCR 框（随仓库发布）
 
 
 def _boxes(name):
-    from hiro.produce.ops import ocr_boxes
+    """第三十三局实机帧的 OCR 框（tests/data，合成用例用）：[(text, conf, (x1, y1, x2, y2))]。"""
+    return [(t, c, tuple(b)) for t, c, b in BOXES[f"first_run/g33-{name}"]]
 
-    return ocr_boxes(cv2.resize(cv2.imread(str(FIX / f"g33-{name}.jpg")), (720, 1280)))
+
+def _frame(name):
+    """实机帧本身（只有截图样例在时才有），缺哪张就跳过并写明。"""
+    p = FIX / f"g33-{name}.jpg"
+    if not p.exists():
+        pytest.skip(f"缺样例帧 tests/fixtures/first_run/{p.name}")
+    return cv2.resize(cv2.imread(str(p)), (720, 1280))
 
 
 def test_ok_text_tolerates_check_icon():
@@ -27,6 +36,7 @@ def test_ok_text_tolerates_check_icon():
     assert not ss.is_ok_text("決定しますか") and not ss.is_ok_text("キャンセル") and not ss.is_ok_text("未決定")
 
 
+@pytest.mark.synthetic
 @pytest.mark.parametrize(("name", "kind", "option_y"), [
     ("1-voice", "ボイス再生確認", 818),  # ボイスありで再生（不是「なし」那行 y≈894）
     ("2-commu-ff", "早送り設定", 818),  # コミュを早送りする（不是「しない」那行 y≈742）
@@ -42,6 +52,7 @@ def test_real_frames_read(name, kind, option_y):
         assert r["option"] is not None and abs(r["option"][1] - option_y) <= 20, r
 
 
+@pytest.mark.synthetic
 def test_voice_dialog_clicks_option_then_ok():
     boxes = _boxes("1-voice")
     clicks = []
@@ -50,6 +61,7 @@ def test_voice_dialog_clicks_option_then_ok():
     assert abs(clicks[0][1] - 818) <= 20 and clicks[-1][0] > 400 and abs(clicks[-1][1] - 1160) <= 30, clicks  # 右边的「決定」，不是キャンセル
 
 
+@pytest.mark.synthetic
 def test_support_event_dialog_real_frame(monkeypatch):
     from hiro.loop.controller import HiroController
 
@@ -70,4 +82,4 @@ def test_quick_page_leaves_first_run_dialogs_alone():
     from hiro.vision.quick import quick_page
 
     for name in ("1-voice", "2-commu-ff", "3-produce-skip", "4-support-event"):
-        assert quick_page(cv2.resize(cv2.imread(str(FIX / f"g33-{name}.jpg")), (720, 1280))) is None, name
+        assert quick_page(_frame(name)) is None, name
