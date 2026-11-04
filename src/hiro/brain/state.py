@@ -532,6 +532,11 @@ class BattleState:
             out[_PROMPT_NAME.get(n, n)] = UNKNOWN
         if unknown:
             out["unknown"] = f"{'、'.join(unknown)} 这一帧没有识别出来，值未知（不是 0），判断时不要假设它们的数值"
+        if ({"motivation", "impression"} & set(unknown)) and status_icons_missing():
+            out["effect_names_unavailable"] = (
+                "考试效果名整场都读不到（使用者没有自建效果图标 icons/status/，见 docs/assets.md 的 capture_icons）："
+                "やる気 / 好印象 的层数一直未知。不要靠它们判断兑现时机或叠层是否够，"
+                "优先选不依赖效果层数也稳妥的动作（按卡面效果和剩余回合判断）")
         return out
 
     @classmethod
@@ -666,6 +671,18 @@ def redraw_chance(piles: dict, name: str, hand: list[tuple[str, bool]], future_t
 
 
 UNKNOWN = "未识别"
+
+
+def status_icons_missing() -> bool:
+    """识别层没有考试效果图标（开源默认素材下 やる気 / 好印象 等效果名读不到）。识别层没装时按「不缺」处理，不加提示。"""
+    try:
+        from hiro.vision.assets import available
+    except ImportError:
+        return False
+    try:
+        return not available("status")
+    except Exception:  # noqa: BLE001
+        return False
 _PROMPT_NAME = {"remaining_turns": "remaining_turns_including_this"}
 EXAM_FIELDS = ("remaining_turns", "hp", "genki", "motivation", "impression", "score", "buffs", "attr", "multiplier_permil",
                "npc_scores", "my_rank_index", "deck_count", "pitem_charges", "statuses")  # fmt: skip

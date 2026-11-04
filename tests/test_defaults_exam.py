@@ -82,3 +82,14 @@ def test_state_source_overlay_frame_is_skipped():
 def test_screen_state_fills_from_frame_when_unreadable():
     st = screen_state(ExamMemory(exam="r1"), CAMPUS_HIRO, {}, _Frame({}))
     assert st.remaining_turns == 7 and st.hp == 18 and st.genki == 5
+
+
+def test_prompt_explains_missing_status_icons(monkeypatch):
+    st, _ = _state([_card(0, "A", "c-a")])
+    st.motivation = st.impression = None
+    g = type(st).to_prompt_dict.__globals__  # 别的测试可能重新导入过模块：改实例所属模块的全局名
+    monkeypatch.setitem(g, "status_icons_missing", lambda: True)
+    d = st.to_prompt_dict()
+    assert "effect_names_unavailable" in d and "capture_icons" in d["effect_names_unavailable"]
+    monkeypatch.setitem(g, "status_icons_missing", lambda: False)
+    assert "effect_names_unavailable" not in st.to_prompt_dict()

@@ -52,7 +52,13 @@ def _master(monkeypatch):
     path = _master_path()
     if path is None:
         pytest.skip("没有主数据（设置 HIRO_MASTER_DB 为 KAA game.db 的路径）")
-    monkeypatch.setitem(plugins._registered, "asset_source", lambda: _MasterOnly(path))
+    try:  # 有识别层的默认素材源（带日程）就用它，主数据目录指到同一个 game.db
+        from hiro.defaults.assets import PublicAssetSource  # noqa: F401
+
+        monkeypatch.setenv("HIRO_KAA_GAME_DATA", str(Path(path).parent))
+        plugins._registered.pop("asset_source", None)
+    except ImportError:
+        monkeypatch.setitem(plugins._registered, "asset_source", lambda: _MasterOnly(path))
     plugins._cache.pop("asset_source", None)
     import hiro.state.catalog as cat
     import hiro.state.context as ctx
@@ -63,12 +69,17 @@ def _master(monkeypatch):
     plugins._cache.pop("asset_source", None)
 
 
+def _has_schedule() -> bool:
+    src = plugins.get("asset_source")
+    return bool(src is not None and src.schedule("produce-007"))
+
+
 NEEDS_SCHEDULE = {"ACTION_SELECT"}  # 选行动要日程（AssetSource.schedule）；只给主数据的素材源没有
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
 def test_case_rules_only(case):
-    if case["decider"] in NEEDS_SCHEDULE:
+    if case["decider"] in NEEDS_SCHEDULE and not _has_schedule():
         pytest.skip("需要日程数据（AssetSource.schedule），默认素材源还没有")
     d = ProduceDeciders(CAMPUS_HIRO, None).decide(case["decider"], GameState.from_dict(case["state"]))
     assert isinstance(d, Decision) and not d.problems()
