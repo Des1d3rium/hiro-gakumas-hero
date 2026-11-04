@@ -4,6 +4,8 @@
 夹具 tests/data/q33_enhance_forced.json（page_fields 文本，不是截图，随仓库发布）：#81 的 20 张卡，未强化的只有 元気な挨拶 / ゆるふわおしゃべり / イメトレ / ひなたぼっこ。"""
 
 import json
+
+import pytest
 from pathlib import Path
 
 from hiro.brain.deciders import ProduceDeciders
