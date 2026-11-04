@@ -1,7 +1,7 @@
 # 来源：digital-hiro tests/test_enhance_forced.py（fix_matto_prep_watchdog 5b5adff）
 """D42（总控 2026-11-04，第三十三局本战 18:45 #81）：P 道具触发的免费强化页是必选的（画面只有「強化」，没有キャンセル）。
 核心卡都已强化时原来给 cancel（执行不了）；page_fields.cancelable=False 时改为退选：非核心里价值最高的未强化卡 → 基础卡 → 冲突卡。
-夹具 tests/fixtures/q33_enhance_forced.json：#81 的 20 张卡，未强化的只有 元気な挨拶 / ゆるふわおしゃべり / イメトレ / ひなたぼっこ。"""
+夹具 tests/data/q33_enhance_forced.json（page_fields 文本，不是截图，随仓库发布）：#81 的 20 张卡，未强化的只有 元気な挨拶 / ゆるふわおしゃべり / イメトレ / ひなたぼっこ。"""
 
 import json
 from pathlib import Path
@@ -10,7 +10,7 @@ from hiro.brain.deciders import ProduceDeciders
 from hiro.brain.state import CAMPUS_HIRO
 from hiro.contracts import ActionKind, GameState
 
-FIX = json.loads((Path(__file__).parent / "fixtures" / "q33_enhance_forced.json").read_text(encoding="utf-8"))
+FIX = json.loads((Path(__file__).parent / "data" / "q33_enhance_forced.json").read_text(encoding="utf-8"))
 
 
 def _state(**extra):

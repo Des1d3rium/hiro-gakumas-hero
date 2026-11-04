@@ -1,0 +1,351 @@
+{
+ "page": "SKILL_CARD_ENHANCE",
+ "page_fields": {
+  "cards": [
+   {
+    "deck_index": 0,
+    "row": 0,
+    "col": 0,
+    "card_id": "p_card-02-act-1_004",
+    "name": "元気な挨拶",
+    "upgrade": 0,
+    "customized": false,
+    "dimmed": false,
+    "screen": 0,
+    "index": 0
+   },
+   {
+    "deck_index": 1,
+    "row": 0,
+    "col": 1,
+    "card_id": "p_card-02-act-1_028",
+    "name": "ゆるふわおしゃべり",
+    "upgrade": 0,
+    "customized": false,
+    "dimmed": false,
+    "screen": 0,
+    "index": 1
+   },
+   {
+    "deck_index": 2,
+    "row": 0,
+    "col": 2,
+    "card_id": "p_card-02-men-2_008",
+    "name": "イメトレ",
+    "upgrade": 0,
+    "customized": false,
+    "dimmed": false,
+    "screen": 0,
+    "index": 2
+   },
+   {
+    "deck_index": 3,
+    "row": 0,
+    "col": 3,
+    "card_id": "p_card-02-men-2_052",
+    "name": "ひなたぼっこ",
+    "upgrade": 0,
+    "customized": false,
+    "dimmed": false,
+    "screen": 0,
+    "index": 3
+   },
+   {
+    "deck_index": 4,
+    "row": 1,
+    "col": 0,
+    "card_id": "p_card-02-act-1_004",
+    "name": "元気な挨拶",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 0,
+    "index": 4
+   },
+   {
+    "deck_index": 5,
+    "row": 1,
+    "col": 1,
+    "card_id": "p_card-02-act-1_004",
+    "name": "元気な挨拶",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 0,
+    "index": 5
+   },
+   {
+    "deck_index": 6,
+    "row": 1,
+    "col": 2,
+    "card_id": "p_card-02-act-1_037",
+    "name": "デイドリーミング",
+    "upgrade": 1,
+    "customized": true,
+    "dimmed": true,
+    "screen": 0,
+    "index": 6
+   },
+   {
+    "deck_index": 7,
+    "row": 1,
+    "col": 3,
+    "card_id": "p_card-02-act-2_062",
+    "name": "きらきら紙吹雪",
+    "upgrade": 1,
+    "customized": true,
+    "dimmed": true,
+    "screen": 0,
+    "index": 7
+   },
+   {
+    "deck_index": 8,
+    "row": 2,
+    "col": 0,
+    "card_id": "p_card-02-act-3_039",
+    "name": "届いて！",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 0,
+    "index": 8
+   },
+   {
+    "deck_index": 9,
+    "row": 2,
+    "col": 1,
+    "card_id": "p_card-02-act-3_045",
+    "name": "あのときの約束",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 0,
+    "index": 9
+   },
+   {
+    "deck_index": 10,
+    "row": 2,
+    "col": 2,
+    "card_id": "p_card-02-act-3_186",
+    "name": "せのびの魔法",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 0,
+    "index": 10
+   },
+   {
+    "deck_index": 11,
+    "row": 2,
+    "col": 3,
+    "card_id": "p_card-02-ido-3_105",
+    "name": "エウレカ！",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 0,
+    "index": 11
+   },
+   {
+    "deck_index": 12,
+    "row": 3,
+    "col": 0,
+    "card_id": "p_card-00-men-2_012",
+    "name": "アイドル宣言",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 1,
+    "index": 12
+   },
+   {
+    "deck_index": 13,
+    "row": 3,
+    "col": 1,
+    "card_id": "p_card-00-sup-3_093",
+    "name": "紅葉ランニング",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 1,
+    "index": 13
+   },
+   {
+    "deck_index": 14,
+    "row": 3,
+    "col": 2,
+    "card_id": "p_card-02-men-1_031",
+    "name": "えいえいおー",
+    "upgrade": 1,
+    "customized": true,
+    "dimmed": true,
+    "screen": 1,
+    "index": 14
+   },
+   {
+    "deck_index": 15,
+    "row": 3,
+    "col": 3,
+    "card_id": "p_card-02-men-2_004",
+    "name": "ワクワクが止まらない",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 1,
+    "index": 15
+   },
+   {
+    "deck_index": 16,
+    "row": 4,
+    "col": 0,
+    "card_id": "p_card-02-men-2_056",
+    "name": "止められない想い",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 2,
+    "index": 16
+   },
+   {
+    "deck_index": 17,
+    "row": 4,
+    "col": 1,
+    "card_id": "p_card-02-men-2_057",
+    "name": "ゆめみごこち",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 2,
+    "index": 17
+   },
+   {
+    "deck_index": 18,
+    "row": 4,
+    "col": 2,
+    "card_id": "p_card-02-men-2_111",
+    "name": "成長痛",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 2,
+    "index": 18
+   },
+   {
+    "deck_index": 19,
+    "row": 4,
+    "col": 3,
+    "card_id": "p_card-02-men-3_002",
+    "name": "私がスター",
+    "upgrade": 1,
+    "customized": false,
+    "dimmed": true,
+    "screen": 2,
+    "index": 19
+   }
+  ],
+  "deck_complete": true,
+  "deck_screens": 4
+ },
+ "produce": {
+  "mode": "produce-008",
+  "step": 3,
+  "stamina": 22,
+  "max_stamina": 33,
+  "produce_point": 250,
+  "params": {
+   "Vo": 1890,
+   "Da": 2287,
+   "Vi": 1075
+  },
+  "growth_permil": {
+   "Vo": 1455,
+   "Da": 1444,
+   "Vi": 1413
+  },
+  "star": 825,
+  "param_cap": 3200,
+  "drinks": [
+   "pdrink_00-3-001"
+  ],
+  "drink_capacity": 4,
+  "deck": [
+   {
+    "card_id": "p_card-02-act-3_039",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-act-3_045",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-act-3_186",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-ido-3_105",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-act-2_062",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-act-1_004",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-act-1_004",
+    "upgrade": 0
+   },
+   {
+    "card_id": "p_card-02-act-1_004",
+    "upgrade": 0
+   },
+   {
+    "card_id": "p_card-02-act-1_028",
+    "upgrade": 0
+   },
+   {
+    "card_id": "p_card-02-act-1_037",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-men-3_002",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-men-2_004",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-men-2_052",
+    "upgrade": 0
+   },
+   {
+    "card_id": "p_card-02-men-2_057",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-men-2_111",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-men-1_031",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-00-sup-3_093",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-00-men-2_012",
+    "upgrade": 1
+   },
+   {
+    "card_id": "p_card-02-men-2_056",
+    "upgrade": 1
+   }
+  ],
+  "deck_size": 19
+ }
+}
