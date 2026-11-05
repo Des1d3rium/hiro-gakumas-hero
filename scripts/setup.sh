@@ -91,7 +91,7 @@ from hiro.loop import manifest
 
 m = manifest.collect()
 print(f"插件：资产 {m.asset_source}；局面 {m.exam_state_source}；出招 {m.exam_advisor}")
-print(f"主数据 game.db：{'有' if m.master_db else '没有'}；自建素材：{m.user_assets or '没有（考试效果名读不到，可用 tools/assets/capture_icons.py 补）'}")
+print(f"主数据 game.db：{'有' if m.master_db else '没有'}；随仓库素材包：{m.bundled_assets or '没有（考试效果名读不到，可用 tools/assets/capture_icons.py 补）'}；自建素材：{m.user_assets or '没有'}")
 for p in m.problems:
     print(f"  ⚠ {p}")
 if sys.platform != "darwin":

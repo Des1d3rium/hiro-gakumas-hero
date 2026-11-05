@@ -1,0 +1,17 @@
+{
+ "revision": 302,
+ "client_version": "3.5.1",
+ "master_commit": "c67b88ebfdf0a1654bd30facc746c6bb41f7bf0a",
+ "built_at": "2026-11-04T09:40:45+00:00",
+ "counts": {
+  "cards": 2290,
+  "exam_effect": 93,
+  "produce_effect": 54,
+  "pdrink": 29,
+  "pitem": 532,
+  "support": 210,
+  "font": 4,
+  "layout": 190,
+  "sprites": 1813
+ }
+}

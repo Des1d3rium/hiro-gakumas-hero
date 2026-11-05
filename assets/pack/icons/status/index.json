@@ -1,0 +1,374 @@
+{
+ "debuff": {
+  "type": null,
+  "name": null
+ },
+ "examaddgroweffect": {
+  "type": "ProduceExamEffectType_ExamAddGrowEffect",
+  "name": "成長"
+ },
+ "examaggressiveadditive": {
+  "type": "ProduceExamEffectType_ExamAggressiveAdditive",
+  "name": "やる気増加量増加"
+ },
+ "examaggressiveadditivefix": {
+  "type": "ProduceExamEffectType_ExamAggressiveAdditiveFix",
+  "name": "やる気増加量追加"
+ },
+ "examantidebuff": {
+  "type": "ProduceExamEffectType_ExamAntiDebuff",
+  "name": "低下状態無効"
+ },
+ "examblock": {
+  "type": "ProduceExamEffectType_ExamBlock",
+  "name": "元気"
+ },
+ "examblockadddown": {
+  "type": "ProduceExamEffectType_ExamBlockAddDown",
+  "name": "不安"
+ },
+ "examblockdown": {
+  "type": null,
+  "name": null
+ },
+ "examblockrestriction": {
+  "type": "ProduceExamEffectType_ExamBlockRestriction",
+  "name": "元気増加無効"
+ },
+ "exambuffconsumptionadd": {
+  "type": "ProduceExamEffectType_ExamBuffConsumptionAdd",
+  "name": "強化状態コスト増加"
+ },
+ "exambuffconsumptiondown": {
+  "type": null,
+  "name": null
+ },
+ "examcardcreateid": {
+  "type": "ProduceExamEffectType_ExamCardCreateId",
+  "name": "生成"
+ },
+ "examcardduplicate": {
+  "type": "ProduceExamEffectType_ExamCardDuplicate",
+  "name": "複製"
+ },
+ "examcardplayaggressive": {
+  "type": "ProduceExamEffectType_ExamCardPlayAggressive",
+  "name": "やる気"
+ },
+ "examcardsearcheffectplaycountbuff": {
+  "type": "ProduceExamEffectType_ExamCardSearchEffectPlayCountBuff",
+  "name": "スキルカード追加発動"
+ },
+ "examcardshuffledeckgrave": {
+  "type": null,
+  "name": null
+ },
+ "examconcentration": {
+  "type": "ProduceExamEffectType_ExamConcentration",
+  "name": "強気"
+ },
+ "examconcentrationlessonmultipleadditive": {
+  "type": "ProduceExamEffectType_ExamConcentrationLessonMultipleAdditive",
+  "name": "強気強化"
+ },
+ "examdebuffrecover": {
+  "type": "ProduceExamEffectType_ExamDebuffRecover",
+  "name": "低下状態回復"
+ },
+ "exameffecttimer": {
+  "type": "ProduceExamEffectType_ExamEffectTimer",
+  "name": "発動予約"
+ },
+ "examenthusiasticadditive": {
+  "type": "ProduceExamEffectType_ExamEnthusiasticAdditive",
+  "name": "熱意追加"
+ },
+ "examenthusiasticmultiple": {
+  "type": "ProduceExamEffectType_ExamEnthusiasticMultiple",
+  "name": "熱意増加"
+ },
+ "examenthusiasticturnadd": {
+  "type": null,
+  "name": null
+ },
+ "examextraturn": {
+  "type": "ProduceExamEffectType_ExamExtraTurn",
+  "name": "ターン追加"
+ },
+ "examforceplaycardsearch": {
+  "type": null,
+  "name": null
+ },
+ "examforecast": {
+  "type": null,
+  "name": null
+ },
+ "examfullpower": {
+  "type": "ProduceExamEffectType_ExamFullPower",
+  "name": "全力"
+ },
+ "examfullpowerlessonmultipleadditive": {
+  "type": "ProduceExamEffectType_ExamFullPowerLessonMultipleAdditive",
+  "name": "全力強化"
+ },
+ "examfullpowerpoint": {
+  "type": "ProduceExamEffectType_ExamFullPowerPoint",
+  "name": "全力値"
+ },
+ "examfullpowerpointadditive": {
+  "type": "ProduceExamEffectType_ExamFullPowerPointAdditive",
+  "name": "全力値増加量増加"
+ },
+ "examfullpowerpointadditivefix": {
+  "type": "ProduceExamEffectType_ExamFullPowerPointAdditiveFix",
+  "name": "全力値増加量追加"
+ },
+ "examfullpowerpointreduce": {
+  "type": "ProduceExamEffectType_ExamFullPowerPointReduce",
+  "name": "全力値減少"
+ },
+ "examgetcardupgrade": {
+  "type": "ProduceExamEffectType_ExamGetCardUpgrade",
+  "name": "生成強化"
+ },
+ "examgimmickenthusiastic": {
+  "type": "ProduceExamEffectType_ExamGimmickEnthusiastic",
+  "name": "熱意"
+ },
+ "examgimmicklessondebuff": {
+  "type": "ProduceExamEffectType_ExamGimmickLessonDebuff",
+  "name": "緊張"
+ },
+ "examgimmickparameterdebuff": {
+  "type": "ProduceExamEffectType_ExamGimmickParameterDebuff",
+  "name": "不調"
+ },
+ "examgimmickplaycardlimit": {
+  "type": "ProduceExamEffectType_ExamGimmickPlayCardLimit",
+  "name": "スキルカード使用不可"
+ },
+ "examgimmicksleepy": {
+  "type": "ProduceExamEffectType_ExamGimmickSleepy",
+  "name": "弱気"
+ },
+ "examgimmickslump": {
+  "type": "ProduceExamEffectType_ExamGimmickSlump",
+  "name": "スランプ"
+ },
+ "examgimmickstartturncarddrawdown": {
+  "type": "ProduceExamEffectType_ExamGimmickStartTurnCardDrawDown",
+  "name": "手札減少"
+ },
+ "examgroweffectlessonaddadditive": {
+  "type": "ProduceExamEffectType_ExamGrowEffectLessonAddAdditive",
+  "name": "パラメータ上昇値増加量増加"
+ },
+ "examhandhold": {
+  "type": "ProduceExamEffectType_ExamHandHold",
+  "name": "手札持ち越し"
+ },
+ "examitemfirelimitadd": {
+  "type": null,
+  "name": null
+ },
+ "examlesson": {
+  "type": "ProduceExamEffectType_ExamLesson",
+  "name": "パラメータ"
+ },
+ "examlessonbuff": {
+  "type": "ProduceExamEffectType_ExamLessonBuff",
+  "name": "集中"
+ },
+ "examlessonbuffadditive": {
+  "type": "ProduceExamEffectType_ExamLessonBuffAdditive",
+  "name": "集中増加量増加"
+ },
+ "examlessonbuffadditivefix": {
+  "type": "ProduceExamEffectType_ExamLessonBuffAdditiveFix",
+  "name": "集中増加量追加"
+ },
+ "examlessonbuffmultiple": {
+  "type": "ProduceExamEffectType_ExamLessonBuffMultiple",
+  "name": "集中強化"
+ },
+ "examlessonchangespecifylessthan": {
+  "type": "ProduceExamEffectType_ExamLessonChangeSpecifyLessThan",
+  "name": "パラメータ上昇値変更"
+ },
+ "examlessonchangespecifymorethan": {
+  "type": "ProduceExamEffectType_ExamLessonChangeSpecifyMoreThan",
+  "name": "うわの空"
+ },
+ "examlessonvaluemultiple": {
+  "type": "ProduceExamEffectType_ExamLessonValueMultiple",
+  "name": "パラメータ上昇量増加"
+ },
+ "examlessonvaluemultipledependrevieworaggressive": {
+  "type": "ProduceExamEffectType_ExamLessonValueMultipleDependReviewOrAggressive",
+  "name": "プライド"
+ },
+ "examlessonvaluemultipledown": {
+  "type": "ProduceExamEffectType_ExamLessonValueMultipleDown",
+  "name": "パラメータ上昇量減少"
+ },
+ "exammovegroweffect": {
+  "type": null,
+  "name": null
+ },
+ "examoverpreservation": {
+  "type": "ProduceExamEffectType_ExamOverPreservation",
+  "name": "のんびり"
+ },
+ "exampanic": {
+  "type": "ProduceExamEffectType_ExamPanic",
+  "name": "気まぐれ"
+ },
+ "examparameterbuff": {
+  "type": "ProduceExamEffectType_ExamParameterBuff",
+  "name": "好調"
+ },
+ "examparameterbuffadditive": {
+  "type": "ProduceExamEffectType_ExamParameterBuffAdditive",
+  "name": "好調増加量増加"
+ },
+ "examparameterbuffadditivefix": {
+  "type": "ProduceExamEffectType_ExamParameterBuffAdditiveFix",
+  "name": "好調増加量追加"
+ },
+ "examparameterbuffmultipleperturn": {
+  "type": "ProduceExamEffectType_ExamParameterBuffMultiplePerTurn",
+  "name": "絶好調"
+ },
+ "examparameterbuffturnendreducelock": {
+  "type": null,
+  "name": null
+ },
+ "examplayablevalueadd": {
+  "type": "ProduceExamEffectType_ExamPlayableValueAdd",
+  "name": "スキルカード使用数追加"
+ },
+ "examplaycardlimitplayablevalueadd": {
+  "type": null,
+  "name": null
+ },
+ "exampreservation": {
+  "type": "ProduceExamEffectType_ExamPreservation",
+  "name": "温存"
+ },
+ "examreview": {
+  "type": "ProduceExamEffectType_ExamReview",
+  "name": "好印象"
+ },
+ "examreviewadditive": {
+  "type": "ProduceExamEffectType_ExamReviewAdditive",
+  "name": "好印象増加量増加"
+ },
+ "examreviewadditivefix": {
+  "type": "ProduceExamEffectType_ExamReviewAdditiveFix",
+  "name": "好印象増加量追加"
+ },
+ "examreviewcountadd": {
+  "type": "ProduceExamEffectType_ExamReviewCountAdd",
+  "name": "好印象追加発動"
+ },
+ "examreviewmultiple": {
+  "type": "ProduceExamEffectType_ExamReviewMultiple",
+  "name": "好印象強化"
+ },
+ "examreviewturnendreducelock": {
+  "type": null,
+  "name": null
+ },
+ "examreviewvaluemultiple": {
+  "type": null,
+  "name": null
+ },
+ "examsearchplaycardbuffconsumptionchange": {
+  "type": null,
+  "name": null
+ },
+ "examsearchplaycardstaminaconsumptionchange": {
+  "type": "ProduceExamEffectType_ExamSearchPlayCardStaminaConsumptionChange",
+  "name": "消費体力変化"
+ },
+ "examstaminaconsumptionadddown": {
+  "type": "ProduceExamEffectType_ExamStaminaConsumptionAddDown",
+  "name": "消費体力増加効果減少"
+ },
+ "examstaminaconsumptionaddfix": {
+  "type": "ProduceExamEffectType_ExamStaminaConsumptionAddFix",
+  "name": "消費体力追加"
+ },
+ "examstaminaconsumptiondown": {
+  "type": "ProduceExamEffectType_ExamStaminaConsumptionDown",
+  "name": "消費体力減少"
+ },
+ "examstaminaconsumptiondownadd": {
+  "type": "ProduceExamEffectType_ExamStaminaConsumptionDownAdd",
+  "name": "消費体力減少効果増加"
+ },
+ "examstaminaconsumptiondownfix": {
+  "type": "ProduceExamEffectType_ExamStaminaConsumptionDownFix",
+  "name": "消費体力削減"
+ },
+ "examstaminarecoveradd": {
+  "type": "ProduceExamEffectType_ExamStaminaRecoverAdd",
+  "name": "体力回復効果増加"
+ },
+ "examstaminarecoverfix": {
+  "type": "ProduceExamEffectType_ExamStaminaRecoverFix",
+  "name": "体力回復"
+ },
+ "examstaminarecoverrestriction": {
+  "type": "ProduceExamEffectType_ExamStaminaRecoverRestriction",
+  "name": "体力回復無効"
+ },
+ "examstaminareducechange": {
+  "type": "ProduceExamEffectType_ExamStaminaReduceChange",
+  "name": "体力消費軽減"
+ },
+ "examstancelockconcentration": {
+  "type": null,
+  "name": null
+ },
+ "examstancelockfullpower": {
+  "type": null,
+  "name": null
+ },
+ "examstancelockpreservation": {
+  "type": null,
+  "name": null
+ },
+ "examstancereset": {
+  "type": "ProduceExamEffectType_ExamStanceReset",
+  "name": "指針解除"
+ },
+ "examstatusenchant": {
+  "type": "ProduceExamEffectType_ExamStatusEnchant",
+  "name": "持続効果"
+ },
+ "examstatusenchantcountadd": {
+  "type": null,
+  "name": null
+ },
+ "examstatusenchantencore": {
+  "type": "ProduceExamEffectType_ExamStatusEnchantEncore",
+  "name": "再演"
+ },
+ "examstatusenchantturnadd": {
+  "type": null,
+  "name": null
+ },
+ "examthresholddown": {
+  "type": null,
+  "name": null
+ },
+ "examuplifting": {
+  "type": "ProduceExamEffectType_ExamUplifting",
+  "name": "高揚"
+ },
+ "stancelock": {
+  "type": "ProduceExamEffectType_StanceLock",
+  "name": "指針固定"
+ }
+}

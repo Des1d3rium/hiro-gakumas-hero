@@ -23,7 +23,8 @@ class ResourceManifest:
     exam_state_source: str | None = None
     exam_advisor: str | None = None
     master_db: bool = False  # 主数据（game.db）能不能打开
-    user_assets: str | None = None  # 使用者自建素材目录（没有时识别层只用 KAA 公开数据）
+    user_assets: str | None = None  # 使用者自建素材目录（没有时识别层只用 KAA 公开数据和随仓库素材包）
+    bundled_assets: str | None = None  # 随仓库的素材包目录 assets/pack（HIRO_BUNDLED_ASSETS=0 关掉时为 None）
     layout_calib: str | None = None  # layout_calib.json 内容哈希
     signatures: str | None = None  # signatures.json 内容哈希
     contracts_version: str = CONTRACT_VERSION
@@ -46,6 +47,8 @@ def collect(*, check_master: bool = True) -> ResourceManifest:
         assets = plugins.get("asset_source")
         user = getattr(assets, "user", None)
         m.user_assets = str(user) if user is not None and Path(user).is_dir() else None
+        bundled = getattr(assets, "bundled", None)
+        m.bundled_assets = str(bundled) if bundled is not None and Path(bundled).is_dir() else None
         if check_master:
             m.master_db = assets.master_db() is not None
             if not m.master_db:

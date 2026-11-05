@@ -25,8 +25,8 @@
 
 另外：
 
-- 不要把游戏素材（卡面、图标、字体、Sprite、主数据原文件）、截图、trace、账号、密钥提交进仓库。`.gitignore` 已挡住
-  `resources/`、`tests/fixtures/`、`cache/`、`traces/`。
+- 不要把截图、trace、账号、密钥、主数据原文件提交进仓库。`.gitignore` 已挡住 `resources/`、`tests/fixtures/`、`cache/`、`traces/`。
+  `assets/pack/` 是仓库有意带的识别素材包（权利属于游戏的权利人，见 `assets/pack/README.md`），除此之外不要再往仓库里加游戏素材或截图。
 - 不要改 `vendor/kaa`（KAA 子模块，固定版本）。需要改 KAA 行为时，在 `hiro/loop/kaa_patches.py` 里打补丁。
 
 ## 二、架构
@@ -74,8 +74,9 @@
    自检最后会打印插件来源、有没有主数据和自建素材，以及开局命令。
 2. 游戏窗口：PlayCover 里打开游戏，保持竖屏窗口在前台；截图走 MaaTools（KAA 文档有说明）。
    macOS 要给运行它的终端 / 程序「屏幕录制」权限；截图报 `could not create image from display` 时先查这个权限和显示器状态。
-3. 素材（见 `docs/assets.md`）：**强烈建议**打一两场考试后跑一次 `tools/assets/capture_icons.py`，补齐考试效果名（やる気、好印象…）
-   和 P 道具名。不跑的话这两个字段一直是 `None`，策略层只能用保守规则，分数会明显低。
+3. 素材（见 `docs/assets.md`）：识别用的卡面、图标、字体、Sprite、布局随仓库在 `assets/pack/`，开箱即用。
+   客户端更新后认不出新图标时，才打一两场考试，用 `tools/assets/capture_icons.py` 补；设了 `HIRO_BUNDLED_ASSETS=0` 时则必须补，
+   否则考试效果名和 P 道具名一直是 `None`，策略层只能用保守规则，分数会明显低。
 4. 游戏内设置：`PYTHONPATH=src .venv/bin/python tools/check_settings.py` 检查快进 / 跳过演出是否全开。
 5. LLM：`HIRO_LLM` 选适配器（`claude-cli:sonnet`、OpenAI 兼容 API 等，见 `hiro/brain/llm.py`）。
 
@@ -104,7 +105,8 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | `HIRO_SUPPORT_SET` / `HIRO_MEMORY_SET` | **必填**，游戏里的编成号。没设就在碰游戏前退出（码 2）。写 `auto` 等于 KAA「おまかせ」，支援卡会直接确认列表第一张租借卡，只在你明确想这样时用 |
 | `HIRO_LLM` | LLM，如 `claude:sonnet`（默认，走 `claude -p`）、`openai:<model>`（OpenAI 兼容）。`--no-llm` 只用规则 |
 | `HIRO_KAA_GAME_DATA` | KAA 公开数据目录（含 `game.db`），默认 `resources/game_data` |
-| `HIRO_USER_ASSETS` | 自建素材目录（`capture_icons` 的产出），可选 |
+| `HIRO_USER_ASSETS` | 自建素材目录（`capture_icons` 的产出），可选；与随仓库素材包并用，同类图库取文件更多的一个 |
+| `HIRO_BUNDLED_ASSETS` | 随仓库素材包目录，默认 `assets/pack`；设 `0` 关掉 |
 | `HIRO_ASSET_SOURCE` / `HIRO_EXAM_STATE_SOURCE` / `HIRO_EXAM_ADVISOR` | 换插件实现（`包.模块:类名`） |
 | `HIRO_STRATEGY` | 换培育策略类（KAA `HifGrindStrategy` 子类），默认 `hiro.produce.hif:HiroHifStrategy` |
 | `HIRO_PAUSE_FLAG` | 外部暂停旗标文件路径：文件存在就暂停对局 |

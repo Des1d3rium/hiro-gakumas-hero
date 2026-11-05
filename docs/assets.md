@@ -1,20 +1,22 @@
 # 识别素材与退路（AssetSource）
 
-仓库不带任何游戏素材（卡面、图标、字体、界面 Sprite、主数据原文件）。识别层取素材只经插件 `AssetSource`
-（`hiro.plugins.get("asset_source")`，入口 `hiro.vision.assets`），默认实现 `hiro.defaults.assets.PublicAssetSource`
-用两个来源：
+仓库带一套识别用素材包 `assets/pack/`（卡面、图标、字体、界面 Sprite、布局；权利属于游戏的权利人，见 `assets/pack/README.md`），
+不带主数据原文件。识别层取素材只经插件 `AssetSource`（`hiro.plugins.get("asset_source")`，入口 `hiro.vision.assets`），
+默认实现 `hiro.defaults.assets.PublicAssetSource` 用三个来源：
 
 | 来源 | 位置（环境变量） | 内容 |
 |---|---|---|
 | KAA 公开数据 | `HIRO_KAA_GAME_DATA`，默认 `resources/game_data/`（KAA 运行时下载） | `game.db` 主数据、`skill_cards/` 技能卡卡面、`drinks/` P 饮料图（白底 RGB，29 种，与主数据 ProduceDrink 全部对上） |
-| 使用者自建素材 | `HIRO_USER_ASSETS`，默认 `resources/user_assets/` | 见下文「自建素材」；都可选 |
+| 随仓库素材包 | `HIRO_BUNDLED_ASSETS`，默认 `assets/pack/`；设 `0` 关掉 | 卡面、考试效果 / P 饮料 / P 道具图标、数字字体、界面 Sprite、支援卡图、布局 |
+| 使用者自建素材 | `HIRO_USER_ASSETS`，默认 `resources/user_assets/` | 见下文「自建素材」；都可选。与素材包并用：同类图库取文件更多的一个，`layout.json` 和字体先自建后素材包 |
 
 设了 `HIRO_KAA_GAME_DATA` 时，`import hiro.vision` 会把 KAA 自己的数据目录（`kaa.game_data.paths` 与 `kaa.db.sqlite`
 的库路径）也指过去，两边用同一份数据；不在当前目录留下 `resources/`。
 
 ## 默认素材下各读数
 
-「默认素材」= 只有 KAA 公开数据，没有任何自建素材。核对方法：识别层回归用例 + 主仓库 58 帧考试画面逐项对比
+下表是关掉素材包（`HIRO_BUNDLED_ASSETS=0`）后的情况，即「默认素材」= 只有 KAA 公开数据，没有任何自建素材；
+带着素材包时，下表里标「跑一次 capture_icons 后可用」「要自建」的项都直接可用（支援卡 id 除外，素材包带的是支援卡图，对识别有效）。核对方法：识别层回归用例 + 主仓库 58 帧考试画面逐项对比
 「有私有素材包 / 只有默认素材」两种读法。
 
 | 读数 | 默认素材下 | 说明 |

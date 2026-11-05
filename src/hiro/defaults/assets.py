@@ -13,6 +13,9 @@
     sprites/          界面 Sprite（页面签名 signatures.json 引用的文件名）
     support/          支援卡图（编成页识别）
 
+- 随仓库的素材包 assets/pack/（目录结构同上；HIRO_BUNDLED_ASSETS 改位置，设成 0 / off 关掉）。同类目录自建的和随仓库的
+  取文件更多的一个；layout.json、字体先自建后随仓库。素材包里的图片、字体权利属于游戏的权利人，不属于本仓库的 GPL，见 assets/pack/README.md。
+
 拿不到的项一律返回 None，识别层各自退路（见 hiro.vision.assets）；默认素材下各读数可用 / 降级 / 不可用见 docs/assets.md。
 """
 
@@ -30,44 +33,74 @@ def _env_dir(name: str, default: str) -> Path:
 
 
 class PublicAssetSource:
-    def __init__(self, kaa_game_data: str | Path | None = None, user_assets: str | Path | None = None) -> None:
+    def __init__(self, kaa_game_data: str | Path | None = None, user_assets: str | Path | None = None,
+                 bundled_assets: str | Path | None = None) -> None:
         self.kaa = Path(kaa_game_data) if kaa_game_data else _env_dir("HIRO_KAA_GAME_DATA", "resources/game_data")
         self.user = Path(user_assets) if user_assets else _env_dir("HIRO_USER_ASSETS", "resources/user_assets")
+        self.bundled = self._bundled_dir(bundled_assets)
         self._db: sqlite3.Connection | None = None
+
+    @staticmethod
+    def _bundled_dir(given: str | Path | None) -> Path | None:
+        raw = str(given) if given else os.environ.get("HIRO_BUNDLED_ASSETS")
+        if raw is not None and raw.strip().lower() in ("0", "off", "no", "false", "none"):
+            return None
+        p = Path(raw) if raw else Path(__file__).resolve().parents[3] / "assets" / "pack"
+        return p if p.is_dir() else None
+
+    def _roots(self) -> list[Path]:
+        """自建目录在前、随仓库素材包在后。"""
+        return [self.user, *([self.bundled] if self.bundled else [])]
 
     # ---------------------------------------------------------------- 目录
     @staticmethod
     def _first_dir(*paths: Path) -> Path | None:
         return next((p for p in paths if p.is_dir() and any(p.iterdir())), None)
 
+    @staticmethod
+    def _fullest_dir(*paths: Path) -> Path | None:
+        """候选目录里文件最多的一个（并列取靠前的）：自建的只有几张时，不挡住随仓库的完整图库。"""
+        best, best_n = None, 0
+        for p in paths:
+            n = sum(1 for _ in p.iterdir()) if p.is_dir() else 0
+            if n > best_n:
+                best, best_n = p, n
+        return best
+
     def card_art_dir(self) -> Path | None:
-        return self._first_dir(self.user / "cards", self.kaa / "skill_cards")
+        return self._fullest_dir(*(r / "cards" for r in self._roots()), self.kaa / "skill_cards")
 
     def icon_dir(self, kind: str) -> Path | None:
         extra = (self.kaa / "drinks",) if kind == "drink" else ()
-        return self._first_dir(self.user / "icons" / kind, *extra)
+        return self._fullest_dir(*(r / "icons" / kind for r in self._roots()), *extra)
 
     DIGIT_FONT = "Campus-Alphanumeric-SemiBold.ttf"  # HUD 数字所用字体的文件名（游戏客户端里的同名文件）
 
     def font_path(self) -> Path | None:
         """数字字体：font/ 下优先 DIGIT_FONT，没有就取唯一的一个字体文件（多个且没有约定名时不猜，返回 None）。"""
-        folder = self.user / "font"
-        if not folder.is_dir():
-            return None
-        if (folder / self.DIGIT_FONT).is_file():
-            return folder / self.DIGIT_FONT
-        fonts = [p for p in sorted(folder.iterdir()) if p.suffix.lower() in (".ttf", ".otf")]
-        return fonts[0] if len(fonts) == 1 else None
+        for root in self._roots():
+            folder = root / "font"
+            if not folder.is_dir():
+                continue
+            if (folder / self.DIGIT_FONT).is_file():
+                return folder / self.DIGIT_FONT
+            fonts = [p for p in sorted(folder.iterdir()) if p.suffix.lower() in (".ttf", ".otf")]
+            if len(fonts) == 1:
+                return fonts[0]
+        return None
 
     def layout(self) -> dict[str, Any] | None:
-        p = self.user / "layout.json"
-        return json.loads(p.read_text()) if p.is_file() else None
+        for root in self._roots():
+            p = root / "layout.json"
+            if p.is_file():
+                return json.loads(p.read_text())
+        return None
 
     def sprites_dir(self) -> Path | None:
-        return self._first_dir(self.user / "sprites")
+        return self._fullest_dir(*(r / "sprites" for r in self._roots()))
 
     def support_dir(self) -> Path | None:
-        return self._first_dir(self.user / "support")
+        return self._fullest_dir(*(r / "support" for r in self._roots()))
 
     # ---------------------------------------------------------------- 主数据
     def master_db(self) -> sqlite3.Connection | None:

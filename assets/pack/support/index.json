@@ -1,0 +1,1250 @@
+{
+ "img_general_csprt-1-0000_thumb-landscape": {
+  "id": "s_card-1-0000",
+  "name": "念入りにストレッチ",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0001_thumb-landscape": {
+  "id": "s_card-1-0001",
+  "name": "全力、その後",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0002_thumb-landscape": {
+  "id": "s_card-1-0002",
+  "name": "枝毛をくるり",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0003_thumb-landscape": {
+  "id": "s_card-1-0003",
+  "name": "王子様のひと呼吸",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0004_thumb-landscape": {
+  "id": "s_card-1-0004",
+  "name": "頼れる先輩お姉さん",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0005_thumb-landscape": {
+  "id": "s_card-1-0005",
+  "name": "いめーじとれーにんぐ",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0006_thumb-landscape": {
+  "id": "s_card-1-0006",
+  "name": "ひたむき居残りレッスン",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0007_thumb-landscape": {
+  "id": "s_card-1-0007",
+  "name": "スイッチON！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0008_thumb-landscape": {
+  "id": "s_card-1-0008",
+  "name": "憧れを目指して",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0009_thumb-landscape": {
+  "id": "s_card-1-0009",
+  "name": "お姉ちゃん直伝メニュー",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0010_thumb-landscape": {
+  "id": "s_card-1-0010",
+  "name": "わたしのペースで",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0011_thumb-landscape": {
+  "id": "s_card-1-0011",
+  "name": "完全無欠のプランニング",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-1-0012_thumb-landscape": {
+  "id": "s_card-1-0012",
+  "name": "謹厳実直",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_R"
+ },
+ "img_general_csprt-2-0000_thumb-landscape": {
+  "id": "s_card-2-0000",
+  "name": "体当たりのラブコール",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0001_thumb-landscape": {
+  "id": "s_card-2-0001",
+  "name": "今はあえて、背を向けて",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0002_thumb-landscape": {
+  "id": "s_card-2-0002",
+  "name": "のらりくらりしっかり",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0003_thumb-landscape": {
+  "id": "s_card-2-0003",
+  "name": "愛無き暗記は難しい",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0004_thumb-landscape": {
+  "id": "s_card-2-0004",
+  "name": "てとりあしとり",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0005_thumb-landscape": {
+  "id": "s_card-2-0005",
+  "name": "ほっぺた、ぷに",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0006_thumb-landscape": {
+  "id": "s_card-2-0006",
+  "name": "魅惑の大腿四頭筋",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0007_thumb-landscape": {
+  "id": "s_card-2-0007",
+  "name": "ふわふわでワクワク",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0008_thumb-landscape": {
+  "id": "s_card-2-0008",
+  "name": "嬉し恥ずかし夢心地",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0009_thumb-landscape": {
+  "id": "s_card-2-0009",
+  "name": "実食！例のSSD",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0010_thumb-landscape": {
+  "id": "s_card-2-0010",
+  "name": "マイペース、マイライフ",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0011_thumb-landscape": {
+  "id": "s_card-2-0011",
+  "name": "思惑とガクガク",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0012_thumb-landscape": {
+  "id": "s_card-2-0012",
+  "name": "ほっとけないクラスメイト",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0013_thumb-landscape": {
+  "id": "s_card-2-0013",
+  "name": "いつか、きっと花開く",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0014_thumb-landscape": {
+  "id": "s_card-2-0014",
+  "name": "はじめてのお友達",
+  "type": "SupportCardType_Assist",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0015_thumb-landscape": {
+  "id": "s_card-2-0015",
+  "name": "イヤホンはんぶんこ",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0016_thumb-landscape": {
+  "id": "s_card-2-0016",
+  "name": "どりゃぎゃ",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0017_thumb-landscape": {
+  "id": "s_card-2-0017",
+  "name": "パクパクもぐもぐ",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0018_thumb-landscape": {
+  "id": "s_card-2-0018",
+  "name": "かちこちストレッチ",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0019_thumb-landscape": {
+  "id": "s_card-2-0019",
+  "name": "パシャっとキメポ",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0020_thumb-landscape": {
+  "id": "s_card-2-0020",
+  "name": "海、楽しまなきゃ！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0021_thumb-landscape": {
+  "id": "s_card-2-0021",
+  "name": "第五種接近遭遇",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0022_thumb-landscape": {
+  "id": "s_card-2-0022",
+  "name": "今日は見学なんです",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0023_thumb-landscape": {
+  "id": "s_card-2-0023",
+  "name": "やさしさ、あったかい",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0024_thumb-landscape": {
+  "id": "s_card-2-0024",
+  "name": "キュッと締めて",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0025_thumb-landscape": {
+  "id": "s_card-2-0025",
+  "name": "ふわふわなお面？",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0026_thumb-landscape": {
+  "id": "s_card-2-0026",
+  "name": "ぐつぐつ、いいにおい♪",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0027_thumb-landscape": {
+  "id": "s_card-2-0027",
+  "name": "ブレイクタイムは珈琲で",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0028_thumb-landscape": {
+  "id": "s_card-2-0028",
+  "name": "りっぱなすすき！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0029_thumb-landscape": {
+  "id": "s_card-2-0029",
+  "name": "千奈の恩返し",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0030_thumb-landscape": {
+  "id": "s_card-2-0030",
+  "name": "興味深い飲み物",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0031_thumb-landscape": {
+  "id": "s_card-2-0031",
+  "name": "SSDのひみつ",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0032_thumb-landscape": {
+  "id": "s_card-2-0032",
+  "name": "サンマ、パタパタ",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0033_thumb-landscape": {
+  "id": "s_card-2-0033",
+  "name": "バズっちゃお！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0034_thumb-landscape": {
+  "id": "s_card-2-0034",
+  "name": "トンボをつかまえて",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0035_thumb-landscape": {
+  "id": "s_card-2-0035",
+  "name": "ディカプルエックスエル！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0036_thumb-landscape": {
+  "id": "s_card-2-0036",
+  "name": "きゅる〜んωポーズッ☆",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0037_thumb-landscape": {
+  "id": "s_card-2-0037",
+  "name": "カロリー/2でハッピー×2",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0038_thumb-landscape": {
+  "id": "s_card-2-0038",
+  "name": "目指すはテッペン",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0039_thumb-landscape": {
+  "id": "s_card-2-0039",
+  "name": "まだまだのばしてー",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0040_thumb-landscape": {
+  "id": "s_card-2-0040",
+  "name": "基礎＞応用",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0041_thumb-landscape": {
+  "id": "s_card-2-0041",
+  "name": "SSCの爆誕",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0042_thumb-landscape": {
+  "id": "s_card-2-0042",
+  "name": "まごころを込めて",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0043_thumb-landscape": {
+  "id": "s_card-2-0043",
+  "name": "佑芽ソリレース、疾走！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0044_thumb-landscape": {
+  "id": "s_card-2-0044",
+  "name": "ピューとシューの二重奏",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0045_thumb-landscape": {
+  "id": "s_card-2-0045",
+  "name": "虫愛づる王子様",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0046_thumb-landscape": {
+  "id": "s_card-2-0046",
+  "name": "ピコピコでポーン",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0047_thumb-landscape": {
+  "id": "s_card-2-0047",
+  "name": "奥義、三重とび！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0048_thumb-landscape": {
+  "id": "s_card-2-0048",
+  "name": "ガールズ♡トーク",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0049_thumb-landscape": {
+  "id": "s_card-2-0049",
+  "name": "屈辱の2位",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0050_thumb-landscape": {
+  "id": "s_card-2-0050",
+  "name": "2名様、ご案内～♪",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0051_thumb-landscape": {
+  "id": "s_card-2-0051",
+  "name": "主菓子、甘い、薄茶、渋み",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0052_thumb-landscape": {
+  "id": "s_card-2-0052",
+  "name": "あん・どぅ・とろわっ！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0053_thumb-landscape": {
+  "id": "s_card-2-0053",
+  "name": "ばたんきゅー",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0054_thumb-landscape": {
+  "id": "s_card-2-0054",
+  "name": "むず×2ふぁっしょんしょー",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0055_thumb-landscape": {
+  "id": "s_card-2-0055",
+  "name": "おやすみのふたり",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0056_thumb-landscape": {
+  "id": "s_card-2-0056",
+  "name": "スパルタ＆スパイス",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0058_thumb-landscape": {
+  "id": "s_card-2-0058",
+  "name": "ちべたなひととき",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0059_thumb-landscape": {
+  "id": "s_card-2-0059",
+  "name": "師弟の修行",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0060_thumb-landscape": {
+  "id": "s_card-2-0060",
+  "name": "トゲトゲ注意報",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0061_thumb-landscape": {
+  "id": "s_card-2-0061",
+  "name": "腹筋で背筋で体幹キープ！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0062_thumb-landscape": {
+  "id": "s_card-2-0062",
+  "name": "はっぴぃはろうぃ～～ん！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0063_thumb-landscape": {
+  "id": "s_card-2-0063",
+  "name": "あったか足ツボマッサージ",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0064_thumb-landscape": {
+  "id": "s_card-2-0064",
+  "name": "ごきげんような挨拶♪",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0065_thumb-landscape": {
+  "id": "s_card-2-0065",
+  "name": "眠れる森の王子様",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0066_thumb-landscape": {
+  "id": "s_card-2-0066",
+  "name": "バディ？",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0067_thumb-landscape": {
+  "id": "s_card-2-0067",
+  "name": "おひさま笑顔、満開ふたつ",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0068_thumb-landscape": {
+  "id": "s_card-2-0068",
+  "name": "仲良しの証",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0069_thumb-landscape": {
+  "id": "s_card-2-0069",
+  "name": "一番星と王子様",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0070_thumb-landscape": {
+  "id": "s_card-2-0070",
+  "name": "洗濯物のバランスタワー",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0071_thumb-landscape": {
+  "id": "s_card-2-0071",
+  "name": "お近づきの印☆",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0072_thumb-landscape": {
+  "id": "s_card-2-0072",
+  "name": "騎士とおてんば姫",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0073_thumb-landscape": {
+  "id": "s_card-2-0073",
+  "name": "ひっぱりじゅーなん",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0074_thumb-landscape": {
+  "id": "s_card-2-0074",
+  "name": "のんびり美味しいひととき",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0075_thumb-landscape": {
+  "id": "s_card-2-0075",
+  "name": "ゆずれないもの",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0076_thumb-landscape": {
+  "id": "s_card-2-0076",
+  "name": "ゆるるんあくび顔",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0077_thumb-landscape": {
+  "id": "s_card-2-0077",
+  "name": "ずっしりスイカでりしゃす",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0078_thumb-landscape": {
+  "id": "s_card-2-0078",
+  "name": "こんにゃくなきもだめし",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0079_thumb-landscape": {
+  "id": "s_card-2-0079",
+  "name": "奇遇な必然",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0080_thumb-landscape": {
+  "id": "s_card-2-0080",
+  "name": "激辛！　初星カレー！！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0081_thumb-landscape": {
+  "id": "s_card-2-0081",
+  "name": "冬のお姫様と王子様",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-2-0082_thumb-landscape": {
+  "id": "s_card-2-0082",
+  "name": "ふたりで衣装作り",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Sr"
+ },
+ "img_general_csprt-3-0000_thumb-landscape": {
+  "id": "s_card-3-0000",
+  "name": "あなたにも作ってあげる！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0001_thumb-landscape": {
+  "id": "s_card-3-0001",
+  "name": "何やってるんだろう、",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0002_thumb-landscape": {
+  "id": "s_card-3-0002",
+  "name": "こいつらめんどくさー",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0003_thumb-landscape": {
+  "id": "s_card-3-0003",
+  "name": "お姉ちゃんに任せなさい！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0004_thumb-landscape": {
+  "id": "s_card-3-0004",
+  "name": "ぐぬぬぬぬ…………！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0005_thumb-landscape": {
+  "id": "s_card-3-0005",
+  "name": "次の桜の季節には。",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0006_thumb-landscape": {
+  "id": "s_card-3-0006",
+  "name": "お疲れ様、千奈ちゃん。",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0007_thumb-landscape": {
+  "id": "s_card-3-0007",
+  "name": "まるで王子様みたいな",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0008_thumb-landscape": {
+  "id": "s_card-3-0008",
+  "name": "おいしい顔、いただき～！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0009_thumb-landscape": {
+  "id": "s_card-3-0009",
+  "name": "わたしたち、やればできる",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0010_thumb-landscape": {
+  "id": "s_card-3-0010",
+  "name": "可愛いと可愛いで可愛い！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0011_thumb-landscape": {
+  "id": "s_card-3-0011",
+  "name": "私の目に狂いはない",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0012_thumb-landscape": {
+  "id": "s_card-3-0012",
+  "name": "また、あんなに無理をして",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0013_thumb-landscape": {
+  "id": "s_card-3-0013",
+  "name": "あら、奇遇ね",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0014_thumb-landscape": {
+  "id": "s_card-3-0014",
+  "name": "まじか。",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0015_thumb-landscape": {
+  "id": "s_card-3-0015",
+  "name": "仕事のつもりで臨みなさい",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0016_thumb-landscape": {
+  "id": "s_card-3-0016",
+  "name": "1人たりとも欠ける事なく",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0017_thumb-landscape": {
+  "id": "s_card-3-0017",
+  "name": "ほら、一緒に持と♪",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0018_thumb-landscape": {
+  "id": "s_card-3-0018",
+  "name": "第2回教室パーティー！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0019_thumb-landscape": {
+  "id": "s_card-3-0019",
+  "name": "きみは、自慢の生徒です",
+  "type": "SupportCardType_Assist",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0020_thumb-landscape": {
+  "id": "s_card-3-0020",
+  "name": "食欲の秋なんです",
+  "type": "SupportCardType_Assist",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0021_thumb-landscape": {
+  "id": "s_card-3-0021",
+  "name": "さみだれ",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0022_thumb-landscape": {
+  "id": "s_card-3-0022",
+  "name": "晴れたね",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0023_thumb-landscape": {
+  "id": "s_card-3-0023",
+  "name": "まだ上がりませんように！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0024_thumb-landscape": {
+  "id": "s_card-3-0024",
+  "name": "「ア」じゃなくて「エ」！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0025_thumb-landscape": {
+  "id": "s_card-3-0025",
+  "name": "新たな挑戦の成功ですわ！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0026_thumb-landscape": {
+  "id": "s_card-3-0026",
+  "name": "もうっ！　冷たいよ！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0027_thumb-landscape": {
+  "id": "s_card-3-0027",
+  "name": "夏を楽しみましょう！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0028_thumb-landscape": {
+  "id": "s_card-3-0028",
+  "name": "一時休戦です",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0029_thumb-landscape": {
+  "id": "s_card-3-0029",
+  "name": "夏を満喫するわよ！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0030_thumb-landscape": {
+  "id": "s_card-3-0030",
+  "name": "あっちも行きたいですわ！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0031_thumb-landscape": {
+  "id": "s_card-3-0031",
+  "name": "花火、やりませんか……？",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0032_thumb-landscape": {
+  "id": "s_card-3-0032",
+  "name": "プロデュースって大変ね",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0033_thumb-landscape": {
+  "id": "s_card-3-0033",
+  "name": "仲直りしましょう",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0034_thumb-landscape": {
+  "id": "s_card-3-0034",
+  "name": "二人ならあっという間だね",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0035_thumb-landscape": {
+  "id": "s_card-3-0035",
+  "name": "ゆっくりと過ごしましょう",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0036_thumb-landscape": {
+  "id": "s_card-3-0036",
+  "name": "似合うんじゃない？",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0037_thumb-landscape": {
+  "id": "s_card-3-0037",
+  "name": "すっかり秋色ですわね！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0038_thumb-landscape": {
+  "id": "s_card-3-0038",
+  "name": "会長、準備は万端です",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0039_thumb-landscape": {
+  "id": "s_card-3-0039",
+  "name": "ぜったい追いついてやる！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0040_thumb-landscape": {
+  "id": "s_card-3-0040",
+  "name": "そろそろ焼けたかな？",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0041_thumb-landscape": {
+  "id": "s_card-3-0041",
+  "name": "キラキラして綺麗～っ！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0042_thumb-landscape": {
+  "id": "s_card-3-0042",
+  "name": "あったかいね",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0043_thumb-landscape": {
+  "id": "s_card-3-0043",
+  "name": "待ちなさーい！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0044_thumb-landscape": {
+  "id": "s_card-3-0044",
+  "name": "もう一度、最初から！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0045_thumb-landscape": {
+  "id": "s_card-3-0045",
+  "name": "はいっ、みんなも一緒に♪",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0046_thumb-landscape": {
+  "id": "s_card-3-0046",
+  "name": "これが私達の、3年間",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0047_thumb-landscape": {
+  "id": "s_card-3-0047",
+  "name": "バレンタイン♡会議中ーっ！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0048_thumb-landscape": {
+  "id": "s_card-3-0048",
+  "name": "絶対にお渡ししますわっ！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0049_thumb-landscape": {
+  "id": "s_card-3-0049",
+  "name": "ひとりで立てますか？",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0050_thumb-landscape": {
+  "id": "s_card-3-0050",
+  "name": "あなたたちのことが好き",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0051_thumb-landscape": {
+  "id": "s_card-3-0051",
+  "name": "新生活のはじまりだね",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0052_thumb-landscape": {
+  "id": "s_card-3-0052",
+  "name": "合格おめでとう！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0053_thumb-landscape": {
+  "id": "s_card-3-0053",
+  "name": "さあ、もう一戦！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0054_thumb-landscape": {
+  "id": "s_card-3-0054",
+  "name": "相手にとって不足なしよ！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0055_thumb-landscape": {
+  "id": "s_card-3-0055",
+  "name": "ここから始まるんだね！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0056_thumb-landscape": {
+  "id": "s_card-3-0056",
+  "name": "相変わらず不器用ね",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0057_thumb-landscape": {
+  "id": "s_card-3-0057",
+  "name": "利用し合うのが友達！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0058_thumb-landscape": {
+  "id": "s_card-3-0058",
+  "name": "ひとりごとです",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0059_thumb-landscape": {
+  "id": "s_card-3-0059",
+  "name": "すっかり仲良しって感じ♪",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0060_thumb-landscape": {
+  "id": "s_card-3-0060",
+  "name": "迷子のおしらせです",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0061_thumb-landscape": {
+  "id": "s_card-3-0061",
+  "name": "みんなの意見を聞かせて♪",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0062_thumb-landscape": {
+  "id": "s_card-3-0062",
+  "name": "よくやったな、倉本。",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0063_thumb-landscape": {
+  "id": "s_card-3-0063",
+  "name": "推し活なひととき、だね！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0064_thumb-landscape": {
+  "id": "s_card-3-0064",
+  "name": "いつも頑張ってるね。",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0065_thumb-landscape": {
+  "id": "s_card-3-0065",
+  "name": "どんな関係なんですか？",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0066_thumb-landscape": {
+  "id": "s_card-3-0066",
+  "name": "放っておけない気になる子",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0067_thumb-landscape": {
+  "id": "s_card-3-0067",
+  "name": "わたしと美鈴、超仲良し",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0068_thumb-landscape": {
+  "id": "s_card-3-0068",
+  "name": "お母さんか！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0069_thumb-landscape": {
+  "id": "s_card-3-0069",
+  "name": "いつまでも続けばいいのに",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0070_thumb-landscape": {
+  "id": "s_card-3-0070",
+  "name": "おい、来てやったぞ！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0071_thumb-landscape": {
+  "id": "s_card-3-0071",
+  "name": "盛り上げてこー！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0072_thumb-landscape": {
+  "id": "s_card-3-0072",
+  "name": "おっと、危ないよ",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0073_thumb-landscape": {
+  "id": "s_card-3-0073",
+  "name": "ｖギャルピーーースッｖ",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0074_thumb-landscape": {
+  "id": "s_card-3-0074",
+  "name": "ちょっと詳しいんです！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0075_thumb-landscape": {
+  "id": "s_card-3-0075",
+  "name": "これは――お城ッ！！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0076_thumb-landscape": {
+  "id": "s_card-3-0076",
+  "name": "月村手毬、興味深いわね",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0077_thumb-landscape": {
+  "id": "s_card-3-0077",
+  "name": "クールダウンが大切よ！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0078_thumb-landscape": {
+  "id": "s_card-3-0078",
+  "name": "レディ・セット、ゴー！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0079_thumb-landscape": {
+  "id": "s_card-3-0079",
+  "name": "やっと見つけたぞ！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0080_thumb-landscape": {
+  "id": "s_card-3-0080",
+  "name": "ぜったいに取るんだ！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0081_thumb-landscape": {
+  "id": "s_card-3-0081",
+  "name": "メリクリ、おねーちゃん♪",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0082_thumb-landscape": {
+  "id": "s_card-3-0082",
+  "name": "なぜこんなところにッ！？",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0083_thumb-landscape": {
+  "id": "s_card-3-0083",
+  "name": "堂々とサボってる！？",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0084_thumb-landscape": {
+  "id": "s_card-3-0084",
+  "name": "手毬のリサイタル、だね",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0085_thumb-landscape": {
+  "id": "s_card-3-0085",
+  "name": "自分と向き合う時間だ",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0086_thumb-landscape": {
+  "id": "s_card-3-0086",
+  "name": "貸せ、手本を見せてやる！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0087_thumb-landscape": {
+  "id": "s_card-3-0087",
+  "name": "オシャレもメイクも♪",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0088_thumb-landscape": {
+  "id": "s_card-3-0088",
+  "name": "思い出の宝箱だ、ね",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0089_thumb-landscape": {
+  "id": "s_card-3-0089",
+  "name": "かかってらっしゃい！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0090_thumb-landscape": {
+  "id": "s_card-3-0090",
+  "name": "みいつけた。",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0091_thumb-landscape": {
+  "id": "s_card-3-0091",
+  "name": "あたしの勝ち、ですね～！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0092_thumb-landscape": {
+  "id": "s_card-3-0092",
+  "name": "進化したお弁当、気になる",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0093_thumb-landscape": {
+  "id": "s_card-3-0093",
+  "name": "長旅おつかれさま！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0094_thumb-landscape": {
+  "id": "s_card-3-0094",
+  "name": "上かッ！！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0095_thumb-landscape": {
+  "id": "s_card-3-0095",
+  "name": "パーティー楽しみだねっ！",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0096_thumb-landscape": {
+  "id": "s_card-3-0096",
+  "name": "あなたとふたり、電車で",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0097_thumb-landscape": {
+  "id": "s_card-3-0097",
+  "name": "……騒々しいお祭りね",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0098_thumb-landscape": {
+  "id": "s_card-3-0098",
+  "name": "大運動会、開催っ！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0099_thumb-landscape": {
+  "id": "s_card-3-0099",
+  "name": "もうすぐ本番ですね",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0100_thumb-landscape": {
+  "id": "s_card-3-0100",
+  "name": "私たちも成長していくぞ！",
+  "type": "SupportCardType_Assist",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0101_thumb-landscape": {
+  "id": "s_card-3-0101",
+  "name": "どーなっちゃうの～？",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0102_thumb-landscape": {
+  "id": "s_card-3-0102",
+  "name": "おでん、通りま～すッ！",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0103_thumb-landscape": {
+  "id": "s_card-3-0103",
+  "name": "次の曲は～ッあの曲だ！！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0104_thumb-landscape": {
+  "id": "s_card-3-0104",
+  "name": "インタビューお願いします",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0105_thumb-landscape": {
+  "id": "s_card-3-0105",
+  "name": "私を楽しませろ",
+  "type": "SupportCardType_Dance",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0106_thumb-landscape": {
+  "id": "s_card-3-0106",
+  "name": "食レポ、得意かも！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0107_thumb-landscape": {
+  "id": "s_card-3-0107",
+  "name": "大切な思い出、またひとつ",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0108_thumb-landscape": {
+  "id": "s_card-3-0108",
+  "name": "風紀が乱れるぞ！",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0109_thumb-landscape": {
+  "id": "s_card-3-0109",
+  "name": "わたしに、まかせて",
+  "type": "SupportCardType_Vocal",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0110_thumb-landscape": {
+  "id": "s_card-3-0110",
+  "name": "イクラ～♪　ウニ～♪",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0111_thumb-landscape": {
+  "id": "s_card-3-0111",
+  "name": "小悪魔になっちゃえ♪",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ },
+ "img_general_csprt-3-0112_thumb-landscape": {
+  "id": "s_card-3-0112",
+  "name": "これがあのかぼちゃ……",
+  "type": "SupportCardType_Visual",
+  "rarity": "SupportCardRarity_Ssr"
+ }
+}
