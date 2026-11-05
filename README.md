@@ -63,7 +63,9 @@
 
 ## 快速开始
 
-只支持 macOS（Apple Silicon）+ PlayCover 运行的游戏客户端。
+只支持 macOS（Apple Silicon）+ PlayCover 运行的游戏客户端。默认的截图和点击走 [hguandl 的 PlayCover 分支](https://github.com/hguandl/PlayCover)
+里的 MaaTools 服务，需要用这个分支，并在游戏的 PlayCover 设置里打开 `maaTools`（端口 `maaToolsPort`）；用原版 PlayCover 时会退回 Quartz 截图，
+这时游戏窗口要在前台，点击也更不稳。
 
 ```bash
 git clone --recurse-submodules https://github.com/matto49/hiro-gakumas-hero
@@ -126,8 +128,13 @@ open /tmp/hiro-view/demo-run.html
 
 ## 致谢与许可
 
-- 操作层与识别层建立在 [KAA（kotones-auto-assistant）](https://github.com/XcantloadX/kotones-auto-assistant)
-  之上，KAA 以 GPL-3.0 发布；本仓库随之采用 **GPL-3.0-or-later**。从 KAA 派生的文件在文件头注明。
+- 识别层的部分逻辑基于 [KAA（kotones-auto-assistant）](https://github.com/XcantloadX/kotones-auto-assistant) 的识别接口、主数据与界面模板；
+  培育的页面流程沿用 KAA 的任务流程，在 `hiro/loop/kaa_patches.py` 里打运行时补丁。KAA 以 GPL-3.0 发布；
+  本仓库随之采用 **GPL-3.0-or-later**。从 KAA 派生的文件在文件头注明。
+- 截图和点击默认通过 [hguandl 的 PlayCover 分支](https://github.com/hguandl/PlayCover)（GPL-3.0，派生自 PlayCover）里
+  [PlayTools](https://github.com/hguandl/PlayTools)（AGPL-3.0）内置的 MaaTools 服务完成：它在游戏进程内开 TCP 服务，进程内截图、注入触摸，
+  不要求游戏在前台，也不动鼠标。本仓库只按它的协议做客户端（`hiro/device.py`），不包含它的代码。连不上时退回 kotonebot 的 Quartz 截图
+  + `CGEventPostToPid` 投递。致谢 MaaTools 的作者们。
 - H.I.F 打法整理自社区攻略（seesaawiki、wikiwiki 等），出处写在 `docs/hif-playbook.md` 和 `hiro/brain/hif_rules.py`。
 - 《学園アイドルマスター》及相关名称、图像的权利属于其权利人。本仓库不分发游戏素材；请遵守游戏的用户协议，
   不要把相关技术用于破坏公平性或损害他人利益的用途。

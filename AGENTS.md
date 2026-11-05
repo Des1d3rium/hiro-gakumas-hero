@@ -72,7 +72,9 @@
    ```
    从零约 4 分钟。KAA 换版本后加 `--regen` 重新生成；已用 `HIRO_KAA_GAME_DATA` 指向现成数据时加 `--no-data`。
    自检最后会打印插件来源、有没有主数据和自建素材，以及开局命令。
-2. 游戏窗口：PlayCover 里打开游戏，保持竖屏窗口在前台；截图走 MaaTools（KAA 文档有说明）。
+2. 游戏窗口：用 [hguandl 的 PlayCover 分支](https://github.com/hguandl/PlayCover)，在游戏的 PlayCover 设置里打开 `maaTools`（端口 `maaToolsPort`）。
+   默认的截图和点击走游戏进程内的 MaaTools 服务（见 `hiro/device.py` 开头注释），**不要求窗口在前台，也不动鼠标**；
+   只有 MaaTools 连不上、退回 Quartz 截图 + `CGEventPostToPid` 时，才需要保持竖屏窗口在前台。
    macOS 要给运行它的终端 / 程序「屏幕录制」权限；截图报 `could not create image from display` 时先查这个权限和显示器状态。
 3. 素材（见 `docs/assets.md`）：识别用的卡面、图标、字体、Sprite、布局随仓库在 `assets/pack/`，开箱即用。
    客户端更新后认不出新图标时，才打一两场考试，用 `tools/assets/capture_icons.py` 补；设了 `HIRO_BUNDLED_ASSETS=0` 时则必须补，
