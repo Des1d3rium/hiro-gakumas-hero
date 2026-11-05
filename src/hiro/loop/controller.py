@@ -101,9 +101,10 @@ class HiroController(ProduceController):
 
     def _update(self):
         if HiroController._landscape is None:
+            from hiro.device import is_playcover
             from hiro.loop.landscape import LandscapeGuard
 
-            HiroController._landscape = LandscapeGuard()
+            HiroController._landscape = LandscapeGuard(active=is_playcover())
         self._texts = self._boxes = None  # 本轮整帧 OCR 结果（UNKNOWN 时按需识别一次，各补判共用）
         from kotonebot import device
 

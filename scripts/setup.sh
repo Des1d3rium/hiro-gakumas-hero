@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 一条命令装好实机游玩环境（macOS + PlayCover）：KAA 子模块 → .venv（Python 3.10）→ 安装 → 生成 KAA 的 R.py
+# 一条命令装好实机游玩环境（macOS + PlayCover；Windows 在 Git Bash 里跑，未实测）：KAA 子模块 → .venv（Python 3.10）→ 安装 → 生成 KAA 的 R.py
 # → 下载 KAA 公开游戏数据（主数据 game.db + 卡图，resources/game_data）→ 自检。
 #
 #   scripts/setup.sh            # 第一次装 / 更新后重跑（已有的步骤会跳过）
@@ -30,12 +30,13 @@ step "1/6 KAA 子模块 vendor/kaa"
 git submodule update --init vendor/kaa
 
 step "2/6 虚拟环境 .venv（KAA 要求 Python 3.10）"
-if [ ! -x .venv/bin/python ]; then
+venv_py() { if [ -x .venv/Scripts/python.exe ]; then echo .venv/Scripts/python.exe; else echo .venv/bin/python; fi; }  # Windows / 其他
+if [ ! -x "$(venv_py)" ]; then
   uv venv --python 3.10 .venv
 else
-  echo "已有 .venv（$(.venv/bin/python --version)）"
+  echo "已有 .venv（$("$(venv_py)" --version)）"
 fi
-PY="$ROOT/.venv/bin/python"
+PY="$ROOT/$(venv_py)"
 
 step "3/6 安装本仓库与 KAA（.[dev,play]）"
 uv pip install --python "$PY" -e ".[dev,play]"
@@ -94,8 +95,10 @@ print(f"插件：资产 {m.asset_source}；局面 {m.exam_state_source}；出招
 print(f"主数据 game.db：{'有' if m.master_db else '没有'}；随仓库素材包：{m.bundled_assets or '没有（考试效果名读不到，可用 tools/assets/capture_icons.py 补）'}；自建素材：{m.user_assets or '没有'}")
 for p in m.problems:
     print(f"  ⚠ {p}")
-if sys.platform != "darwin":
-    print("  ⚠ 实机游玩只支持 macOS（PlayCover + MaaTools）")
+import os
+if sys.platform != "darwin" and not os.environ.get("HIRO_DEVICE"):
+    print("  ⚠ 这台机器不是 macOS：开局前设 HIRO_DEVICE（adb / mumu / leidian / dmm），见 AGENTS.md「设备」。"
+          "这些后端走 KAA 的设备工厂，作者没有实机验证过")
 print("自检通过：入口和 KAA 都能导入")
 PY
 

@@ -1,43 +1,58 @@
-# 来源：digital-hiro src/hiro/vision/ocr.py（develop c3fc27f）
-"""Apple Vision OCR（macOS 系统文字识别），用于读固定区域的数字和短文本。
+# 来源：digital-hiro src/hiro/vision/ocr.py（develop c3fc27f）；开源版：加 RapidOCR 后端，非 macOS 也能用
+"""固定区域的数字和短文本 OCR。两个后端，接口相同：
 
-实测在本机比 KAA 的 RapidOCR 快 2–7 倍且更准（见 README）。区域先放大 3 倍再识别，小号描边数字更稳。
+- vision：Apple Vision（macOS 系统文字识别）。实测在作者机器上比 KAA 的 RapidOCR 快 2–7 倍且更准（见 README），
+  macOS 上默认用它。区域先放大 3 倍再识别，小号描边数字更稳。
+- rapidocr：KAA 自带的 RapidOCR（PaddleOCR 日文 / 英文模型，kotonebot.backend.ocr）。非 macOS（模拟器 / DMM）用它；
+  **识别率与速度没有在本项目的回归截图上核对过**，换平台后先用回归截图验一遍（见 docs/assets.md）。
+
+HIRO_OCR=auto（缺省：macOS 且能导入 Vision → vision，否则 rapidocr）/ vision / rapidocr。
 """
 
+from __future__ import annotations
+
+import os
 import re
+import sys
 
 import cv2
-import Vision
 from cv2.typing import MatLike
-from Foundation import NSData
+
+ENGINES = ("auto", "vision", "rapidocr")
+_engine: str | None = None
 
 
-def ocr(img: MatLike, *, scale: float = 3.0, languages=("ja-JP", "en-US")) -> list[tuple[str, float]]:
-    if scale != 1:
-        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+def _vision_available() -> bool:
+    try:
+        import Foundation  # noqa: F401
+        import Vision  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def engine() -> str:
+    """当前 OCR 后端（首次调用时按 HIRO_OCR 和平台确定，之后不变）。"""
+    global _engine
+    if _engine is None:
+        want = (os.environ.get("HIRO_OCR") or "auto").strip().lower()
+        if want not in ENGINES:
+            raise ValueError(f"HIRO_OCR={want!r} 不认识；可选：{', '.join(ENGINES)}")
+        if want == "auto":
+            want = "vision" if sys.platform == "darwin" and _vision_available() else "rapidocr"
+        _engine = want
+    return _engine
+
+
+def _vision_raw(img: MatLike, w: int, h: int, languages) -> list[tuple[str, float, tuple[int, int, int, int]]]:
+    """img 已放大；框按归一化坐标换回原图尺寸 (w, h)。"""
+    import Vision
+    from Foundation import NSData
+
     ok, buf = cv2.imencode(".png", img)
     handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(NSData.dataWithBytes_length_(buf.tobytes(), len(buf)), None)
     request = Vision.VNRecognizeTextRequest.alloc().init()
     request.setRecognitionLevel_(0)  # accurate
-    request.setRecognitionLanguages_(list(languages))
-    request.setUsesLanguageCorrection_(False)
-    handler.performRequests_error_([request], None)
-    out = []
-    for obs in request.results() or []:
-        cand = obs.topCandidates_(1)[0]
-        out.append((str(cand.string()), float(cand.confidence())))
-    return out
-
-
-def ocr_boxes(img: MatLike, *, scale: float = 3.0, languages=("ja-JP", "en-US")) -> list[tuple[str, float, tuple[int, int, int, int]]]:
-    """同 ocr()，另给出每段文字在 img 中的外接框 (x1, y1, x2, y2)。"""
-    h, w = img.shape[:2]
-    if scale != 1:
-        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-    ok, buf = cv2.imencode(".png", img)
-    handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(NSData.dataWithBytes_length_(buf.tobytes(), len(buf)), None)
-    request = Vision.VNRecognizeTextRequest.alloc().init()
-    request.setRecognitionLevel_(0)
     request.setRecognitionLanguages_(list(languages))
     request.setUsesLanguageCorrection_(False)
     handler.performRequests_error_([request], None)
@@ -50,8 +65,38 @@ def ocr_boxes(img: MatLike, *, scale: float = 3.0, languages=("ja-JP", "en-US"))
     return out
 
 
+def _rapid_raw(img: MatLike, scale: float, languages) -> list[tuple[str, float, tuple[int, int, int, int]]]:
+    """img 已放大；框除以 scale 换回原图坐标。只要英文时用英文模型（数字），否则日文模型。"""
+    from kotonebot.backend import ocr as kocr
+    from kotonebot.primitives.geometry import Rect
+
+    eng = kocr.en() if tuple(languages) == ("en-US",) else kocr.jp()
+    h, w = img.shape[:2]
+    # 传整图 rect：kotonebot 不传 rect 时返回的是补白后画布上的坐标，传了才会减掉补白偏移（original_rect）
+    res = eng.ocr(img if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR), rect=Rect(xywh=(0, 0, w, h)))
+    out = []
+    for r in res:
+        x, y, rw, rh = r.original_rect.xywh
+        out.append((r.text, float(r.confidence), (round(x / scale), round(y / scale), round((x + rw) / scale), round((y + rh) / scale))))
+    return out
+
+
+def ocr_boxes(img: MatLike, *, scale: float = 3.0, languages=("ja-JP", "en-US")) -> list[tuple[str, float, tuple[int, int, int, int]]]:
+    """每段文字、置信度和它在 img 中的外接框 (x1, y1, x2, y2)。"""
+    h, w = img.shape[:2]
+    if scale != 1:
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+    if engine() == "vision":
+        return _vision_raw(img, w, h, languages)
+    return _rapid_raw(img, scale, languages)
+
+
+def ocr(img: MatLike, *, scale: float = 3.0, languages=("ja-JP", "en-US")) -> list[tuple[str, float]]:
+    return [(t, c) for t, c, _ in ocr_boxes(img, scale=scale, languages=languages)]
+
+
 def digits_image(img: MatLike, *, white_min: int = 200) -> MatLike:
-    """白色描边数字 → 白底黑字：取接近白色的像素作为字形，加边框，便于 Vision 识别小号数字。"""
+    """白色描边数字 → 白底黑字：取接近白色的像素作为字形，加边框，便于识别小号数字。"""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
     _, mask = cv2.threshold(gray, white_min, 255, cv2.THRESH_BINARY)
     inv = 255 - mask

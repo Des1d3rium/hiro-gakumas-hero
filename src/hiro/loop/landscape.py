@@ -6,11 +6,11 @@
 菜单操作需要把游戏短暂切到前台，结束后把原来的前台应用还回去。实机 2026-10-31 第四局验证。
 """
 
+from __future__ import annotations
+
 import logging
 import subprocess
 import time
-
-from AppKit import NSRunningApplication, NSWorkspace
 
 BUNDLE_ID = "jp.co.bandainamcoent.BNEI0421"
 MENU_VIEW = "显示"  # 系统语言为中文；英文 / 日文系统按下面的候选找
@@ -22,11 +22,15 @@ logger = logging.getLogger(__name__)
 
 
 def _game_pid() -> int | None:
+    from AppKit import NSRunningApplication
+
     apps = NSRunningApplication.runningApplicationsWithBundleIdentifier_(BUNDLE_ID)
     return int(apps[0].processIdentifier()) if apps and len(apps) else None
 
 
 def _front_app():
+    from AppKit import NSWorkspace
+
     return NSWorkspace.sharedWorkspace().frontmostApplication()
 
 
@@ -58,7 +62,8 @@ class LandscapeGuard:
     BLACK_S = 20.0
     EXIT_BLACK_S = 8.0
 
-    def __init__(self):
+    def __init__(self, *, active: bool = True):
+        self.active = active  # 只有 PlayCover 有横屏黑屏问题；其他平台（模拟器 / DMM）只用 in_live 判断，不切全屏
         self.black_since: float | None = None
         self.fullscreen = False
         self.prev_front: NSRunningApplication | None = None
@@ -73,6 +78,8 @@ class LandscapeGuard:
 
     def tick(self, img, texts: list[str] | None = None) -> bool:
         """返回 True 表示本轮做了窗口操作（调用方跳过本轮分发）。"""
+        if not self.active:
+            return False
         now = time.monotonic()
         # 只看中间区域：全屏后窗口顶部有一条白边，整帧均值会超过阈值（q8 / q9 LIVE 结束后一直没退出全屏）
         black = img is not None and float(img[img.shape[0] // 8 : img.shape[0] * 7 // 8, img.shape[1] // 8 : img.shape[1] * 7 // 8].mean()) < 3.0

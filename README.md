@@ -63,7 +63,9 @@
 
 ## 快速开始
 
-只支持 macOS（Apple Silicon）+ PlayCover 运行的游戏客户端。默认的截图和点击走 [hguandl 的 PlayCover 分支](https://github.com/hguandl/PlayCover)
+作者实机验证过的平台只有 macOS（Apple Silicon）+ PlayCover。安卓设备 / 模拟器（ADB）、MuMu、雷电和 Windows DMM 版
+与 [KAA](https://github.com/XcantloadX/kotones-auto-assistant) 对齐，用 `HIRO_DEVICE` 选择、走 KAA 的设备工厂，
+代码和离线测试都有，但还没有实机打过一局（见 [AGENTS.md](AGENTS.md)「设备」）。macOS 上默认的截图和点击走 [hguandl 的 PlayCover 分支](https://github.com/hguandl/PlayCover)
 里的 MaaTools 服务，需要用这个分支，并在游戏的 PlayCover 设置里打开 `maaTools`（端口 `maaToolsPort`）；用原版 PlayCover 时会退回 Quartz 截图，
 这时游戏窗口要在前台，点击也更不稳。
 

@@ -63,7 +63,8 @@
 
 ## 三、环境
 
-只支持 macOS（Apple Silicon）+ PlayCover 跑 iOS 版游戏；Android（ADB）留了接口，还没实现。
+平台与 KAA 支持的对齐（见下面「设备」）：**作者实机验证过的只有 macOS（Apple Silicon）+ PlayCover**；
+安卓设备 / 模拟器（ADB）、MuMu、雷电、DMM 版走 KAA 的设备工厂，代码接好了、有离线测试，但没有实机打过一局。
 
 1. 装环境（一条命令，可重复跑，做过的步骤会跳过；需要 uv、git 和网络）：
    ```bash
@@ -76,6 +77,25 @@
    默认的截图和点击走游戏进程内的 MaaTools 服务（见 `hiro/device.py` 开头注释），**不要求窗口在前台，也不动鼠标**；
    只有 MaaTools 连不上、退回 Quartz 截图 + `CGEventPostToPid` 时，才需要保持竖屏窗口在前台。
    macOS 要给运行它的终端 / 程序「屏幕录制」权限；截图报 `could not create image from display` 时先查这个权限和显示器状态。
+
+   **设备**（`HIRO_DEVICE`，与 KAA 支持的平台对齐）：
+
+   | `HIRO_DEVICE` | 平台 | 截图 / 点击 | 验证情况 |
+   |---|---|---|---|
+   | `auto`（缺省） | macOS：MaaTools 能连就 `maatools`，否则 `quartz`；其他系统要求显式设置 | — | — |
+   | `maatools` | macOS + hguandl 分支 PlayCover | 游戏进程内 MaaTools | 作者实机验证（6 次夺冠） |
+   | `quartz` | macOS + 原版 PlayCover | Quartz 截图 + `CGEventPostToPid`，要游戏在前台 | 作者实机用过 |
+   | `adb` | 任意安卓设备 / 模拟器（KAA 的 custom） | `HIRO_SCREENSHOT=adb`（缺省）或 `uiautomator2` | 未实机验证 |
+   | `mumu` | MuMu 12 | Windows 上缺省 `nemu_ipc`，其他系统 `adb` | 未实机验证 |
+   | `leidian` | 雷电模拟器 | `adb` / `uiautomator2` | 未实机验证 |
+   | `dmm` | Windows DMM 版 | `windows_background`（缺省）/ `windows_native` | 未实机验证 |
+
+   - `HIRO_ADB=ip:port` 指 adb 地址（`adb` / `leidian` 用，缺省 `127.0.0.1:5555`；`mumu` 不设时由 MuMu SDK 自动取）；
+     `HIRO_EMULATOR_INSTANCE` 指 MuMu / 雷电的实例 ID（多开时用）。组合不合法时开局前就报错（用 KAA 自己的配置校验）。
+   - 非 PlayCover 后端不做 PlayCover 专用的退路（横屏 LIVE 黑屏时切全屏、MaaTools 点了没反应时用真实鼠标再点）。
+   - 文字识别（`HIRO_OCR`）：macOS 缺省用 Apple Vision，其他系统自动改用 KAA 自带的 RapidOCR（日文 / 英文模型）。
+     RapidOCR 在作者的回归截图上的准确率与速度见 `docs/assets.md`；换平台后先用自己的截图验一遍。
+   - Windows 在 Git Bash 里跑 `scripts/setup.sh`（未实测）。
 3. 素材（见 `docs/assets.md`）：识别用的卡面、图标、字体、Sprite、布局随仓库在 `assets/pack/`，开箱即用。
    客户端更新后认不出新图标时，才打一两场考试，用 `tools/assets/capture_icons.py` 补；设了 `HIRO_BUNDLED_ASSETS=0` 时则必须补，
    否则考试效果名和 P 道具名一直是 `None`，策略层只能用保守规则，分数会明显低。
@@ -112,6 +132,8 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | `HIRO_ASSET_SOURCE` / `HIRO_EXAM_STATE_SOURCE` / `HIRO_EXAM_ADVISOR` | 换插件实现（`包.模块:类名`） |
 | `HIRO_STRATEGY` | 换培育策略类（KAA `HifGrindStrategy` 子类），默认 `hiro.produce.hif:HiroHifStrategy` |
 | `HIRO_PAUSE_FLAG` | 外部暂停旗标文件路径：文件存在就暂停对局 |
+| `HIRO_DEVICE` / `HIRO_ADB` / `HIRO_SCREENSHOT` / `HIRO_EMULATOR_INSTANCE` | 设备后端与连接，见「三、环境」的「设备」表 |
+| `HIRO_OCR` | 文字识别后端：`auto`（缺省）/ `vision`（Apple Vision，只有 macOS）/ `rapidocr` |
 | `HIRO_RESCUE_LLM=0` | 关掉认不出画面时的 LLM 看图兜底（默认开） |
 | `HIRO_DEBUG_RECOG=1` | 把全部识别互验写进 trace，页面变化都存帧 |
 
