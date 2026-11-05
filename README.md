@@ -80,6 +80,8 @@ PYTHONPATH=src .venv/bin/python -m pytest -q            # 没有截图样例时�
      python tools/play_game.py --idol <偶像卡 skin id> --main-attr <Vo|Da|Vi>
    ```
 
+   也可以让程序按社区攻略选支援卡和回忆、生成开局编成方案，开局时自动核对编成，见 [docs/formation-plan.md](docs/formation-plan.md)。
+
 3. **看复盘**：`python tools/viewer/build_exam_view.py <trace>`，打开生成的 HTML。
 
 更完整的说明（环境变量、续跑、出问题怎么查）在 [AGENTS.md](AGENTS.md)。这份文件也是给 AI 看的：把仓库交给一个 AI 会话，

@@ -154,6 +154,10 @@ def main():
     except SetupMissing as e:
         print(str(e), file=sys.stderr)
         return 2
+    from hiro import kaa_env
+
+    if args.main_attr is None and kaa_env.PLAN_MAIN_ATTR:
+        args.main_attr = kaa_env.PLAN_MAIN_ATTR  # 没给 --main-attr：用开局编成方案的主属性（策略、租借格、trace 都按它）
 
     manifest = manifest_mod.collect()
     if manifest.problems:
@@ -255,6 +259,10 @@ def main():
                 print(str(e), file=sys.stderr)
                 return 3
             except kaa_patches.RentalPending as e:  # 租借格要手动挑（支援卡选择系统未交付）：停在第 2 步，没开局
+                logger.error("%s", e)
+                print(str(e), file=sys.stderr)
+                return 3
+            except kaa_patches.FormationMismatch as e:  # 支援卡 / 回忆编成和开局编成方案对不上：没开局，直接停
                 logger.error("%s", e)
                 print(str(e), file=sys.stderr)
                 return 3
