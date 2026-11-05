@@ -136,5 +136,5 @@ open /tmp/hiro-view/demo-run.html
   不要求游戏在前台，也不动鼠标。本仓库只按它的协议做客户端（`hiro/device.py`），不包含它的代码。连不上时退回 kotonebot 的 Quartz 截图
   + `CGEventPostToPid` 投递。致谢 MaaTools 的作者们。
 - H.I.F 打法整理自社区攻略（seesaawiki、wikiwiki 等），出处写在 `docs/hif-playbook.md` 和 `hiro/brain/hif_rules.py`。
-- 《学園アイドルマスター》及相关名称、图像的权利属于其权利人。本仓库不分发游戏素材；请遵守游戏的用户协议，
+- 《学園アイドルマスター》及相关名称、图像的权利属于其权利人。`assets/pack/` 里随仓库带的识别素材同样属于权利人，仅供识别研究用途（见 `assets/pack/README.md`）；请遵守游戏的用户协议，
   不要把相关技术用于破坏公平性或损害他人利益的用途。
