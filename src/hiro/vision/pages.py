@@ -410,7 +410,7 @@ def _merged_gain(img: MatLike, listed: str, box, n_total: int, n_gain: int) -> i
     x1, y1, x2, y2 = box
     cut = _gain_cut(img, box, n_total, n_gain)
     crop = img[max(0, y1 - 6) : y2 + 6, cut : min(img.shape[1], x2 + 6)]
-    again = re.sub(r"\D", "", "".join(t for t, _ in ocr(cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC))))
+    again = re.sub(r"\D", "", "".join(t for t, _ in ocr(cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC), scale=1)))
     dddd = read_dddd(img, (cut + GAIN_PLUS_W, max(0, y1 - 4), min(img.shape[1], x2 + 4), y2 + 4))
     d = str(dddd) if dddd is not None else None
     if d and listed and len(d) == len(listed) + 1 and d[0] == "4":
@@ -434,7 +434,7 @@ def _merged_total(img: MatLike, listed: str, box, n_total: int, n_gain: int) -> 
     # 只看框中间几行、从框宽 35% 往右找（框边缘有进度条等蓝色，总分至少占框的三分之一）
     cut = _gain_cut(img, box, n_total, n_gain)
     crop = img[max(0, y1 - 6) : y2 + 6, max(0, x1 - 6) : cut]
-    text = "".join(t for t, _ in ocr(cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)))
+    text = "".join(t for t, _ in ocr(cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC), scale=1))
     again = re.sub(r"\D", "", re.split(r"[+＋]", text)[0])
     dddd = read_dddd(img, (max(0, x1 - 4), max(0, y1 - 4), cut, y2 + 4))
     votes = [listed or None, again or None, str(dddd) if dddd is not None else None]

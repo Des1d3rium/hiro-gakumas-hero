@@ -186,7 +186,9 @@ def read_interval_shelf(img: MatLike) -> dict:
             index = row * 4 + col
             kind = INTERVAL_KINDS[index]
             xr = (x - 10, x + CELL + 10)
-            nums = _nums(texts_in(xr, INTERVAL_PRICE[top])) or _cell_price(img, x, INTERVAL_PRICE[top])
+            # 价格读成 0 / 个位数（RapidOCR 把「50」读成「;0」→ 0）当没读到：轮间没有免费或几 P 的东西，转去单格补读
+            nums = [n for n in _nums(texts_in(xr, INTERVAL_PRICE[top])) if n >= INTERVAL_MIN_PRICE]
+            nums = nums or [n for n in _cell_price(img, x, INTERVAL_PRICE[top]) if n >= INTERVAL_MIN_PRICE]
             purchased = any("交換済" in t.replace(" ", "") for t in texts_in(xr, (top, top + CELL))) or _purchased_mark(img, x, top)
             entry = {"index": index, "price": nums[-1] if nums else None, "purchased": purchased, "center": [x + CELL // 2, top + CELL // 2]}
             if kind == "drink":
@@ -225,8 +227,11 @@ def read_interval_shelf(img: MatLike) -> dict:
     return {"interval": out, "complete": hint and end_btn and opaque}
 
 
+INTERVAL_MIN_PRICE = 5  # 轮间货架最便宜的东西也有几十 P；更小的读数是 OCR 把首位读丢了
+
+
 def _cell_price(img: MatLike, x: int, band: tuple[int, int]) -> list[int]:
     """整块 OCR 漏掉某格价格（第五局格 5 隔帧为 None）时，单独把这格的价格条放大再读。"""
     y1, y2 = band
-    crop = cv2.resize(img[y1:y2, x + 30 : x + CELL + 5], None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-    return _nums([t for t, _, _ in ocr_boxes(crop)])
+    # 只放大一次（3 倍）：原来先 resize 3 倍、ocr_boxes 又默认放大 3 倍，实际 9 倍，Apple Vision 还读得出，RapidOCR 把「50」读成「0」
+    return _nums([t for t, _, _ in ocr_boxes(img[y1:y2, x + 30 : x + CELL + 5], scale=3)])
