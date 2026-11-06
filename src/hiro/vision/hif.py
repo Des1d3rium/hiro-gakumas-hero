@@ -23,6 +23,7 @@ from hiro.vision.card_art import match_card_art
 from hiro.vision.cards import card_summary, card_version
 from hiro.vision.digits import _iou, _scale, _templates, read_dddd, read_int, read_number, read_score
 from hiro.vision.items import read_drink_slots, read_pitems
+from hiro.vision.ocr import engine as ocr_engine
 from hiro.vision.ocr import ocr, ocr_batch
 from hiro.vision.region_cache import RegionCache, cached
 from hiro.vision.status import read_status_column, status_summary
@@ -403,7 +404,12 @@ def read_finals_ranking(img: MatLike) -> dict:
         if x + FINALS_NPC_W > img.shape[1]:
             out["npc_scores"].append(None)
             continue
-        v = _ocr_int(img, (x, y1, x + FINALS_NPC_W + 1, y2))
+        if ocr_engine() == "vision":
+            v = _ocr_int(img, (x, y1, x + FINALS_NPC_W + 1, y2))
+        else:
+            # RapidOCR / Windows OCR 读这号小字有系统性错（596029→598029、460505→430505，换放大倍数多次读也一致地错，投票选不对），
+            # ddddocr 框向右放宽 4 像素读 6 位数：本战 11 帧要么全对、要么读出一两位被下限作废，没给过错值
+            v = read_dddd(img, (x, y1, x + FINALS_NPC_W + 5, y2))
         out["npc_scores"].append(v if v is not None and FINALS_NPC_MIN <= v <= 999_999 else None)
     out["finals_round"] = finals_round_from_npc(out["npc_scores"])
     return out
