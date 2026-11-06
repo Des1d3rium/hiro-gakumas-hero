@@ -579,8 +579,15 @@ def read_confirm_dialog(img: MatLike) -> dict | None:
             break
     # 「270→221」「116 → 16」在大号 P 硬币图标右侧，可能拆成几个框；效果说明里的图标也会被认成「→」，
     # 所以以 P 图标（高 ≥40）所在行为准，找不到再用最后一个带「→」的框
-    coin = next((b for t, b in boxes if t == "P" and b[3] - b[1] >= 40), None)
+    # RapidOCR 读不出「→」、P 图标框也偏小（高 35，Vision 54；小号价格图标约 26）
+    coin = next((b for t, b in boxes if t == "P" and b[3] - b[1] >= 30), None)
     arrow = coin or next((b for t, b in reversed(boxes) if "→" in t), None)
+    if arrow is None:  # 都找不到：取最靠下、右半边有两个纯数字的一行（「116」「16」）
+        digit_rows = sorted(((b[1] + b[3]) // 2, b) for t, b in boxes if t.isdigit() and b[0] >= 250)
+        for cy, b in reversed(digit_rows):
+            if sum(abs(cy2 - cy) <= 12 for cy2, _ in digit_rows) >= 2:
+                arrow = b
+                break
     before = after = None
     if arrow is not None:
         cy = (arrow[1] + arrow[3]) // 2
