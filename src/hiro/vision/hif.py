@@ -206,7 +206,8 @@ ATTR_TAILS = {"カル": "vocal", "ンス": "dance", "ュアル": "visual"}  # �
 
 def _parse_attr(joined: str) -> dict:
     attr = next((v for k, v in ATTRS.items() if k in joined), None) or next((v for k, v in ATTR_TAILS.items() if k in joined), None)
-    m = re.search(r"(\d+)\s*%", joined)
+    # RapidOCR 常把「%」读成「:」「“」或漏掉：没有「%」时取末尾那串 3–5 位数（之后还要和 ddddocr 一致才采用）
+    m = re.search(r"(\d+)\s*%", joined) or re.search(r"(\d{3,5})\D{0,2}$", joined)
     return {"attr": attr, "multiplier_pct": int(m.group(1)) if m else None}
 
 
