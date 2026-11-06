@@ -1680,9 +1680,9 @@ class ProduceDeciders:
             if know and know.get("must") and deck_known and it["card_id"] not in owned and _affordable(it, budget):
                 return done(Action(ActionKind.INTERVAL_BUY, {"index": it["index"]}), f"买缺的核心卡 {know['name']}（{it['price']}P）")
         if ps.deck and "deck" not in unknown and upgrade.get("available", True) and _affordable(upgrade, budget):
-            target = _upgrade_target(ps)
-            if target is not None:
-                return done(Action(ActionKind.INTERVAL_UPGRADE_CARD, {"card_index": target[0]}), f"强化核心卡 {target[1]}（{upgrade['price']}P）")
+            up = _upgrade_target(ps)  # 别复用 target：后面的「回体力到目标」要用体力目标（原来写成 target 被覆盖成 None）
+            if up is not None:
+                return done(Action(ActionKind.INTERVAL_UPGRADE_CARD, {"card_index": up[0]}), f"强化核心卡 {up[1]}（{upgrade['price']}P）")
         if recover_ok:
             return done(Action(ActionKind.INTERVAL_BUY, {"service": "recover"}), f"回体力到目标 {target}（{hp}/{max_hp}）")
         return done(Action(ActionKind.INTERVAL_END), f"没有要买的（剩 {p}P，体力 {hp}/{max_hp}，目标 {target}）")
