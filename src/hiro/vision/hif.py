@@ -166,7 +166,8 @@ def read_hif_result(img: MatLike) -> dict:
     if me is not None and passed is None and line["y"] is not None:
         passed, derived = entries[me]["y"] < line["y"], True  # 突破线横幅之上 = 过线
     return {
-        "exam_no": int(m.group(1)) if m else None,
+        # 「第1回」的数字 RapidOCR 常漏（「第回結果」）：按突破线人数推（128 → 选拔①、64 → ②、32 → ③，与 _battle_label 同一对应）
+        "exam_no": int(m.group(1)) if m else {128: 1, 64: 2, 32: 3}.get(line["participants"]),
         "my_score": entries[me]["score"] if me is not None else None,
         "score": entries[me]["score"] if me is not None else None,  # 同 my_score（主循环日志按 score 取，识别-06）
         "my_score_votes": entries[me]["score_votes"] if me is not None else None,
