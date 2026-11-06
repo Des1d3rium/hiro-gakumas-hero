@@ -232,10 +232,20 @@ def find_codex() -> str | None:
         return os.environ["HIRO_CODEX_BIN"]
     if found := shutil.which("codex"):
         return found
+    if os.name != "nt":
+        return None
+    # Windows：Codex 应用（Microsoft Store 包）自带 codex.exe。WindowsApps 目录普通进程列不出来，
+    # 用 Get-AppxPackage 查安装位置（2026-11-06 Windows 实测：glob 返回空，Get-AppxPackage 能拿到）
     try:
-        hits = sorted(glob.glob(r"C:\Program Files\WindowsApps\OpenAI.Codex_*\app\resources\codex.exe"))
-    except OSError:
-        hits = []
+        loc = subprocess.run(["powershell", "-NoProfile", "-Command", "(Get-AppxPackage -Name 'OpenAI.Codex').InstallLocation"],
+                             capture_output=True, text=True, timeout=20).stdout.strip().splitlines()  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        loc = []
+    for root in reversed(loc):
+        exe = Path(root) / "app" / "resources" / "codex.exe"
+        if exe.exists():
+            return str(exe)
+    hits = sorted(glob.glob(r"C:\Program Files\WindowsApps\OpenAI.Codex_*\app\resources\codex.exe"))
     return hits[-1] if hits else None
 
 
