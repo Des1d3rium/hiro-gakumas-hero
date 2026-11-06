@@ -175,3 +175,26 @@ print('ok')
     env.pop("HIRO_OCR", None)
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env)
     assert r.returncode == 0 and r.stdout.strip().endswith("ok"), r.stderr[-2000:]
+
+
+# ---------------------------------------------------------------- RapidOCR 读歪时的选行动页（2026-11-06 Windows 实测）
+def test_lesson_text_tolerates_rapidocr_misreads():
+    from hiro.vision import action
+
+    def kind(text):
+        return next((k for p, k in action.ACTIONS if p.search(text)), None)
+
+    assert kind("V0公開レッズン") == "open_lesson"  # Vo.→V0、ス→ズ
+    assert kind("W公開レッスン") == "open_lesson"  # Vi.→W
+    assert kind("Da.公開レッスン") == "open_lesson"
+
+
+@pytest.mark.parametrize(("bgr", "want"), [((180, 80, 240), "vo"), ((230, 140, 30), "da"), ((40, 150, 250), "vi")])
+def test_attr_by_band_color(bgr, want):
+    """文字条底色：粉=Vo、蓝=Da、橙=Vi（中间留一条白字，模拟按钮文字）。"""
+    from hiro.vision import action
+
+    img = np.full((1280, 720, 3), 255, np.uint8)
+    img[1090:1120, 100:260] = bgr
+    img[1100:1110, 150:210] = 255
+    assert action._attr_by_band(img, 180, 1105) == want

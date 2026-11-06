@@ -286,9 +286,9 @@ class ProduceDeciders:
             if i in gain:
                 s += 3 * gain[i] / top
             elif r["option"] == "training":
-                s += 3 * (r["attr"] == main) + 1.5 * bool(r.get("sp"))
+                s += 3 * (r.get("attr") == main) + 1.5 * bool(r.get("sp"))
             elif r["option"] == "class":
-                s += 2 * (r["attr"] == weakest)
+                s += 2 * (r.get("attr") == weakest)
             elif r["option"] in ("shop", "special_guidance") and template in ("shop", "special_guidance"):
                 s += 8  # 模板的花钱日：相談 / 特別指導 互为替代（执行不了其中一个时用另一个）
             elif r["option"] == "rest" and _rest_blocked(ps, rows, i):

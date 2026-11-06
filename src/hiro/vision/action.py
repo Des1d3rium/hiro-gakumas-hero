@@ -41,14 +41,15 @@ BUTTON_BAND = (840, 1120)  # 行动按钮及其文字、体力消耗
 
 # 按钮文字 → 行动类型
 ACTIONS = [
-    (re.compile(r"(Vo|Da|Vi)\.?公開レッスン"), "open_lesson"),
+    # 「ス」容许读成「ズ」、属性前缀容许读不出（RapidOCR：「Vo.公開レッスン」→「V0公開レッズン」），属性再按文字条颜色补
+    (re.compile(r"(Vo|Da|Vi)?\.?公開レッ[スズ]ン"), "open_lesson"),
     (re.compile(r"授業"), "class"),
     (re.compile(r"休む"), "rest"),
     (re.compile(r"相談"), "consult"),
     (re.compile(r"差し入れ"), "present"),
     (re.compile(r"特別指導"), "special_training"),
     (re.compile(r"おでかけ"), "outing"),
-    (re.compile(r"(Vo|Da|Vi)?\.?レッスン"), "lesson"),
+    (re.compile(r"(Vo|Da|Vi)?\.?レッ[スズ]ン"), "lesson"),
 ]
 # 授業按钮右下角属性小图标的色相（OpenCV 0–180）：粉=Vo、蓝=Da、黄=Vi
 ATTR_HUE = {"vo": (160, 180), "da": (95, 115), "vi": (15, 35)}
@@ -101,6 +102,23 @@ def _attr_by_badge(img: MatLike, cx: int, cy: int) -> str | None:
     return best if counts[best] >= 30 else None
 
 
+def _attr_by_band(img: MatLike, cx: int, ty: int) -> str | None:
+    """レッスン / 公開レッスン 按钮：文字条的底色（粉=Vo、蓝=Da、橙=Vi）。文字认不出属性时的退路
+    （RapidOCR 会把「Vo.」读成「V0」、「Vi.」读成「W」，2026-11-06 Windows 实测）。"""
+    h, w = img.shape[:2]
+    band = img[max(ty - 14, 0) : min(ty + 14, h), max(cx - 75, 0) : min(cx + 75, w)]
+    if band.size == 0:
+        return None
+    hsv = cv2.cvtColor(band, cv2.COLOR_BGR2HSV)
+    vivid = (hsv[:, :, 1] > 120) & (hsv[:, :, 2] > 120)
+    if vivid.sum() < 200:
+        return None
+    hues = hsv[:, :, 0][vivid]
+    counts = {a: int(((hues >= lo) & (hues <= hi)).sum()) for a, (lo, hi) in ATTR_HUE.items()}
+    best = max(counts, key=counts.get)
+    return best if counts[best] >= 0.5 * vivid.sum() else None
+
+
 def _options(img: MatLike) -> list[ActionOption]:
     y1, y2 = BUTTON_BAND
     tokens = [(t, (b[0], b[1] + y1, b[2], b[3] + y1)) for t, _, b in ocr_boxes(img[y1:y2], scale=2)]
@@ -125,6 +143,8 @@ def _options(img: MatLike) -> list[ActionOption]:
                 attr = m.group(1).lower()
             elif kind == "class":
                 attr = _attr_by_badge(img, cx, ty - 20)
+            if attr is None and kind in ("open_lesson", "lesson"):
+                attr = _attr_by_band(img, cx, ty)
             option = ActionOption(kind, compact, attr, center)
             if kind == "rest":
                 # 回复量在按钮左上角的爱心徽章里（白字深描边），位于文字左上方
