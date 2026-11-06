@@ -270,3 +270,20 @@ def test_codex_adapter_passes_utf8_prompt_and_reads_reply(monkeypatch, tmp_path)
     assert seen["cwd"] and "hiro-codex-" in seen["cwd"]
     r = a.ask_json_image("s", "u", b"\xff\xd8jpeg")
     assert "-i" in seen["cmd"] and r.data == {"action": "play", "card": 1}
+
+
+# ---------------------------------------------------------------- 本战选课：缺倍率换算数据时按 R1 回合数近似（R1_TURN_PROXY）
+def test_r1_turn_weighted_gain_prefers_heavier_r1_attr():
+    from types import SimpleNamespace
+
+    from hiro.state import context as C
+    from hiro.state.produce import FINALS
+
+    st = SimpleNamespace(mode=FINALS, params={"Vo": 1710, "Da": 2268, "Vi": 913}, param_cap=3200, idol_card_id="i_card-shro-3-007")
+    vo = C.r1_turn_weighted_gain(st, {"Vo": 180})
+    vi = C.r1_turn_weighted_gain(st, {"Vi": 180})
+    da = C.r1_turn_weighted_gain(st, {"Da": 180})
+    assert vo > da > vi  # 篠澤広 均衡型 R1 回合 Vo 4 / Da 3 / Vi 2
+    capped = SimpleNamespace(**{**st.__dict__, "params": {"Vo": 3150, "Da": 2268, "Vi": 913}})
+    assert C.r1_turn_weighted_gain(capped, {"Vo": 180}) == 4 * 50  # 到上限为止
+    assert C.r1_turn_weighted_gain(SimpleNamespace(**{**st.__dict__, "mode": "produce-007"}), {"Vo": 180}) is None  # 选拔不算
