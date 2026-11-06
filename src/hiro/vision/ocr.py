@@ -6,7 +6,7 @@
 - rapidocr：KAA 自带的 RapidOCR（PaddleOCR 日文 / 英文模型，kotonebot.backend.ocr）。非 macOS（模拟器 / DMM）用它；
   **识别率与速度没有在本项目的回归截图上核对过**，换平台后先用回归截图验一遍（见 docs/assets.md）。
 - winocr：Windows 自带的文字识别（Windows.Media.Ocr，经 winrt 调用；要装了日文 OCR 语言，Windows 设置里加日语即可）。
-  Windows 实测单块区域约 0.05 s。它按「词」返回结果，日文是一字一词，这里按字间距拼回整行（见 _join_words）。
+  Windows 实测单块区域约 0.05 s。它按「词」返回结果，日文是一字一词：这里按间隙把一行拆成段、段内拼回文字（见 _split_words / _join_words）。
 
 HIRO_OCR=auto（缺省：macOS 且能导入 Vision → vision，否则 rapidocr）/ vision / rapidocr / winocr。
 """
@@ -104,17 +104,37 @@ def _win_engine(languages):
     return _win[tag], _win["loop"]
 
 
+def _is_ascii_word(t: str) -> bool:
+    return bool(t) and t.isascii() and any(c.isalnum() for c in t)
+
+
+def _split_words(words: list[tuple[str, tuple[float, float, float, float]]]) -> list[list[tuple]]:
+    """Windows OCR 会把同一水平线上相隔很远的几段字并成一行（货架一排价格「70 49 105 35」），Apple Vision 是分开的。
+    间隙大于字高的 1.2 倍就断成新的一段，各自出框。"""
+    segs: list[list[tuple]] = []
+    for wd in words:
+        x, _, _, h = wd[1]
+        if segs:
+            px, _, pw, ph = segs[-1][-1][1]
+            if x - (px + pw) <= 1.2 * max(h, ph):
+                segs[-1].append(wd)
+                continue
+        segs.append([wd])
+    return segs
+
+
 def _join_words(words: list[tuple[str, tuple[float, float, float, float]]]) -> str:
-    """Windows OCR 一行里的词按位置拼接：间隙小于字高的 0.35 倍就直接相连（日文一字一词、「56.4」「%」），否则留一个空格。"""
+    """一段里的词拼成文字：日文一字一词、字间不留空格；只有两边都是英文 / 数字且确实隔开（间隙 ≥ 字高 0.35 倍）才留一个空格。"""
     out = ""
     prev = None
-    for text, (x, y, w, h) in words:
+    for text, (x, _, w, h) in words:
         if prev is not None:
-            px, pw, ph = prev
+            ptext, px, pw, ph = prev
             gap = x - (px + pw)
-            out += "" if gap < 0.35 * max(h, ph) else " "
+            if _is_ascii_word(ptext) and _is_ascii_word(text[:1]) and gap >= 0.35 * max(h, ph):
+                out += " "
         out += text
-        prev = (x, w, h)
+        prev = (text, x, w, h)
     return out
 
 
@@ -139,11 +159,12 @@ def _win_raw(img: MatLike, scale: float, languages) -> list[tuple[str, float, tu
         if not ws:
             continue
         ws.sort(key=lambda t: t[1][0])
-        x1 = min(b[0] for _, b in ws)
-        y1 = min(b[1] for _, b in ws)
-        x2 = max(b[0] + b[2] for _, b in ws)
-        y2 = max(b[1] + b[3] for _, b in ws)
-        out.append((_join_words(ws), 1.0, (round(x1 / scale), round(y1 / scale), round(x2 / scale), round(y2 / scale))))
+        for seg in _split_words(ws):
+            x1 = min(b[0] for _, b in seg)
+            y1 = min(b[1] for _, b in seg)
+            x2 = max(b[0] + b[2] for _, b in seg)
+            y2 = max(b[1] + b[3] for _, b in seg)
+            out.append((_join_words(seg), 1.0, (round(x1 / scale), round(y1 / scale), round(x2 / scale), round(y2 / scale))))
     return out
 
 

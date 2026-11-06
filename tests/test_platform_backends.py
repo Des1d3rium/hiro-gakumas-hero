@@ -336,3 +336,31 @@ def test_emulator_swipe_keeps_duration():
     _keep_swipe_duration(d2)
     d2.swipe(100, 200, 100, 400, duration=0.4)
     assert adb2.adb.cmds == ["input touchscreen swipe 150 300 150 600 400"]
+
+
+def test_winocr_word_joining():
+    """Windows OCR 一字一词：日文不留空格，英文数字隔开才留空格；同一行相隔很远的两段拆开（货架一排价格）。"""
+    from hiro.vision.ocr import _join_words, _split_words
+
+    w = lambda t, x, wd=20, h=20: (t, (x, 0, wd, h))  # noqa: E731
+    assert _join_words([w("キ", 0), w("ャ", 30), w("ン", 52), w("セ", 74), w("ル", 96)]) == "キャンセル"
+    assert _join_words([w("56.4", 0, 40), w("%", 42)]) == "56.4%"
+    assert _join_words([w("Vo.", 0, 30), w("Lesson", 40, 60)]) == "Vo. Lesson"
+    segs = _split_words([w("70", 0, 30), w("49", 34, 30), w("105", 200, 40)])
+    assert [_join_words(s) for s in segs] == ["7049", "105"]
+
+
+@pytest.mark.fixtures
+def test_finals_npc_score_with_dropped_digit_is_rejected(monkeypatch):
+    """本战 NPC 分数整场不变（R1 约 29–40 万、R2 约 42–60 万），读成五位数一定是掉了首位：作废，不交给名次自洽检查当上限
+    （Windows 第二局 RapidOCR 把 451280 读成 51280，我方分数被丢了 8 次）。"""
+    import cv2
+
+    from hiro.vision import hif
+
+    img = cv2.imread(str(Path(__file__).parent / "fixtures" / "finals" / "exam-r2-t12.jpg"))
+    real = hif.read_finals_ranking(img)["npc_scores"]
+    assert real == [598516, 460505]
+    reads = iter([598516, 60505])
+    monkeypatch.setattr(hif, "_ocr_int", lambda im, box: next(reads) if box[2] - box[0] == hif.FINALS_NPC_W + 1 else None)
+    assert hif.read_finals_ranking(img)["npc_scores"] == [598516, None]
