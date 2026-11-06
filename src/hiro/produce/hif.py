@@ -1576,6 +1576,12 @@ class HiroHifStrategy(HifGrindStrategy):
                 logger.warning("%s 考试收尾 %.0fs 还没走完，交回主循环重新判断", label, EXAM_END_LOOP_TIMEOUT)
                 break
             before = device.screenshot()
+            if label in ("r1", "r2") and not recorded_ranking:
+                # 本战结果弹窗还没记到：入场动画中途的帧认不出，紧接着就点了「次へ」（Windows 第二局第三次再挑戦用完后
+                # 结算没读到）。先等画面停稳再认，弹窗已记过就不再等
+                settled = ops.wait_stable(timeout=EXAM_END_SETTLE).img
+                if settled is not None:  # numpy 数组不能直接 or
+                    before = settled
             self._record_round_result(before, label, recorded_ranking)  # 本战每轮结果弹窗：点「次へ」前存帧、记分（用户指示）
             if self._finals_retry(before, label):
                 return  # 本战已点再挑戦：考试重开，主循环会再次进入 on_exam_entered
