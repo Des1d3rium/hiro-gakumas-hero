@@ -629,7 +629,22 @@ def _item_from_name(text: str) -> dict | None:
         if t in _pitems_by_name():
             ids = _pitems_by_name()[t]
             return {"kind": "pitem", "pitem_id": ids[0] if len(ids) == 1 else None, "pitem_ids": ids, "name": t}
+    from hiro.vision.ocr import engine
+
+    if engine() != "vision":  # RapidOCR 等常错一个字（「冒険心」→「目険心」）：只差一个字且唯一时按主数据名称再认一次
+        for t in (text, text[1:]):
+            if (near := _near_name(t)) is not None:
+                return _item_from_name(near)
     return None
+
+
+def _near_name(text: str) -> str | None:
+    """主数据里与 text 等长（≥3 字）、只差一个字的名称；恰好一个才返回（卡名含「+」）。"""
+    if len(text) < 3:
+        return None
+    names = {n for n in _cards_by_full_name()} | set(_drinks_by_name()) | set(_pitems_by_name())
+    hits = {n for n in names if len(n) == len(text) and sum(a != b for a, b in zip(n, text, strict=True)) == 1}
+    return hits.pop() if len(hits) == 1 else None
 
 
 def read_acquire_popup(img: MatLike, art: bool = True) -> dict | None:
