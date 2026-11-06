@@ -883,6 +883,80 @@ def _default_rental_pick() -> bool:
 RENTAL_PICK: Callable | None = _default_rental_pick  # 默认：主属性、等级最高的一张；策略层可替换成自己的选择
 
 
+from hiro.produce.formation_check import FormationMismatch  # noqa: E402  run_hif 按 kaa_patches.FormationMismatch 捕获
+
+
+def _check_support(img) -> None:
+    """有开局编成方案时核对第 2 步的 5 格支援卡；对不上抛 FormationMismatch（不开局）。核对本身出错只记日志。"""
+    from hiro import kaa_env
+
+    if not kaa_env.ACTIVE_PLAN:
+        return
+    from hiro.produce.formation_check import check_support_step2
+
+    try:
+        from hiro.vision.support_screens import read_support_formation
+
+        problems, warnings = check_support_step2(read_support_formation(img), kaa_env.ACTIVE_PLAN)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("支援卡编成核对失败（不拦开局）：%s", e)
+        return
+    for w in warnings:
+        logger.warning("支援卡编成核对：%s", w)
+    if problems:
+        logger.error("支援卡编成和方案对不上，不开局：%s", "；".join(problems))
+        raise FormationMismatch("支援卡编成和方案对不上：" + "；".join(problems))
+    logger.info("支援卡编成核对通过（编成 %s）", kaa_env.SUPPORT_SET)
+
+
+def _check_memory_cards(img, plan: dict) -> tuple[list[str], list[str]]:
+    """第 3 步四格回忆的技能卡小图标 vs 方案的回忆卡。HIRO_MEMORY_CARD_CHECK：block（默认，有把握认错就拦）/ warn / off。"""
+    import os
+
+    mode = (os.environ.get("HIRO_MEMORY_CARD_CHECK") or "block").lower()
+    if mode == "off":
+        return [], []
+    try:
+        from hiro.produce.formation_check import check_memory_cards
+        from hiro.vision.memory_icons import read_step3_icons
+
+        reads = read_step3_icons(img, expect=list((plan.get("memory") or {}).get("cards") or []))
+        logger.info("第 3 步回忆图标：%s", "；".join(f"{r['slot'] + 1}:{r['card']} {r['score']}" for r in reads))
+        problems, warnings = check_memory_cards(reads, plan)
+    except Exception as e:  # noqa: BLE001
+        return [], [f"回忆卡面核对失败（不拦开局）：{e}"]
+    if mode == "warn":
+        return [], warnings + [p + "（HIRO_MEMORY_CARD_CHECK=warn，不拦）" for p in problems]
+    return problems, warnings
+
+
+def _check_memory_set() -> None:
+    """有开局编成方案时，在 KAA 选完回忆编成后读「N/20」核对编成号；对不上抛 FormationMismatch。"""
+    from hiro import kaa_env
+
+    if not kaa_env.ACTIVE_PLAN:
+        return
+    from hiro.produce.formation_check import check_memory_step3, memory_set_number
+
+    try:
+        from hiro.produce.ops import ocr_boxes
+
+        img = device.screenshot()
+        problems, warnings = check_memory_step3(memory_set_number([(t, b) for t, _, b in ocr_boxes(img)]), kaa_env.ACTIVE_PLAN)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("回忆编成核对失败（不拦开局）：%s", e)
+        return
+    if not problems:
+        p2, w2 = _check_memory_cards(img, kaa_env.ACTIVE_PLAN)
+        problems, warnings = problems + p2, warnings + w2
+    for w in warnings:
+        logger.warning("回忆编成核对：%s", w)
+    if problems:
+        logger.error("回忆编成和方案对不上，不开局：%s", "；".join(problems))
+        raise FormationMismatch("回忆编成和方案对不上：" + "；".join(problems))
+    logger.info("回忆编成核对通过（メモリー編成 %s）", kaa_env.MEMORY_SET)
+
+
 def _rent_step2(orig):
     def wrapped(set_number=None, auto_set=None):
         if auto_set:
@@ -899,7 +973,7 @@ def _rent_step2(orig):
             return False
         if set_number is not None:
             importlib.import_module("kaa.tasks.produce.prepare")._select_set(set_number)
-        device.screenshot()
+        _check_support(device.screenshot())
         if R.Produce.Step2.ButtonNext.q(enabled=True).exists():
             logger.info("支援卡：编成 %s 已满（含租借格），直接下一步", set_number)
             return True
@@ -943,7 +1017,10 @@ def _snap_step3(orig):
         if os.environ.get("HIRO_STEP3_PAUSE") == "1":
             # 回忆租借第一次实机探查（用户 2026-11-02 同意）：停在第 3 步交总控手动点开回忆格、看租借列表、必要时租
             raise RentalPending("第 3 步暂停：总控手动探查回忆租借（HIRO_STEP3_PAUSE=1）")
-        return orig(*a, **k)
+        r = orig(*a, **k)
+        if r:
+            _check_memory_set()  # KAA 选完编成、点「次へ」之前
+        return r
 
     wrapped._hiro_snap = True
     return wrapped

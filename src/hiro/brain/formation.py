@@ -252,11 +252,12 @@ def normalize_memory(m: dict) -> dict:
             "abilities": list(m.get("abilities") or []), "rank": m.get("rank"), "raw": m}  # fmt: skip
 
 
-def memory_quality(mem: dict, gains: dict | None = None, finals: dict | None = None) -> tuple[float, list[str], list[tuple[str, float]]]:
-    """一份回忆的质量分（同一张卡不同回忆之间比较）、说明、能力 [(去重键, 分)]。"""
+def memory_quality(mem: dict, gains: dict | None = None, finals: dict | None = None,
+                   profile: str | None = None) -> tuple[float, list[str], list[tuple[str, float]]]:  # fmt: skip
+    """一份回忆的质量分（同一张卡不同回忆之间比较）、说明、能力 [(去重键, 分)]。profile：流派（memory_priority.PROFILES），默认 やる気。"""
     from hiro.state.memory_priority import ability_value, card_entry, param_points
 
-    e = card_entry(mem["card_id"]) or {}
+    e = card_entry(mem["card_id"], profile) or {}
     score, why, abil = 0.0, [], []
     customs = e.get("customs") or []
     hit = next(((k, b, n) for k, b, n in customs if k in mem["custom_keys"]), None)
@@ -278,9 +279,13 @@ def memory_quality(mem: dict, gains: dict | None = None, finals: dict | None = N
     elif t is None and e.get("timing") == "start":
         why.append("入手时机未读出")
     if (mem["upgrade"] or 0) >= 1:
-        score += UPGRADE_BONUS
+        score += UPGRADE_BONUS + e.get("upgrade_bonus", 0)
+        if e.get("upgrade_bonus"):
+            why.append("已强化（这张要强化）")
+    elif e.get("upgrade_bonus"):
+        why.append("未强化（社区：这张要强化）")
     for a in mem["abilities"]:
-        v, key = ability_value(a)
+        v, key = ability_value(a, profile)
         if v:
             abil.append((key or a, v))
             score += v
@@ -293,8 +298,8 @@ def memory_quality(mem: dict, gains: dict | None = None, finals: dict | None = N
     return score, why, abil
 
 
-def _formation_score(mems: list[dict], scored: dict, gains, finals) -> tuple[float, list[str]]:
-    from hiro.state.memory_priority import PARAM_CAP, PARAM_FINALS, PARAM_GAINS
+def _formation_score(mems: list[dict], scored: dict, gains, finals, profile: str | None = None) -> tuple[float, list[str]]:
+    from hiro.state.memory_priority import AB_BONUS, AB_PENALTY, PARAM_CAP, PARAM_FINALS, PARAM_GAINS, PROFILES, card_entry
 
     gains, finals = gains or PARAM_GAINS, finals or PARAM_FINALS
     total, notes, seen = 0.0, [], {}
@@ -319,11 +324,23 @@ def _formation_score(mems: list[dict], scored: dict, gains, finals) -> tuple[flo
     if "p_card-00-men-3_005" in ids and any(m["card_id"] == "p_card-02-act-1_037" and m["timing"] == "start" for m in mems):
         total -= CONFLICT_PENALTY
         notes.append(f"仕切り直し 与开局入手的 デイドリーミング 同在：开局元気不够打不出时会被换手牌洗掉（-{CONFLICT_PENALTY}）")
+    target = PROFILES[profile]["ab_target"] if profile in PROFILES else None
+    if target and len(mems) == SLOTS:
+        # A 栏（一次性压缩 / 过牌）与 B 栏（循环核心）各 1–3 张，推荐配比见流派表 [いおん09][いおん10][いおん12]
+        a = sum((card_entry(m["card_id"], profile) or {}).get("slot") == "A" for m in mems)
+        b = sum((card_entry(m["card_id"], profile) or {}).get("slot") == "B" for m in mems)
+        for col, n in (("A", a), ("B", b)):
+            if not 1 <= n <= 3:
+                total -= AB_PENALTY
+                notes.append(f"{col} 栏 {n} 张，社区建议每栏 1–3 张（-{AB_PENALTY}）")
+        if (a, b) == tuple(target):
+            total += AB_BONUS
     return total, notes
 
 
-def select_memories(inventory: dict | list, *, gains: dict | None = None, finals: dict | None = None, plan: str = "ProducePlanType_Plan2") -> dict:
-    """库存 → 推荐的 4 格编成、每格理由、第 2 方案与差距、值得刷的回忆。"""
+def select_memories(inventory: dict | list, *, gains: dict | None = None, finals: dict | None = None, plan: str = "ProducePlanType_Plan2",
+                    profile: str | None = None) -> dict:  # fmt: skip
+    """库存 → 推荐的 4 格编成、每格理由、第 2 方案与差距、值得刷的回忆。profile：流派（默认 やる気；见 memory_priority.profile_for_idol）。"""
     from itertools import combinations
 
     from hiro.state.context import catalog
@@ -343,13 +360,7 @@ def select_memories(inventory: dict | list, *, gains: dict | None = None, finals
         if card_plan not in (None, plan, "ProducePlanType_Common"):
             continue  # 别的プラン的卡带不进来
         mems.append(m)
-    scored = {}
-    for m in mems:
-        q, why, abil = memory_quality(m, gains, finals)
-        e = card_entry(m["card_id"])
-        w = e["weight"] if e else fallback_weight(m["card_id"])
-        scored[id(m)] = {"weight": w, "quality": q, "why": why, "abilities": abil,
-                         "param_q": min(param_points(m["params"], gains, finals) / PARAM_SCALE, 8)}  # fmt: skip
+    scored = _score_memories(mems, gains, finals, profile)
     # 每张卡留质量最好的 3 份（同一张卡不重复带，候选数控制在组合可穷举的范围）
     by_card: dict = {}
     for m in sorted(mems, key=lambda x: -(scored[id(x)]["weight"] + scored[id(x)]["quality"])):
@@ -360,11 +371,11 @@ def select_memories(inventory: dict | list, *, gains: dict | None = None, finals
     for combo in combinations(pool, min(SLOTS, len({m["card_id"] for m in pool}))):
         if len({m["card_id"] for m in combo}) < len(combo):
             continue
-        total, notes = _formation_score(list(combo), scored, gains, finals)
+        total, notes = _formation_score(list(combo), scored, gains, finals, profile)
         plans.append((total, combo, notes))
     plans.sort(key=lambda p: -p[0])
     if not plans:
-        return {"chosen": [], "notes": ["库存为空或没有可用的回忆"], "skipped": skipped, "farm": farm_list({}, scored)}
+        return {"chosen": [], "notes": ["库存为空或没有可用的回忆"], "skipped": skipped, "farm": farm_list({}, scored, profile), "profile": profile or "yaruki"}
     best_total, best, best_notes = plans[0]
     best_ids = {m["card_id"] for m in best}
     runner = next((p for p in plans[1:] if {m["card_id"] for m in p[1]} != best_ids), None)
@@ -372,11 +383,11 @@ def select_memories(inventory: dict | list, *, gains: dict | None = None, finals
 
     def view(m):
         s = scored[id(m)]
-        e = card_entry(m["card_id"]) or {}
+        e = card_entry(m["card_id"], profile) or {}
         alts = [x for x in by_card[m["card_id"]] if x is not m]
         alt = alts[0] if alts else None
         return {"id": m["id"], "card_id": m["card_id"], "name": e.get("name") or m["name"], "upgrade": m["upgrade"],
-                "timing": m["timing"], "weight": s["weight"], "quality": round(s["quality"], 1), "role": e.get("role"),
+                "timing": m["timing"], "weight": s["weight"], "quality": round(s["quality"], 1), "role": e.get("role"), "slot": e.get("slot"),
                 "sources": e.get("sources", []), "why": s["why"],
                 "vs_same_card": (f"同卡另一份 {alt['id']}：质量 {scored[id(alt)]['quality']:.1f}（{'；'.join(scored[id(alt)]['why']) or '无'}）"
                                  if alt else "库存里只有这一份")}  # fmt: skip
@@ -384,7 +395,7 @@ def select_memories(inventory: dict | list, *, gains: dict | None = None, finals
     chosen = [view(m) for m in sorted(best, key=lambda m: -scored[id(m)]["weight"])]
     left_out = [c for c in top_cards if c not in best_ids]
     out = {"chosen": chosen, "total": round(best_total, 1), "notes": best_notes, "skipped": skipped,
-           "not_chosen": [{"card_id": c, "name": (card_entry(c) or {}).get("name") or by_card[c][0]["name"],
+           "not_chosen": [{"card_id": c, "name": (card_entry(c, profile) or {}).get("name") or by_card[c][0]["name"],
                            "best": round(scored[id(by_card[c][0])]["weight"] + scored[id(by_card[c][0])]["quality"], 1)} for c in left_out[:5]]}  # fmt: skip
     if runner:
         diff_in = [m for m in runner[1] if m["card_id"] not in best_ids]
@@ -393,21 +404,22 @@ def select_memories(inventory: dict | list, *, gains: dict | None = None, finals
                             "swap": f"把 {'、'.join(view(m)['name'] for m in diff_out)} 换成 {'、'.join(view(m)['name'] for m in diff_in)}"}  # fmt: skip
     if same_cards:
         out["same_cards_other_copies"] = round(best_total - same_cards[0], 1)
-    out["farm"] = farm_list(by_card, scored)
+    out["farm"] = farm_list(by_card, scored, profile)
+    out["profile"] = profile or "yaruki"
     return out
 
 
 RENT_MIN_GAIN = 2.0  # 租借要让编成总分至少高这么多才租（低于这个就是噪声级的差别，不值得用掉一次租借）
 
 
-def _score_memories(mems: list[dict], gains, finals) -> dict:
+def _score_memories(mems: list[dict], gains, finals, profile: str | None = None) -> dict:
     from hiro.state.memory_priority import card_entry, fallback_weight, param_points
 
     scored = {}
     for m in mems:
-        q, why, abil = memory_quality(m, gains, finals)
-        e = card_entry(m["card_id"])
-        w = e["weight"] if e else fallback_weight(m["card_id"])
+        q, why, abil = memory_quality(m, gains, finals, profile)
+        e = card_entry(m["card_id"], profile)
+        w = e["weight"] if e else fallback_weight(m["card_id"], profile)
         scored[id(m)] = {"weight": w, "quality": q, "why": why, "abilities": abil,
                          "param_q": min(param_points(m["params"], gains, finals) / PARAM_SCALE, 8)}  # fmt: skip
     return scored
@@ -450,7 +462,7 @@ def cost_allowed(cost) -> bool:
 
 def choose_memory_rental(rental_rows: list[dict], current_formation: list[dict], inventory: dict | list | None = None, *,
                          rentals_left: int | None = None, gains: dict | None = None, finals: dict | None = None,
-                         plan: str = "ProducePlanType_Plan2") -> dict:  # fmt: skip
+                         plan: str = "ProducePlanType_Plan2", profile: str | None = None) -> dict:  # fmt: skip
     """回忆租借（用户 2026-11-02 同意，总控派单）：自己库存缺关键卡（せのびの魔法 等）时，从租借列表里租一份替换编成里的一格。
 
     - rental_rows：租借列表（开局第 3 步），每行和回忆库存同一格式（card_id / card_name、upgrade、timing、abilities、customizations、
@@ -490,18 +502,18 @@ def choose_memory_rental(rental_rows: list[dict], current_formation: list[dict],
         rentals.append((raw, m))
     own_rows = ((inventory.get("memories") or inventory.get("entries") or []) if isinstance(inventory, dict) else inventory) or []
     own = [m for m in (normalize_memory(r) for r in own_rows) if m["card_id"]]
-    scored = _score_memories(cur + [m for _, m in rentals] + own, gains_, finals_)
-    base, _ = _formation_score(cur, scored, gains_, finals_) if cur else (0.0, [])
+    scored = _score_memories(cur + [m for _, m in rentals] + own, gains_, finals_, profile)
+    base, _ = _formation_score(cur, scored, gains_, finals_, profile) if cur else (0.0, [])
     out["current_total"] = round(base, 1)
 
     def best_swap(m: dict) -> tuple[float, int | None, list[str]]:
         slots = [i for i, c in enumerate(cur) if c["card_id"] == m["card_id"]] or list(range(len(cur)))
         if len(cur) < SLOTS and not any(c["card_id"] == m["card_id"] for c in cur):
-            total, notes = _formation_score(cur + [m], scored, gains_, finals_)
+            total, notes = _formation_score(cur + [m], scored, gains_, finals_, profile)
             return total - base, None, notes  # 有空格：直接放进去
         best = (float("-inf"), None, [])
         for i in slots:
-            total, notes = _formation_score(cur[:i] + [m] + cur[i + 1:], scored, gains_, finals_)
+            total, notes = _formation_score(cur[:i] + [m] + cur[i + 1:], scored, gains_, finals_, profile)
             if total - base > best[0]:
                 best = (total - base, i, notes)
         return best
@@ -509,8 +521,8 @@ def choose_memory_rental(rental_rows: list[dict], current_formation: list[dict],
     from hiro.state.memory_priority import card_entry
 
     def name_of(x: dict) -> str:
-        if (card_entry(x["card_id"]) or {}).get("name"):
-            return card_entry(x["card_id"])["name"]
+        if (card_entry(x["card_id"], profile) or {}).get("name"):
+            return card_entry(x["card_id"], profile)["name"]
         try:
             from hiro.state.context import catalog
 
@@ -551,12 +563,12 @@ def choose_memory_rental(rental_rows: list[dict], current_formation: list[dict],
     return out
 
 
-def farm_list(by_card: dict, scored: dict) -> list[dict]:
+def farm_list(by_card: dict, scored: dict, profile: str | None = None) -> list[dict]:
     """值得刷的回忆（§5）：优先级表里的卡，库存没有，或最好的一份缺推荐定制 / 入手时机不对 / 没有好能力。按卡优先度排。"""
-    from hiro.state.memory_priority import MEMORY_PRIORITY
+    from hiro.state.memory_priority import MEMORY_PRIORITY, PROFILES
 
     out = []
-    for e in MEMORY_PRIORITY:
+    for e in PROFILES[profile]["priority"] if profile in PROFILES else MEMORY_PRIORITY:
         if e["weight"] < FARM_MIN_WEIGHT:
             continue
         have = by_card.get(e["card_id"]) or []
@@ -570,8 +582,12 @@ def farm_list(by_card: dict, scored: dict) -> list[dict]:
                 want.append(f"推荐定制：{e['customs'][0][2]}")
             if e.get("timing") == "start" and best["timing"] != "start":
                 want.append("开局入手" + ("（现有的是中间试验后入手）" if best["timing"] == "mid" else "（入手时机未读出）"))
+            if e.get("upgrade_bonus") and not (best["upgrade"] or 0):
+                want.append("强化过的（社区：这张要强化）")
             if not any(v >= 4 for _, v in s["abilities"]):
-                want.append("HIF 能力：紙吹雪 / Wkwk 再动（[いおん15] 优先 紙吹雪）")
+                react = sorted(PROFILES[profile]["react"].items(), key=lambda kv: -kv[1])[:2] if profile in PROFILES else []
+                want.append(f"HIF 能力：{' / '.join(k for k, _ in react)} 再动" if react and profile != "yaruki"
+                            else "HIF 能力：紙吹雪 / Wkwk 再动（[いおん15] 优先 紙吹雪）")  # fmt: skip
         if want:
             out.append({"card_id": e["card_id"], "name": e["name"], "weight": e["weight"], "owned": len(have),
                         "want": want, "sources": e["sources"]})  # fmt: skip
@@ -579,9 +595,13 @@ def farm_list(by_card: dict, scored: dict) -> list[dict]:
 
 
 def format_memory_report(r: dict) -> str:
-    lines = ["# 回忆编成推荐（Campus 広 やる気）", ""]
+    from hiro.state.memory_priority import PROFILES
+
+    prof = PROFILES.get(r.get("profile") or "yaruki", PROFILES["yaruki"])
+    lines = [f"# 回忆编成推荐（{prof['name']}）", ""]
     for i, c in enumerate(r.get("chosen", []), 1):
-        lines.append(f"{i}. **{c['name']}{'+' * (c['upgrade'] or 0)}**（回忆 {c['id']}，{c['role']}；"
+        col = f"{c['slot']} 栏，" if c.get("slot") else ""
+        lines.append(f"{i}. **{c['name']}{'+' * (c['upgrade'] or 0)}**（回忆 {c['id']}，{col}{c['role']}；"
                      f"{'开局' if c['timing'] == 'start' else '中间试验后' if c['timing'] == 'mid' else '时机未读出'}入手）")  # fmt: skip
         lines.append(f"   - 社区：{'、'.join(c['sources'])}；优先度 {c['weight']}，回忆质量 {c['quality']}")
         lines.append(f"   - {'；'.join(c['why']) or '无定制 / 能力信息'}")

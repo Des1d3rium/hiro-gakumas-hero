@@ -8,6 +8,9 @@ description: 在实机上开一局 H.I.F（整局或只打本战），盯住运�
 开局前确认（问使用者，不要猜）：
 - 游戏停在首页；没有别的设备上进行中的培育；AP 够或有 APドリンク。
 - 支援卡 / 回忆编成号（`HIRO_SUPPORT_SET` / `HIRO_MEMORY_SET`）、偶像卡、主属性。
+  有 `conf/formation-plan.json`（开局编成方案，docs/formation-plan.md）且偶像一致时，编成号和主属性可以不给，按方案走；
+  手动给编成号时，回忆带的卡也要用 `HIRO_MEMORY_CARDS` 告诉决策器。
+- 停机原因是「编成和方案对不上」（FormationMismatch，码 3）时：编成位里的卡和方案不一致，请使用者按 `reports/live/formation-plan.md` 重新存编成，不要改方案绕过。
 - 这一局是整局还是只打本战。
 
 ```bash
