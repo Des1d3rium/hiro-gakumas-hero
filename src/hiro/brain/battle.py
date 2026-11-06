@@ -104,7 +104,8 @@ class BattleBrain:
         user = "当前状态：\n" + json.dumps(payload, ensure_ascii=False)
         for attempt in range(self.max_retries + 1):
             res = self.llm.ask_json(self.system, user)
-            self.calls.append(res.record(prompt_version=self.prompt_version))
+            # 发给 LLM 的局面一并记下（系统提示按 prompt_version 可还原），之后换模型 / 改提示词可以原样重放（tools.audit.exam_replay）
+            self.calls.append(res.record(prompt_version=self.prompt_version, prompt_state=payload))
             if res.data is None:
                 logger.warning("LLM 调用失败：%s", res.error)
                 return None
