@@ -51,6 +51,7 @@ def _strategy(fields):
 def test_change_removes_decided_card_not_slot0():
     grid = [{"index": 0, "card_id": DAYDREAM, "upgrade": 1}, {"index": 1, "card_id": HIGH, "upgrade": 0}, {"index": 2, "card_id": BASIC, "upgrade": 0}]
     st, ctx = _strategy({"SKILL_CARD_CHANGE_2": {"cards": grid}}), StubCtx(stage=1)
+    st.CHANGE1_DECIDE_RETRIES = 0  # 本用例测「一直读不到候选」：不重读
     st.on_skill_card_change(ctx)
     assert ctx.calls[0] == ("s1", 0)  # 阶段 1 候选未识别 → 第 0 张
     assert ctx.calls[1] == ("s2", HIGH, False)  # 冲突卡先换出（用户 2026-11-03：冲突牌 > 初始卡），デイドリーミング 不动
@@ -101,3 +102,26 @@ def test_stage1_pick_mapped_to_column_by_center():
     st.s.observe("SKILL_CARD_CHANGE_1")
     d = Decision(Action(ActionKind.CHANGE_CARD, {"stage": 1, "pick_index": 3}), "", "rule", 1.0)
     assert st._stage1_column(3, d) == 2 and st._stage1_column(0, d) == 0
+
+
+def test_stage1_rereads_until_candidates_reach_state():
+    """换卡页第一帧：状态还是上一页（候选没进状态），决策器回 Wait；再读一帧候选到了，就按价值选，不盲换第 0 张
+    （Windows 第二局两次、Mac A5b 一次，2026-11-06）。"""
+    cands = [{"index": 0, "card_id": BASIC, "upgrade": 0}, {"index": 1, "card_id": BASIC, "upgrade": 0},
+             {"index": 2, "card_id": DAYDREAM, "upgrade": 1}]  # fmt: skip
+    st, ctx = _strategy({}), StubCtx(stage=1)
+    st.CHANGE1_DECIDE_WAIT = 0
+    st.CHANGE_OBSERVE_TRIES = 1
+    seen = []
+
+    def observe(scene, **_):
+        seen.append(scene)
+        first_frame = scene == "SKILL_CARD_CHANGE_1" and seen.count(scene) == 1
+        st.s.state = GameState(page_fields={} if first_frame else ({"candidates": cands} if scene == "SKILL_CARD_CHANGE_1" else {}))
+        return scene
+
+    st.s.observe = observe
+    st._stage1_column = lambda pick, d: pick
+    st.on_skill_card_change(ctx)
+    assert seen.count("SKILL_CARD_CHANGE_1") == 2  # 第一帧拿不到，重读一帧
+    assert ctx.calls[0] == ("s1", 2)  # 按价值选 デイドリーミング，不是第 0 张

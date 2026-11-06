@@ -1073,14 +1073,25 @@ class HiroHifStrategy(HifGrindStrategy):
         self.s.recover("missing_fields", f"{page} 整副拼接不可信（{scan['problems']}），只用第一屏 {len(pf['cards'])} 张")
         return False
 
+    CHANGE1_DECIDE_RETRIES = 3  # 换卡阶段 1 拿不到换卡决策时再读几帧（等页面提交进状态），之后才退回第 0 张
+    CHANGE1_DECIDE_WAIT = 0.4
+
     def on_skill_card_change(self, ctx):
         """换卡：阶段 1 按决策选换入候选（候选未识别时选第 0 张），阶段 2 按决策的 card_id 换出；决策取消时点キャンセル。
         执行在 kaa_patches.change_stage1 / change_stage2（核心卡保护、认不出就取消）。KAA 原版固定换第 0 张，第 4 局因此丢了 デイドリーミング。"""
         cancel = False
         if ctx.stage == 1:
             t0 = time.monotonic()
-            obs = self.s.observe(scene="SKILL_CARD_CHANGE_1")
-            d = self.deciders.decide("SKILL_CARD_CHANGE_1", self.s.state)
+            # 换卡页刚出现的第一帧：识别已经认出候选，但页面要连续两帧才提交进状态，状态里还是上一页（获得饮料 / 饮料已满）的字段，
+            # 决策器读不到候选只能回 Wait，下面就会盲换第 0 张（Windows 第二局两次、Mac A5b 一次，2026-11-06）。再读几帧等状态提交。
+            for attempt in range(1 + self.CHANGE1_DECIDE_RETRIES):
+                obs = self.s.observe(scene="SKILL_CARD_CHANGE_1")
+                d = self.deciders.decide("SKILL_CARD_CHANGE_1", self.s.state)
+                if d.action.kind is ActionKind.CHANGE_CARD:
+                    break
+                if attempt < self.CHANGE1_DECIDE_RETRIES:
+                    self.s.record(obs, decision=d, timings_ms={"total": (time.monotonic() - t0) * 1000})
+                    time.sleep(self.CHANGE1_DECIDE_WAIT)
             args = d.action.args if d.action.kind is ActionKind.CHANGE_CARD else {}
             cancel = bool(args.get("cancel"))
             pick = int(args.get("pick_index") or 0)
