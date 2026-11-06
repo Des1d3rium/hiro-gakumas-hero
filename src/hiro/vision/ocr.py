@@ -5,8 +5,10 @@
   macOS 上默认用它。区域先放大 3 倍再识别，小号描边数字更稳。
 - rapidocr：KAA 自带的 RapidOCR（PaddleOCR 日文 / 英文模型，kotonebot.backend.ocr）。非 macOS（模拟器 / DMM）用它；
   **识别率与速度没有在本项目的回归截图上核对过**，换平台后先用回归截图验一遍（见 docs/assets.md）。
+- winocr：Windows 自带的文字识别（Windows.Media.Ocr，经 winrt 调用；要装了日文 OCR 语言，Windows 设置里加日语即可）。
+  Windows 实测单块区域约 0.05 s。它按「词」返回结果，日文是一字一词，这里按字间距拼回整行（见 _join_words）。
 
-HIRO_OCR=auto（缺省：macOS 且能导入 Vision → vision，否则 rapidocr）/ vision / rapidocr。
+HIRO_OCR=auto（缺省：macOS 且能导入 Vision → vision，否则 rapidocr）/ vision / rapidocr / winocr。
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ import sys
 import cv2
 from cv2.typing import MatLike
 
-ENGINES = ("auto", "vision", "rapidocr")
+ENGINES = ("auto", "vision", "rapidocr", "winocr")
 _engine: str | None = None
 
 
@@ -81,13 +83,80 @@ def _rapid_raw(img: MatLike, scale: float, languages) -> list[tuple[str, float, 
     return out
 
 
+_win: dict = {}
+
+
+def _win_engine(languages):
+    """按语言缓存 OcrEngine（只要英文时用 en-US，否则 ja）；事件循环也缓存，recognize_async 在里面同步跑完。"""
+    import asyncio
+
+    from winrt.windows.globalization import Language
+    from winrt.windows.media.ocr import OcrEngine
+
+    tag = "en-US" if tuple(languages) == ("en-US",) else "ja"
+    if tag not in _win:
+        eng = OcrEngine.try_create_from_language(Language(tag))
+        if eng is None:
+            raise RuntimeError(f"Windows OCR 没有 {tag} 语言：在 Windows 设置 → 时间和语言 → 语言里添加日语（含 OCR）")
+        _win[tag] = eng
+    if "loop" not in _win:
+        _win["loop"] = asyncio.new_event_loop()
+    return _win[tag], _win["loop"]
+
+
+def _join_words(words: list[tuple[str, tuple[float, float, float, float]]]) -> str:
+    """Windows OCR 一行里的词按位置拼接：间隙小于字高的 0.35 倍就直接相连（日文一字一词、「56.4」「%」），否则留一个空格。"""
+    out = ""
+    prev = None
+    for text, (x, y, w, h) in words:
+        if prev is not None:
+            px, pw, ph = prev
+            gap = x - (px + pw)
+            out += "" if gap < 0.35 * max(h, ph) else " "
+        out += text
+        prev = (x, w, h)
+    return out
+
+
+def _win_raw(img: MatLike, scale: float, languages) -> list[tuple[str, float, tuple[int, int, int, int]]]:
+    """img 已放大；框除以 scale 换回原图坐标。Windows OCR 不给置信度，统一记 1.0。"""
+    from winrt.windows.graphics.imaging import BitmapPixelFormat, SoftwareBitmap
+    from winrt.windows.storage.streams import DataWriter
+
+    eng, loop = _win_engine(languages)
+    bgra = cv2.cvtColor(img, cv2.COLOR_GRAY2BGRA if img.ndim == 2 else cv2.COLOR_BGR2BGRA)
+    h, w = bgra.shape[:2]
+    if min(h, w) < 40:   # 太小的图 Windows OCR 读不出，向右下补到 40（不影响原坐标）
+        bgra = cv2.copyMakeBorder(bgra, 0, max(0, 40 - h), 0, max(0, 40 - w), cv2.BORDER_REPLICATE)
+        h, w = bgra.shape[:2]
+    dw = DataWriter()
+    dw.write_bytes(bgra.tobytes())
+    bmp = SoftwareBitmap.create_copy_from_buffer(dw.detach_buffer(), BitmapPixelFormat.BGRA8, w, h)
+    res = loop.run_until_complete(eng.recognize_async(bmp))
+    out = []
+    for line in res.lines:
+        ws = [(wd.text, (wd.bounding_rect.x, wd.bounding_rect.y, wd.bounding_rect.width, wd.bounding_rect.height)) for wd in line.words]
+        if not ws:
+            continue
+        ws.sort(key=lambda t: t[1][0])
+        x1 = min(b[0] for _, b in ws)
+        y1 = min(b[1] for _, b in ws)
+        x2 = max(b[0] + b[2] for _, b in ws)
+        y2 = max(b[1] + b[3] for _, b in ws)
+        out.append((_join_words(ws), 1.0, (round(x1 / scale), round(y1 / scale), round(x2 / scale), round(y2 / scale))))
+    return out
+
+
 def ocr_boxes(img: MatLike, *, scale: float = 3.0, languages=("ja-JP", "en-US")) -> list[tuple[str, float, tuple[int, int, int, int]]]:
     """每段文字、置信度和它在 img 中的外接框 (x1, y1, x2, y2)。"""
     h, w = img.shape[:2]
     if scale != 1:
         img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-    if engine() == "vision":
+    eng = engine()
+    if eng == "vision":
         return _vision_raw(img, w, h, languages)
+    if eng == "winocr":
+        return _win_raw(img, scale, languages)
     return _rapid_raw(img, scale, languages)
 
 
