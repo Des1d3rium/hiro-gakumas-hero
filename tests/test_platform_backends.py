@@ -364,3 +364,15 @@ def test_finals_npc_score_with_dropped_digit_is_rejected(monkeypatch):
     reads = iter([598516, 60505])
     monkeypatch.setattr(hif, "_ocr_int", lambda im, box: next(reads) if box[2] - box[0] == hif.FINALS_NPC_W + 1 else None)
     assert hif.read_finals_ranking(img)["npc_scores"] == [598516, None]
+
+
+def test_imwrite_handles_non_ascii_path(tmp_path):
+    """标定帧目录是中文名（「换卡」）：Windows 上 OpenCV 的 imwrite 会静默失败，hiro.imgio.imwrite 先编码再写文件。"""
+    import cv2
+    import numpy as np
+
+    from hiro.imgio import imwrite
+
+    p = tmp_path / "20261107-063238-换卡" / "01-阶段1.jpg"
+    p.parent.mkdir()
+    assert imwrite(p, np.full((8, 8, 3), 200, np.uint8)) and cv2.imdecode(np.frombuffer(p.read_bytes(), np.uint8), 1).shape == (8, 8, 3)

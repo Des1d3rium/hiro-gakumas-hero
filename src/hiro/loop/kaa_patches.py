@@ -24,6 +24,7 @@ from collections.abc import Callable
 
 from kotonebot import device, logging
 from kotonebot.primitives import Rect
+from hiro import imgio
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +278,7 @@ def _save_scan_frames(frames, problems) -> None:
         d = CALIB_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}-牌组拼接"
         d.mkdir(parents=True, exist_ok=True)
         for i, f in enumerate(frames):
-            cv2.imwrite(str(d / f"screen{i:02d}.jpg"), f)
+            imgio.imwrite(str(d / f"screen{i:02d}.jpg"), f)
         (d / "problems.txt").write_text("\n".join(map(str, problems)), encoding="utf-8")
         logger.info("牌组拼接不可信，%d 屏存到 %s", len(frames), d)
     except Exception as e:  # noqa: BLE001
@@ -700,7 +701,7 @@ def _memory_snap(img, tag: str) -> None:
         d = CALIB_DIR / f"{time.strftime('%Y%m%d-%H%M%S', time.localtime(_memory_snap.t0))}-回忆"
         d.mkdir(parents=True, exist_ok=True)
         _memory_snap.n += 1
-        cv2.imwrite(str(d / f"{_memory_snap.n:02d}-{tag}.jpg"), img)
+        imgio.imwrite(str(d / f"{_memory_snap.n:02d}-{tag}.jpg"), img)
     except Exception:
         pass
 
@@ -953,7 +954,7 @@ def _snap_step3(orig):
             d = Path("reports/live/rental")
             d.mkdir(parents=True, exist_ok=True)
             p = d / f"step3-memory-{time.strftime('%Y%m%d-%H%M%S')}.png"
-            cv2.imwrite(str(p), img)
+            imgio.imwrite(str(p), img)
             texts = [t.text for t in ocr.ocr()]
             hit = [t for t in texts if "レンタル" in t]
             logger.info("第 3 步回忆选择：截图 %s；租借字样 %s", p, hit or "无")

@@ -22,6 +22,7 @@ from kotonebot import contains, device, logging, ocr
 from kotonebot.primitives import Rect
 
 from hiro.contracts import Action, ExecutionResult
+from hiro import imgio
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +251,7 @@ class Run:
             return
         self.calib.mkdir(parents=True, exist_ok=True)
         self._snaps += 1
-        cv2.imwrite(str(self.calib / f"{self._snaps:02d}-{tag}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        imgio.imwrite(str(self.calib / f"{self._snaps:02d}-{tag}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 90])
 
     def tap(self, xy) -> None:
         self.click_fn(int(xy[0]), int(xy[1]))

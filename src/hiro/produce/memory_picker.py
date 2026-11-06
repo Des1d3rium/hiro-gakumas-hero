@@ -25,6 +25,7 @@ import numpy as np
 from kotonebot import logging
 
 from hiro.produce.ops import find_text, ocr_boxes, roi_diff
+from hiro import imgio
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +175,7 @@ class Picker:
             return
         self.calib_dir.mkdir(parents=True, exist_ok=True)
         self._n += 1
-        cv2.imwrite(str(self.calib_dir / f"{self._n:04d}-{tag}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        imgio.imwrite(str(self.calib_dir / f"{self._n:04d}-{tag}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 90])
 
     def _wait_change(self, before, roi, timeout=TAP_TIMEOUT):
         t0 = self.clock()
@@ -352,7 +353,7 @@ def explore(picker: Picker, out_dir: Path) -> list[dict]:
     def shot(tag: str):
         img = picker.shoot()
         boxes = picker.ocr(img)
-        cv2.imwrite(str(out_dir / f"{len(log):02d}-{tag}.png"), img)
+        imgio.imwrite(str(out_dir / f"{len(log):02d}-{tag}.png"), img)
         log.append({"tag": tag, "texts": [[t, list(b)] for t, _, b in boxes]})
         (out_dir / "explore.json").write_text(json.dumps(log, ensure_ascii=False, indent=1))
         return img, boxes

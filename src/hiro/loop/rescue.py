@@ -29,6 +29,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from hiro.log import logging
+from hiro import imgio
 
 logger = logging.getLogger(__name__)
 
@@ -306,7 +307,7 @@ class Rescuer:
 
                 d = self.out_dir / f"{time.strftime('%Y%m%d-%H%M%S')}-{len(self.log)}"
                 d.mkdir(parents=True, exist_ok=True)
-                cv2.imwrite(str(d / "screen.jpg"), img)
+                imgio.imwrite(str(d / "screen.jpg"), img)
                 rec["dir"] = str(d)
                 (d / "record.json").write_text(json.dumps(rec, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
             except Exception:
