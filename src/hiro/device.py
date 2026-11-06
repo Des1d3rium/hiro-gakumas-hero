@@ -322,6 +322,30 @@ def _kaa_config(name: str):
     return config
 
 
+def _keep_swipe_duration(device) -> None:
+    """模拟器后端的滑动保留时长。KotoneBot 的 AdbImpl.swipe 会丢掉 duration（日志「Swipe duration is not supported
+    with AdbDevice」），快速划过去列表带惯性多滚；Windows + MuMu 第二局每次换卡翻牌组都这样。
+    有 MuMu 的 nemu_ipc 触摸就交给它（按 duration 分步移动），否则用 adb 自带的「input touchscreen swipe … 毫秒」。"""
+    parts = [getattr(device, a, None) for a in ("_touch", "_multitouch", "commands")]
+    nemu = next((c for c in parts if type(c).__name__ == "NemuIpcImpl"), None)
+    adb = next((c for c in parts if type(c).__name__ == "AdbImpl"), None)
+    if nemu is None and adb is None:
+        return
+    plain = device.swipe
+
+    def swipe(x1: int, y1: int, x2: int, y2: int, duration: float | None = None, **kw) -> None:
+        if not duration:
+            return plain(x1, y1, x2, y2, duration, **kw)
+        (a1, b1), (a2, b2) = device.scaler.logic_to_physical((x1, y1)), device.scaler.logic_to_physical((x2, y2))
+        a1, b1, a2, b2 = int(a1), int(b1), int(a2), int(b2)
+        if nemu is not None:
+            nemu.swipe(a1, b1, a2, b2, duration)
+        else:
+            adb.adb.shell(f"input touchscreen swipe {a1} {b1} {a2} {b2} {max(1, round(duration * 1000))}")
+
+    device.swipe = swipe
+
+
 def connect(backend: str | None = None) -> Device:
     """创建并启动连接游戏的设备，逻辑分辨率 720x1280。
 
@@ -336,6 +360,7 @@ def connect(backend: str | None = None) -> Device:
         from kaa.main.kaa import KaaDeviceFactory
 
         device = KaaDeviceFactory().create_device_for_config(_kaa_config(name))
+        _keep_swipe_duration(device)
     else:
         from kotonebot.client.device import MacOSDevice
         from kotonebot.client.implements.macos import QuartzImpl
