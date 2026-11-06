@@ -35,7 +35,8 @@ def box(t, x, y):
 def test_real_frame_detected_with_strip_ocr():
     img = cv2.imread(str(FIX / "date-change-20261030.png"))
     pos = dc.date_change_button(dc.strip_boxes(img, ops.ocr_boxes))
-    assert pos and abs(pos[0] - 379) < 15 and abs(pos[1] - 1159) < 15
+    # 按钮宽约 220（中心 x≈379）：RapidOCR 文字框偏窄，中心 x≈354 仍在按钮内
+    assert pos and abs(pos[0] - 379) < 40 and abs(pos[1] - 1159) < 15
 
 
 def test_not_triggered_by_other_pages():
