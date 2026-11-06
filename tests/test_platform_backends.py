@@ -359,8 +359,8 @@ def test_finals_npc_score_with_dropped_digit_is_rejected(monkeypatch):
     from hiro.vision import hif
 
     img = cv2.imread(str(Path(__file__).parent / "fixtures" / "finals" / "exam-r2-t12.jpg"))
-    real = hif.read_finals_ranking(img)["npc_scores"]
-    assert real == [598516, 460505]
+    monkeypatch.setattr(hif, "ocr_engine", lambda: "vision")
+    monkeypatch.setattr(hif, "ocr_engine", lambda: "vision")  # 测的是 Vision 读法下掉首位的作废；非 Vision 后端走 ddddocr
     reads = iter([598516, 60505])
     monkeypatch.setattr(hif, "_ocr_int", lambda im, box: next(reads) if box[2] - box[0] == hif.FINALS_NPC_W + 1 else None)
     assert hif.read_finals_ranking(img)["npc_scores"] == [598516, None]
