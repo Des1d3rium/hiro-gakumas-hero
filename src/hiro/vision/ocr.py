@@ -8,7 +8,10 @@
 - winocr：Windows 自带的文字识别（Windows.Media.Ocr，经 winrt 调用；要装了日文 OCR 语言，Windows 设置里加日语即可）。
   Windows 实测单块区域约 0.05 s。它按「词」返回结果，日文是一字一词：这里按间隙把一行拆成段、段内拼回文字（见 _split_words / _join_words）。
 
-HIRO_OCR=auto（缺省：macOS 且能导入 Vision → vision，否则 rapidocr）/ vision / rapidocr / winocr。
+- ppocr5：rapidocr 包里的 PaddleOCR PP-OCRv5（中日英一个模型，onnxruntime），比 KAA 自带的 RapidOCR 模型新；
+  Mac / Windows 结果一致。中日混合模型会把部分汉字认成简体（强化、交换済），按 _SIMPLIFIED 换回日文写法。
+
+HIRO_OCR=auto（缺省：macOS 且能导入 Vision → vision，否则 rapidocr）/ vision / rapidocr / winocr / ppocr5。
 """
 
 from __future__ import annotations
@@ -16,11 +19,12 @@ from __future__ import annotations
 import os
 import re
 import sys
+from pathlib import Path
 
 import cv2
 from cv2.typing import MatLike
 
-ENGINES = ("auto", "vision", "rapidocr", "winocr")
+ENGINES = ("auto", "vision", "rapidocr", "winocr", "ppocr5")
 _engine: str | None = None
 
 
@@ -168,6 +172,52 @@ def _win_raw(img: MatLike, scale: float, languages) -> list[tuple[str, float, tu
     return out
 
 
+# 只在简体中文里出现、日文不用的字 → 日文写法（PP-OCRv5 中日混合模型的读法；两边写法相同的字不收）
+_SIMPLIFIED = str.maketrans(dict(zip(
+    "强换查选择认识确战试验费结气动习课讲获领张级时间开关闭门问题说话读买卖价钱饮剧场进还对应实际现发处务员东车运转轮输边过达连补态优胜败负记录设计让训练绩续继绝经给线红约纪细终组织编缘网罗义书页顶项顺须预频颜风飞饰马驱鱼鸟乐兴举产亲亿传伤众华单卫历压变叶听启园围图圣坏块报备头夺奋宽导层岁岛带广库废异弹归忆怀总恶惊惯戏户扩扫护损据挥摄敌无显晓暂术机杂权极构标样树桥检欢测济满灵烧热爱猎环电疗盘盖监码础种积稳竞笔简类紧纯纸绘统维综绿缓缩罚职联脑艺节范药营虑见观规视览觉议许论访证评诉词译诗该详语误请诸谁调谈谢谱贝贡财责贤货质贩贯贵贴贸资赏赖赞赠跃践轻载较辅辈迁远违适递遗邮邻释钟钢银锁锐错键镜长闪闻阳阶阵陆险隐难额馆骑鲜鸣",
+    "強換査選択認識確戦試験費結気動習課講獲領張級時間開関閉門問題説話読買売価銭飲劇場進還対応実際現発処務員東車運転輪輸辺過達連補態優勝敗負記録設計譲訓練績続継絶経給線紅約紀細終組織編縁網羅義書頁頂項順須預頻顔風飛飾馬駆魚鳥楽興挙産親億伝傷衆華単衛歴圧変葉聴啓園囲図聖壊塊報備頭奪奮寛導層歳島帯広庫廃異弾帰憶懐総悪驚慣戯戸拡掃護損拠揮摂敵無顕暁暫術機雑権極構標様樹橋検歓測済満霊焼熱愛猟環電療盤蓋監碼礎種積穏競筆簡類緊純紙絵統維総緑緩縮罰職聯脳芸節範薬営慮見観規視覧覚議許論訪証評訴詞訳詩該詳語誤請諸誰調談謝譜貝貢財責賢貨質販貫貴貼貿資賞頼賛贈躍践軽載較輔輩遷遠違適逓遺郵隣釈鐘鋼銀鎖鋭錯鍵鏡長閃聞陽階陣陸険隠難額館騎鮮鳴",
+    strict=True,
+)))
+_pp: dict = {}
+
+
+PP_DIR_DEFAULT = Path(__file__).resolve().parents[3] / "cache" / "ppocr5"
+
+
+def _pp_engine(languages):
+    """PP-OCRv5 mobile（检测 + 中日英识别）。模型从 HIRO_PPOCR_DIR（缺省 cache/ppocr5）加载：KAA 把 onnxruntime 固定在 1.14
+    （Windows DLL 问题），只认 IR ≤ 8，rapidocr 自带的 v5 模型是 IR 10，要先用 tools/assets/ppocr_models.py 转一份。
+    数字也用同一个模型（英文模型读本项目的小号描边数字没有更好），languages 不再区分。"""
+    from rapidocr import LangRec, ModelType, OCRVersion, RapidOCR
+
+    if "eng" not in _pp:
+        d = Path(os.environ.get("HIRO_PPOCR_DIR") or PP_DIR_DEFAULT)
+        det, rec = d / "ch_PP-OCRv5_det_mobile.onnx", d / "ch_PP-OCRv5_rec_mobile.onnx"
+        if not det.exists() or not rec.exists():
+            raise RuntimeError(f"HIRO_OCR=ppocr5 要的模型不在 {d}：先跑 python tools/assets/ppocr_models.py")
+        _pp["eng"] = RapidOCR(params={
+            "Det.ocr_version": OCRVersion.PPOCRV5, "Det.model_type": ModelType.MOBILE, "Det.model_path": str(det),
+            "Rec.ocr_version": OCRVersion.PPOCRV5, "Rec.model_type": ModelType.MOBILE, "Rec.model_path": str(rec),
+            "Rec.lang_type": LangRec.CH, "Global.log_level": "error",
+        })  # fmt: skip
+    return _pp["eng"]
+
+
+def _pp_raw(img: MatLike, scale: float, languages) -> list[tuple[str, float, tuple[int, int, int, int]]]:
+    """img 已放大；四点框取外接矩形、除以 scale 换回原图坐标；简体字换回日文写法。"""
+    if img.ndim == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    res = _pp_engine(languages)(img)
+    if res.boxes is None or res.txts is None:
+        return []
+    out = []
+    for box, text, conf in zip(res.boxes, res.txts, res.scores, strict=False):
+        xs, ys = [p[0] for p in box], [p[1] for p in box]
+        out.append((str(text).translate(_SIMPLIFIED), float(conf),
+                    (round(min(xs) / scale), round(min(ys) / scale), round(max(xs) / scale), round(max(ys) / scale))))
+    return out
+
+
 def ocr_boxes(img: MatLike, *, scale: float = 3.0, languages=("ja-JP", "en-US")) -> list[tuple[str, float, tuple[int, int, int, int]]]:
     """每段文字、置信度和它在 img 中的外接框 (x1, y1, x2, y2)。"""
     h, w = img.shape[:2]
@@ -178,6 +228,8 @@ def ocr_boxes(img: MatLike, *, scale: float = 3.0, languages=("ja-JP", "en-US"))
         return _vision_raw(img, w, h, languages)
     if eng == "winocr":
         return _win_raw(img, scale, languages)
+    if eng == "ppocr5":
+        return _pp_raw(img, scale, languages)
     return _rapid_raw(img, scale, languages)
 
 
