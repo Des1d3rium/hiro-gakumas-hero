@@ -134,8 +134,10 @@ def _has(boxes, word: str, y_range: tuple[int, int] = (0, 1280)) -> tuple | None
 
 
 def _contains_near(text: str, word: str) -> bool:
-    """text 里有一段与 word 等长、只差一个字。"""
+    """text 里有一段与 word 等长、只差一个字；≥6 字的 word 掉了首字或末字也算（RapidOCR「カスタマイズメニュ」丢了末尾长音）。"""
     n = len(word)
+    if n >= 6 and (word[:-1] in text or word[1:] in text):
+        return True
     return any(sum(a != b for a, b in zip(text[i : i + n], word, strict=True)) <= 1 for i in range(len(text) - n + 1))
 
 
