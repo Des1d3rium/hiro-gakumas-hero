@@ -1,6 +1,7 @@
 """从使用者自己的考试截图里提取考试效果图标与 P 道具图标，补齐默认素材下认不出的效果名 / P 道具名。
 
-仓库不带游戏素材；这个工具只读你自己的截图，产物写到自建素材目录（HIRO_USER_ASSETS，默认 resources/user_assets/）：
+随仓库的素材包 assets/pack/ 已经带了这些图标；素材包缺的（游戏更新后新出的）或关掉素材包时，用这个工具从你自己的截图补，
+产物写到自建素材目录（HIRO_USER_ASSETS，默认 resources/user_assets/）：
     icons/status/img_general_icon_exam-effect_<类型>.png + index.json   考试效果（やる気、好印象 …）
     icons/pitem/<资源名>.png + index.json                              P 道具
 

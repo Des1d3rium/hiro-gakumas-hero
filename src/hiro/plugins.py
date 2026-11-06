@@ -28,7 +28,7 @@ Confidence = Literal["save", "screen"]
 
 @runtime_checkable
 class AssetSource(Protocol):
-    """游戏素材与主数据。默认实现：KAA 公开数据 + 使用者自己客户端截图采集的目录；不带任何游戏原始素材。"""
+    """游戏素材与主数据。默认实现：KAA 公开数据 + 随仓库的识别素材包 assets/pack/ + 使用者自建目录（见 hiro.defaults.assets）。"""
 
     def master_db(self) -> sqlite3.Connection | None:
         """卡牌 / 饮料 / P 道具 / 支援卡主数据（KAA game.db 同结构）。"""

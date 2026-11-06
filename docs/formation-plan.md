@@ -32,13 +32,13 @@
 + 卡面插画按分类遮罩裁形（主动卡六边形、精神卡圆形）+ 分类外框 + 深灰外框。`hiro.vision.card_icon_render` 按这个结构把每张卡面渲染成干净图标。
 认卡时把截图图标缩到 48×48，遮掉角标可能出现的区域，剩下的像素和全部模板比 Lab 距离，按卡汇总。
 
-启用（素材只在你本机，不随仓库发布）：
+启用（零件和卡面用随仓库的素材包 assets/pack/）：
 
 ```bash
-pip install UnityPy
-python tools/assets/export_card_sprites.py          # 从你自己的客户端导出 13 张界面精灵图到 $HIRO_USER_ASSETS/sprites
-python -m hiro.vision.card_icon_render build        # 用 KAA 卡面生成渲染库 cache/card_icons.npz（约 2200 张）
+python -m hiro.vision.card_icon_render build        # 生成渲染库 cache/card_icons.npz（约 2300 张，几分钟）
 ```
+
+关掉了素材包时，先 `pip install UnityPy` 再 `python tools/assets/export_card_sprites.py`，从你自己的客户端导出 13 张界面精灵图。
 
 - 「认出」= 最佳分 ≤ 20、和第二名差 ≥ 10、不是平色。离线验证（KAA 卡面）：正例 12 个（第 3 步 4 格 + 详情栏 8 个）全对，分差 ≥ 14；
   低清角标压满的一张、纯灰图、截到背景的位置落在「认不出」。

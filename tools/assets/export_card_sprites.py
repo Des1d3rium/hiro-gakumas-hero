@@ -1,7 +1,7 @@
 """从你自己安装的游戏客户端导出技能卡小图标要用的界面精灵图（13 张），放进使用者素材目录 sprites/。
 
-仓库不带游戏素材；这些图只在你本机使用。导出后运行 `python -m hiro.vision.card_icon_render build` 生成渲染库，
-开局第 3 步的回忆卡核对就会改用渲染模板（区分度比「和整张插画比」高很多，见 docs/formation-plan.md）。
+随仓库的素材包 assets/pack/sprites 已经带了这些图，一般不用跑；素材包关掉了、或游戏更新后图标样式变了时，用这个工具从你自己的客户端导出。
+之后运行 `python -m hiro.vision.card_icon_render build` 生成渲染库（见 docs/formation-plan.md）。
 
     pip install UnityPy
     python tools/assets/export_card_sprites.py [--client <客户端 Data/data.unity3d>] [--out <素材目录>/sprites]

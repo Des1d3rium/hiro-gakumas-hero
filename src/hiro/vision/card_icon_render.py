@@ -13,8 +13,8 @@
 - BaseFrame：整个方框 card_frame 九宫格，染成 (0.32, 0.36, 0.43)。
 叠在上面的角标（OnCardIcon：效果、「+」、费用、元気、课程数值、分类、定制计数）不画，认卡时按 OVERLAY_BOXES 遮掉。
 
-开源版：仓库不带游戏素材。渲染要的 8 张界面精灵图由 tools/assets/export_card_sprites.py 从使用者自己的客户端导出到素材目录 sprites/，
-卡面用 KAA 公开数据（skill_cards/），稀有度 / 分类查 KAA game.db。生成渲染库：
+开源版：渲染要的 13 张界面精灵图和卡面都在随仓库的素材包 assets/pack/ 里（关掉素材包时可用 tools/assets/export_card_sprites.py
+从自己的客户端导出精灵图、卡面退到 KAA 公开数据 skill_cards/），稀有度 / 分类查 KAA game.db。生成渲染库：
 
     python -m hiro.vision.card_icon_render build      # → cache/card_icons.npz（约 2300 张，几分钟）
 
