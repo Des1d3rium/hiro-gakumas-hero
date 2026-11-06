@@ -55,7 +55,8 @@ SCROLL_SETTLE = 0.8
 
 def picker_open(boxes) -> bool:
     """在回忆选择页：底部有「キャンセル」「決定」，底栏有「編成詳細」。"""
-    return all(find_text(boxes, t) is not None for t in ("キャンセル", "決定", "編成詳細"))
+    # 「編成詳細」RapidOCR 常读歪（半分辨率帧「成詳綱」），认中间的「成詳」也算；キャンセル / 決定 仍须都在
+    return all(find_text(boxes, t) is not None for t in ("キャンセル", "決定")) and find_text(boxes, ("編成詳細", "成詳")) is not None
 
 
 def grid_rows(img: np.ndarray) -> list[tuple[int, int]]:
@@ -92,7 +93,8 @@ def grid_cells(img: np.ndarray) -> list[dict]:
 
 def detail_page(boxes) -> int | None:
     for t, _, (x1, y1, x2, y2) in boxes:
-        if 480 <= (y1 + y2) // 2 <= 580 and (m := re.fullmatch(r"([12])/2", t.replace(" ", ""))):
+        # 斜杠 RapidOCR 常读成 1（「1/2」→「112」）；页码只有 1/2、2/2，三位且中间是 1 / l / I / | 也按斜杠算
+        if 480 <= (y1 + y2) // 2 <= 580 and (m := re.fullmatch(r"([12])[/1lI|]2", t.replace(" ", ""))):
             return int(m.group(1))
     return None
 
