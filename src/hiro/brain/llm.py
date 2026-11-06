@@ -2,10 +2,11 @@
 """LLM 适配层：决策层只依赖 LLMAdapter 协议（ask_json），换模型只改适配器 / 配置。
 
 - ClaudeCLI：本机 Claude Code CLI（claude -p），走用户订阅额度，无需 API key。
+- CodexCLI：本机 OpenAI Codex CLI（codex exec），用 ChatGPT 账号登录，无需 API key；Windows 上可用 Codex 应用自带的 codex.exe。
 - OpenAICompatible：任何 OpenAI Chat Completions 兼容接口（OpenAI / DeepSeek / OpenRouter / Ollama / vLLM…），只用标准库 urllib。
 - MockLLM：测试与离线回放用，按序返回预设回复。
 
-配置：from_spec("claude:sonnet") / from_spec("openai:gpt-4o-mini")；环境变量 HIRO_LLM 为默认 spec，
+配置：from_spec("claude:sonnet") / from_spec("codex") / from_spec("openai:gpt-4o-mini")；环境变量 HIRO_LLM 为默认 spec，
 OpenAI 兼容端点读 OPENAI_BASE_URL（默认 https://api.openai.com/v1）与 OPENAI_API_KEY。
 提示词版本：prompts/*.md 首行 <!-- version: x.y -->，由 prompt_version() 读出并写进每次调用记录。
 """
@@ -222,6 +223,71 @@ class ClaudeCLI:
         return LLMResult(data, text, dt, None if data is not None else "no json in reply", self.name, self.model, **_claude_usage(result))
 
 
+def find_codex() -> str | None:
+    """codex 可执行文件：HIRO_CODEX_BIN → PATH 里的 codex → Windows 上 Codex 应用包自带的 resources\\codex.exe。"""
+    import glob
+    import shutil
+
+    if os.environ.get("HIRO_CODEX_BIN"):
+        return os.environ["HIRO_CODEX_BIN"]
+    if found := shutil.which("codex"):
+        return found
+    try:
+        hits = sorted(glob.glob(r"C:\Program Files\WindowsApps\OpenAI.Codex_*\app\resources\codex.exe"))
+    except OSError:
+        hits = []
+    return hits[-1] if hits else None
+
+
+class CodexCLI:
+    """本机 OpenAI Codex CLI：codex exec 非交互调用，回复写进 -o 文件。用 ChatGPT 账号的登录（~/.codex），不需要 API key。
+
+    codex exec 没有单独的系统提示参数，系统提示和用户提示拼在一起从标准输入（UTF-8）传入；在空的临时目录里跑，
+    不让 Codex 把仓库的 AGENTS.md 当成指令读进去；-s read-only、--ephemeral 不留会话。
+    需要代理的网络：给进程设 HTTPS_PROXY（Codex 认这个环境变量）。2026-11-06 Windows 实测单次约 12 秒。"""
+
+    name = "codex-cli"
+
+    def __init__(self, model: str | None = None, timeout: float = 120, binary: str | None = None):
+        self.model = model or None
+        self.timeout = timeout
+        self.binary = binary or find_codex()
+
+    def _run(self, prompt: str, image_jpeg: bytes | None = None) -> LLMResult:
+        import tempfile
+
+        if not self.binary:
+            return LLMResult(None, "", 0.0, "找不到 codex（设 HIRO_CODEX_BIN 或把 codex 放进 PATH）", self.name, self.model)
+        t0 = time.monotonic()
+        with tempfile.TemporaryDirectory(prefix="hiro-codex-") as tmp:
+            out = Path(tmp) / "reply.txt"
+            cmd = [self.binary, "exec", "--skip-git-repo-check", "--ephemeral", "-s", "read-only", "--color", "never", "-o", str(out)]
+            if self.model:
+                cmd += ["-m", self.model]
+            if image_jpeg is not None:
+                img = Path(tmp) / "screen.jpg"
+                img.write_bytes(image_jpeg)
+                cmd += ["-i", str(img)]
+            cmd.append("-")
+            try:
+                proc = subprocess.run(cmd, input=prompt.encode("utf-8"), capture_output=True, timeout=self.timeout, cwd=tmp)
+            except subprocess.TimeoutExpired:
+                return LLMResult(None, "", time.monotonic() - t0, "timeout", self.name, self.model)
+            dt = time.monotonic() - t0
+            text = out.read_text(encoding="utf-8", errors="replace") if out.exists() else ""
+        if proc.returncode != 0 or not text.strip():
+            detail = (proc.stderr or b"").decode("utf-8", errors="replace").strip()[-300:]
+            return LLMResult(None, text, dt, f"exit {proc.returncode}: {detail}", self.name, self.model)
+        data = extract_json(text)
+        return LLMResult(data, text, dt, None if data is not None else "no json in reply", self.name, self.model)
+
+    def ask_json(self, system: str, user: str) -> LLMResult:
+        return self._run(f"{system}\n\n---\n\n{user}")
+
+    def ask_json_image(self, system: str, user: str, image_jpeg: bytes) -> LLMResult:
+        return self._run(f"{system}\n\n---\n\n{user}", image_jpeg)
+
+
 class OpenAICompatible:
     """OpenAI Chat Completions 兼容接口。要求 JSON 回复（response_format json_object，不支持的端点也靠 extract_json 兜底）。"""
 
@@ -303,18 +369,20 @@ class MockLLM:
 
 
 def from_spec(spec: str | None = None, **kw) -> LLMAdapter:
-    """"claude[:model]" / "openai:<model>" / "mock" → 适配器。spec 为 None 时读 HIRO_LLM，缺省 claude:sonnet。"""
+    """"claude[:model]" / "codex[:model]" / "openai:<model>" / "mock" → 适配器。spec 为 None 时读 HIRO_LLM，缺省 claude:sonnet。"""
     spec = spec or os.environ.get("HIRO_LLM") or "claude:sonnet"
     kind, _, model = spec.partition(":")
     if kind in ("claude", "claude-cli"):
         return ClaudeCLI(model=model or "sonnet", **kw)
+    if kind in ("codex", "codex-cli"):
+        return CodexCLI(model=model or None, **kw)
     if kind in ("openai", "openai-compatible"):
         if not model:
             raise ValueError("openai 适配器需要模型名：openai:<model>")
         return OpenAICompatible(model, **kw)
     if kind == "mock":
         return MockLLM(**kw)
-    raise ValueError(f"未知的 LLM spec：{spec!r}（支持 claude[:model] / openai:<model> / mock）")
+    raise ValueError(f"未知的 LLM spec：{spec!r}（支持 claude[:model] / codex[:model] / openai:<model> / mock）")
 
 
 def extract_json(text: str) -> dict | None:

@@ -232,3 +232,41 @@ def test_advance_blocks_title_read_as_katakana_he():
     from hiro.loop.advance import blocked
 
     assert blocked(["タイトルヘ"]) is not None
+
+
+# ---------------------------------------------------------------- Codex CLI 作为 LLM（Windows 上用 ChatGPT 账号）
+def test_codex_adapter_spec_and_missing_binary(monkeypatch):
+    from hiro.brain import llm
+
+    monkeypatch.setenv("HIRO_CODEX_BIN", "")
+    monkeypatch.setattr("shutil.which", lambda _: None)
+    a = llm.from_spec("codex:gpt-6-astra")
+    assert isinstance(a, llm.CodexCLI) and a.model == "gpt-6-astra"
+    a.binary = None
+    r = a.ask_json("sys", "user")
+    assert r.data is None and "找不到 codex" in r.error
+
+
+def test_codex_adapter_passes_utf8_prompt_and_reads_reply(monkeypatch, tmp_path):
+    """系统提示 + 用户提示拼成 UTF-8 从标准输入传；回复从 -o 文件读；在临时目录里跑（不读仓库 AGENTS.md）。"""
+    import subprocess as sp
+    from pathlib import Path
+
+    from hiro.brain import llm
+
+    seen = {}
+
+    def fake_run(cmd, input=None, capture_output=None, timeout=None, cwd=None):
+        seen.update(cmd=cmd, prompt=input.decode("utf-8"), cwd=cwd)
+        Path(cmd[cmd.index("-o") + 1]).write_text('{"action": "play", "card": 1}', encoding="utf-8")
+        return sp.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    a = llm.CodexCLI(binary="codex.exe")
+    r = a.ask_json("系统：只输出 JSON", "用户：出哪张牌")
+    assert r.error is None and r.data == {"action": "play", "card": 1}
+    assert "系统：只输出 JSON" in seen["prompt"] and "用户：出哪张牌" in seen["prompt"]
+    assert seen["cmd"][-1] == "-" and "read-only" in seen["cmd"] and "--ephemeral" in seen["cmd"]
+    assert seen["cwd"] and "hiro-codex-" in seen["cwd"]
+    r = a.ask_json_image("s", "u", b"\xff\xd8jpeg")
+    assert "-i" in seen["cmd"] and r.data == {"action": "play", "card": 1}
