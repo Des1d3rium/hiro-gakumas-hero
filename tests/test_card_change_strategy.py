@@ -125,3 +125,20 @@ def test_stage1_rereads_until_candidates_reach_state():
     st.on_skill_card_change(ctx)
     assert seen.count("SKILL_CARD_CHANGE_1") == 2  # 第一帧拿不到，重读一帧
     assert ctx.calls[0] == ("s1", 2)  # 按价值选 デイドリーミング，不是第 0 张
+
+
+def test_change_pick_by_cull_switch(monkeypatch):
+    """CHANGE_PICK_BY_CULL：换入按删卡顺序挑（最晚才会被删的），默认关时仍按 card_value（Win2 seq19：止められない想い vs 気まぐれハート）。"""
+    from hiro.brain import deciders as D
+
+    cands = [{"index": 0, "card_id": "p_card-02-men-2_056", "upgrade": 0, "name": "止められない想い"},
+             {"index": 1, "card_id": "p_card-02-men-3_043", "upgrade": 0, "name": "トキメキ"},
+             {"index": 2, "card_id": "p_card-02-men-2_100", "upgrade": 0, "name": "気まぐれハート"}]  # fmt: skip
+    state = GameState(page_fields={"candidates": cands}, produce={"mode": "produce-008"})
+    monkeypatch.setattr(D, "CHANGE_PICK_BY_CULL", False)
+    off = ProduceDeciders(CAMPUS_HIRO, None, change_controlled=True).change_pick(state).action.args["pick_index"]
+    monkeypatch.setattr(D, "CHANGE_PICK_BY_CULL", True)
+    on = ProduceDeciders(CAMPUS_HIRO, None, change_controlled=True).change_pick(state).action.args["pick_index"]
+    keys = {c["index"]: D.cull_key(c["card_id"], 0, finals=True) for c in cands}
+    assert off == 0  # 默认：价值最高的 止められない想い
+    assert on == max(keys, key=keys.get) and on != 1  # 开：最晚才会被删的；不挑冲突牌 トキメキ

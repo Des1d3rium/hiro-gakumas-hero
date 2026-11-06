@@ -1484,6 +1484,11 @@ class ProduceDeciders:
         if not cands:
             return Decision(Action.ui(ActionKind.WAIT, why="换卡候选未识别"), "换卡候选未识别", "fallback", 0.1, decider="card_change")
         scored = sorted(((card_value(c.get("card_id"), c.get("upgrade") or 0), c) for c in cands), key=lambda x: (-x[0], x[1].get("index", 0)))
+        if CHANGE_PICK_BY_CULL:
+            from hiro.state.produce import FINALS
+
+            finals = (state.produce or {}).get("mode") == FINALS
+            scored.sort(key=lambda x: (cull_key(x[1].get("card_id"), x[1].get("upgrade") or 0, finals=finals), x[0]), reverse=True)
         value, best = scored[0]
         notes = [f"#{c.get('index')} {_card_label(c)} {v:g}" for v, c in scored]
         # 阶段 1 没有取消键（main8：取消后绕回换卡页死循环），所以总是选最好的那张
@@ -1777,6 +1782,10 @@ SLEEP_ID = "p_card-00-acc-0_002"  # 眠気
 # 按瘦牌组规则（能刷新先刷新，否则拿最不污染的：一次性 > 不生成眠気 > 不冲突），不取游戏推荐。行为变化，默认关
 SELECT_NONE_LEAN = True  # 开源版默认开（主仓库 D40）
 SELECTION_LEAN_PICK = False  # 选拔里必拿已齐、候选无核心卡时按瘦牌组规则选（不调 LLM；协调 2026-11-03 提速）。行为变化，默认关，等用户答复（总控 2026-11-03）
+# 换卡阶段 1 按删卡顺序挑换入卡（协调 2026-11-07）：原来只按 card_value 挑，换出却按 cull_key（删卡顺序）排，
+# 结果换进来的往往正是下次最先换掉的那类（Win2：换进「止められない想い」价值 2，下一次换卡就把它换掉，牌组里 3 张元気な挨拶 没动）。
+# 开：换入挑 cull_key 最大的（最晚才会被删），同档再比价值。行为变化，默认关；HIRO_CHANGE_PICK_BY_CULL=1 打开
+CHANGE_PICK_BY_CULL = __import__("os").environ.get("HIRO_CHANGE_PICK_BY_CULL") == "1"
 CHANGE_JUNK_VALUE = 1.0  # card_value ≤ 它算「废牌」（冲突 0、基础卡 0.5、好印象系 1）：授業セレクトチェンジ 只在有废牌时才选
 # 授業是セレクトチェンジ 的日子 [wiki]：选拔第 10、17 天，本战第 1、4 天（step = 日程位置）
 CHANGE_STUDY_DAYS = {("produce-007", 10), ("produce-007", 17), ("produce-008", 1), ("produce-008", 4)}
