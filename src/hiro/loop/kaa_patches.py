@@ -909,6 +909,27 @@ def _check_support(img) -> None:
     logger.info("支援卡编成核对通过（编成 %s）", kaa_env.SUPPORT_SET)
 
 
+def _check_memory_cards(img, plan: dict) -> tuple[list[str], list[str]]:
+    """第 3 步四格回忆的技能卡小图标 vs 方案的回忆卡。HIRO_MEMORY_CARD_CHECK：block（默认，有把握认错就拦）/ warn / off。"""
+    import os
+
+    mode = (os.environ.get("HIRO_MEMORY_CARD_CHECK") or "block").lower()
+    if mode == "off":
+        return [], []
+    try:
+        from hiro.produce.formation_check import check_memory_cards
+        from hiro.vision.memory_icons import read_step3_icons
+
+        reads = read_step3_icons(img, expect=list((plan.get("memory") or {}).get("cards") or []))
+        logger.info("第 3 步回忆图标：%s", "；".join(f"{r['slot'] + 1}:{r['card']} {r['score']}" for r in reads))
+        problems, warnings = check_memory_cards(reads, plan)
+    except Exception as e:  # noqa: BLE001
+        return [], [f"回忆卡面核对失败（不拦开局）：{e}"]
+    if mode == "warn":
+        return [], warnings + [p + "（HIRO_MEMORY_CARD_CHECK=warn，不拦）" for p in problems]
+    return problems, warnings
+
+
 def _check_memory_set() -> None:
     """有开局编成方案时，在 KAA 选完回忆编成后读「N/20」核对编成号；对不上抛 FormationMismatch。"""
     from hiro import kaa_env
@@ -925,6 +946,9 @@ def _check_memory_set() -> None:
     except Exception as e:  # noqa: BLE001
         logger.warning("回忆编成核对失败（不拦开局）：%s", e)
         return
+    if not problems:
+        p2, w2 = _check_memory_cards(img, kaa_env.ACTIVE_PLAN)
+        problems, warnings = problems + p2, warnings + w2
     for w in warnings:
         logger.warning("回忆编成核对：%s", w)
     if problems:

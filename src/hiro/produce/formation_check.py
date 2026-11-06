@@ -4,7 +4,8 @@
 - 第 2 步「サポート選択」：read_support_formation 读 5 格自己的卡，和方案的 own 比。认出来的卡不在方案里、或全部认出但缺方案里的卡、
   或编成号读出来和方案不同 → 不一致；有格子认不出时只记警告（素材库认不全不该卡住开局）。
 - 第 3 步「メモリー選択」：KAA 选完编成后读左侧「N/20」，编成号和方案不同 → 不一致。
-  回忆卡本身还核对不了：第 3 步的技能卡小图标用现有卡面库匹配分只有 0.3–0.5（2026-11-06 用 11-04 截图试过），要实机标注帧再做。
+  再用 vision.memory_icons 认四格回忆的技能卡小图标（check_memory_cards）：某格有把握地认成方案外的卡 → 不一致；
+  认不出 / 拿不准只记警告。HIRO_MEMORY_CARD_CHECK=warn 只警告不拦，off 不认图标。
 """
 
 from __future__ import annotations
@@ -70,3 +71,42 @@ def check_memory_step3(number: int | None, plan: dict) -> tuple[list[str], list[
     if number != mem["set"]:
         return [f"メモリー编成号 {number} 不是方案的 {mem['set']}"], []
     return [], []
+
+
+CONFIDENT_MARGIN = 5.0  # 认出的卡比方案里最像的那张至少好这么多分，才算「有把握不是方案的卡」
+
+
+def check_memory_cards(reads: list[dict], plan: dict, names: dict | None = None) -> tuple[list[str], list[str]]:
+    """reads：vision.memory_icons.read_step3_icons(img, expect=方案回忆卡) 的结果。返回 (不一致, 警告)。
+    不看顺序（游戏里格子的顺序可以和方案不同）；names：卡键 → 卡名，只用于提示文字。"""
+    from hiro.vision.memory_icons import card_key
+
+    mem = (plan or {}).get("memory") or {}
+    expect = [card_key(c) for c in mem.get("cards") or [] if card_key(c)]
+    if not expect:
+        return [], ["方案里没有回忆卡，跳过卡面核对"]
+    names = dict(names or {})
+    for c in mem.get("chosen") or []:
+        if card_key(c.get("card_id") or ""):
+            names.setdefault(card_key(c["card_id"]), c.get("name"))
+
+    def nm(k):
+        return names.get(k) or k
+
+    problems, warnings, unknown = [], [], 0
+    for r in reads:
+        i = r.get("slot", 0) + 1
+        if not r.get("known"):
+            unknown += 1
+            warnings.append(f"第 {i} 格回忆的卡认不出" + (f"（最像 {nm(r['card'])}，分 {r['score']}）" if r.get("card") else "（没有卡面素材）"))
+            continue
+        if r["card"] in expect:
+            continue
+        exp = {card_key(k): v for k, v in (r.get("expect_scores") or {}).items()}
+        best_k = min(exp, key=exp.get) if exp else None
+        gap = exp[best_k] - r["score"] if best_k else float("inf")
+        msg = f"第 {i} 格回忆像 {nm(r['card'])}（分 {r['score']}），不是方案里的卡" + (f"（方案里最像的 {nm(best_k)} 分 {exp[best_k]}）" if best_k else "")
+        (problems if gap >= CONFIDENT_MARGIN else warnings).append(msg if gap >= CONFIDENT_MARGIN else msg + "，差距不大，不拦")
+    if reads and unknown == len(reads):
+        warnings.append("四格回忆都认不出：第 3 步布局可能变了，图标位置要重新标定")
+    return problems, warnings
