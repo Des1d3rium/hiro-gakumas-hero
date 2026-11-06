@@ -92,3 +92,19 @@ schedule_hif.json 日程（有则优先于仓库自带）
 - 「没有字体」的读法另有用例（`test_no_font_*`），把字体模板换成空，有没有字体都跑。
 - `test_capture_icons.py` 只用合成图（标 `@pytest.mark.synthetic`，不按「读样例截图」跳过），CI 上也跑。
 - 跑带截图样例的测试：设 `HIRO_FIXTURES`（样例目录）、`HIRO_KAA_GAME_DATA`（KAA 公开数据），不要在仓库目录生成 `resources/`。
+
+## 文字识别后端：Apple Vision 与 RapidOCR（`HIRO_OCR`）
+
+macOS 缺省用 Apple Vision，其他系统自动改用 KAA 自带的 RapidOCR（日文 / 英文 PaddleOCR 模型）。
+2026-11-06 在作者的实机截图回归集上对比（同一份代码和缓存，只换 OCR 后端；Mac M4）：
+
+| | Apple Vision | RapidOCR |
+|---|---|---|
+| 回归用例通过数 | 基线 | 比基线少 36 个，没有一个反而变好 |
+| 全套回归耗时 | 约 3.5 分钟 | 约 16 分钟（约 4.5 倍） |
+
+RapidOCR 多错的集中在：选行动页和考试说明页的文字（`test_pages`、`test_action`、`test_quick_pages`）、
+没有数字字体时的 HUD 数字和排名分数、回忆能力页、刷新确认页、星数获得页。
+也就是说，在非 macOS 平台上判页和读数会比 macOS 弱一截、也更慢；能玩，但遇到「认不出就停下」的情况会更多。
+换到 Windows / 模拟器后，建议先用自己的截图跑一遍识别回归（`HIRO_FIXTURES` 指向截图目录，`HIRO_OCR=rapidocr`），
+再决定要不要为常错的读数加模板或调阈值。
