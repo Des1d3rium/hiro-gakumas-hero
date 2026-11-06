@@ -287,3 +287,52 @@ def test_r1_turn_weighted_gain_prefers_heavier_r1_attr():
     capped = SimpleNamespace(**{**st.__dict__, "params": {"Vo": 3150, "Da": 2268, "Vi": 913}})
     assert C.r1_turn_weighted_gain(capped, {"Vo": 180}) == 4 * 50  # 到上限为止
     assert C.r1_turn_weighted_gain(SimpleNamespace(**{**st.__dict__, "mode": "produce-007"}), {"Vo": 180}) is None  # 选拔不算
+
+
+def test_emulator_swipe_keeps_duration():
+    """MuMu / adb 后端：带时长的滑动不再被 AdbImpl 丢掉时长（Windows 第二局换卡翻牌组每次都快速划）。"""
+    from hiro.device import _keep_swipe_duration
+
+    class Scaler:
+        def logic_to_physical(self, p):
+            return (p[0] * 1.5, p[1] * 1.5)
+
+    class NemuIpcImpl:
+        def __init__(self):
+            self.calls = []
+
+        def swipe(self, *a):
+            self.calls.append(a)
+
+    class Adb:
+        def __init__(self):
+            self.cmds = []
+
+        def shell(self, cmd):
+            self.cmds.append(cmd)
+
+    class AdbImpl:
+        def __init__(self):
+            self.adb = Adb()
+
+    class Dev:
+        def __init__(self, touch, commands):
+            self.scaler, self._touch, self._multitouch, self.commands = Scaler(), touch, None, commands
+            self.plain = []
+
+        def swipe(self, *a, **kw):
+            self.plain.append(a)
+
+    nemu, adb = NemuIpcImpl(), AdbImpl()
+    d = Dev(nemu, adb)
+    _keep_swipe_duration(d)
+    d.swipe(100, 200, 100, 400, duration=0.6)
+    assert nemu.calls == [(150, 300, 150, 600, 0.6)] and adb.adb.cmds == []
+    d.swipe(1, 2, 3, 4)  # 不带时长照旧
+    assert d.plain == [(1, 2, 3, 4, None)]
+
+    adb2 = AdbImpl()
+    d2 = Dev(adb2, adb2)
+    _keep_swipe_duration(d2)
+    d2.swipe(100, 200, 100, 400, duration=0.4)
+    assert adb2.adb.cmds == ["input touchscreen swipe 150 300 150 600 400"]
