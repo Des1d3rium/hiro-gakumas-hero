@@ -194,6 +194,17 @@ def read_stamina(img: MatLike) -> tuple[int, int] | None:
     return next((r for t in texts if (r := parse_stamina(t))), None)
 
 
+DAYS_DIGIT_BOX = (78, 82, 118, 132)  # 左上「N日」的大号数字（不含「日」）
+
+
+def _days_dddd(img: MatLike) -> int | None:
+    """OCR 没读出「N日」时（RapidOCR 只读到「日」），用 ddddocr 读固定位置的大号数字：8 帧回归全对。"""
+    from hiro.vision.digits import read_dddd
+
+    v = read_dddd(img, DAYS_DIGIT_BOX)
+    return v if v is not None and 1 <= v <= 30 else None
+
+
 def read_action_select(img: MatLike) -> ActionSelectState:
     header = " ".join(t for t, _ in ocr(img[:HEADER_BAND, :280], scale=2))
     exam = re.search(r"(\S+?)まで", header)
@@ -214,8 +225,8 @@ def read_action_select(img: MatLike) -> ActionSelectState:
         growth[a] = float(g.group(1)) if g else None
     advice = "".join(t for t, _ in ocr(img[slice(*ADVICE_BAND)], scale=2)) or None
     return ActionSelectState(
-        exam=exam.group(1) if exam else None,
-        days_left=int(days.group(1)) if days else None,
+        exam=re.sub(r"H\.?I\.?F", "H.I.F", exam.group(1)) if exam else None,  # RapidOCR 会漏点（「HI.F本戦」）
+        days_left=int(days.group(1)) if days else _days_dddd(img),
         stamina=stamina[0] if stamina else None,
         max_stamina=stamina[1] if stamina else None,
         p_points=int(points.group()) if points else None,
