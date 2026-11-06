@@ -127,7 +127,16 @@ def _texts(img: MatLike) -> list[tuple[str, tuple[int, int, int, int]]]:
 
 
 def _has(boxes, word: str, y_range: tuple[int, int] = (0, 1280)) -> tuple | None:
-    return next((b for t, b in boxes if word in t and y_range[0] <= (b[1] + b[3]) // 2 <= y_range[1]), None)
+    from hiro.vision.ocr import engine
+
+    loose = len(word) >= 4 and engine() != "vision"  # RapidOCR 等常错一个字（「スター性獲得」→「ネター性獲得」）
+    return next((b for t, b in boxes if (word in t or (loose and _contains_near(t, word))) and y_range[0] <= (b[1] + b[3]) // 2 <= y_range[1]), None)
+
+
+def _contains_near(text: str, word: str) -> bool:
+    """text 里有一段与 word 等长、只差一个字。"""
+    n = len(word)
+    return any(sum(a != b for a, b in zip(text[i : i + n], word, strict=True)) <= 1 for i in range(len(text) - n + 1))
 
 
 _last: tuple[bytes, tuple[str, dict] | None] | None = None
