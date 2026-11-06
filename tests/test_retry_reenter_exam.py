@@ -71,5 +71,5 @@ def test_strategy_sets_flag_on_finals_retry(monkeypatch):
     monkeypatch.setattr(pages, "classify_page", lambda img: ("HIF_FINALS_RANKING", {"kind": "final", "rank": 2, "outcome": "敗退"}))
     btn = NS(text="再挑戦", rect=NS(center=NS(y=1100)))
     monkeypatch.setattr(hif, "ocr", NS(ocr=lambda: [btn]))
-    st._click_retry = lambda label, b, texts: "free"
+    st._click_retry = lambda label, b, texts, **kw: "free"
     assert st._finals_retry(None, "r2") is True and st.exam_restarted is True

@@ -109,6 +109,24 @@ def retry_cost(boxes) -> str | None:
         return "free"
     return None
 
+# 再挑戦止损（协调 2026-11-07）：本战 R2 打完、要夺冠还需要的 R2 分数超过本次 R2 得分的 RETRY_STOP_LOSS_FACTOR 倍时，
+# 再挑戦不用券（免费照常）。Win2：R2 第一次 19 万、要夺冠需要约 83.5 万，还用了 2 张券、越打越低。行为变化，默认关；HIRO_RETRY_STOP_LOSS=1 打开
+RETRY_STOP_LOSS = __import__("os").environ.get("HIRO_RETRY_STOP_LOSS") == "1"
+RETRY_STOP_LOSS_FACTOR = 2.0
+
+
+def finals_hopeless(f: dict) -> str | None:
+    """本战最终结果页字段 → 翻不了盘时给原因（字符串），否则 None。读数不全时不判（None）。"""
+    score, rnd = f.get("score"), f.get("round_score")
+    tops = [e.get("score") for e in f.get("entries") or [] if e.get("score") is not None and e.get("score") != score]
+    if not score or not rnd or not tops:
+        return None
+    need = max(tops) - (score - rnd)  # 我方 R1 不变，R2 至少要拿这么多才追平第一
+    if need > RETRY_STOP_LOSS_FACTOR * rnd:
+        return f"夺冠需要 R2 {need:,}，本次 R2 {rnd:,}，超过 {RETRY_STOP_LOSS_FACTOR:g} 倍"
+    return None
+
+
 class HiroHifStrategy(HifGrindStrategy):
     recorder: Recorder | None = None
     session: Session | None = None  # run_hif 注入；None 时自动建一个（trace 仍会写）
@@ -1453,7 +1471,7 @@ class HiroHifStrategy(HifGrindStrategy):
                         pass
         return n
 
-    def _click_retry(self, label: str, btn, texts) -> str | None:
+    def _click_retry(self, label: str, btn, texts, *, allow_ticket: bool = True) -> str | None:
         """点「再挑戦」并处理确认框（用户 2026-11-01 授权：免费 / 再挑戦券随便用，消耗ジュエル的绝不点）。
         返回 "free" / "ticket"，没有确认或要花ジュエル（已点キャンセル）时返回 None。"""
         used = self._retries_so_far(label)
@@ -1486,6 +1504,14 @@ class HiroHifStrategy(HifGrindStrategy):
                 kind = "free"
             elif "券" in words:
                 kind = "ticket"
+            if kind == "ticket" and not allow_ticket:
+                # 止损（RETRY_STOP_LOSS）：翻不了盘时不用券，点キャンセル（免费的照常用）
+                cancel = next((t for t in boxes if "キャンセル" in t.text), None)
+                if cancel is not None:
+                    device.click(cancel.rect)
+                self.s.note(f"{label} 再挑戦要用再挑戦チケット，但差距翻不了盘：已取消（RETRY_STOP_LOSS）")
+                logger.warning("%s 再挑戦要用券，差距翻不了盘，已取消（RETRY_STOP_LOSS）", label)
+                return None
             hit = next((t for t in boxes if any(button_text(t.text, w) for w in self.RETRY_CONFIRM) and t.rect.center.y > 600), None)
             if hit is None:
                 if clicks:
@@ -1524,7 +1550,10 @@ class HiroHifStrategy(HifGrindStrategy):
         btn = next((t for t in texts if button_text(t.text, "再挑戦") and t.rect.center.y > 900), None)
         if btn is None:
             return False
-        kind = self._click_retry(label, btn, texts)
+        hopeless = RETRY_STOP_LOSS and finals_hopeless(f)
+        if hopeless:
+            logger.info("本战差距翻不了盘（%s）：再挑戦只用免费次数，不用券（RETRY_STOP_LOSS）", hopeless)
+        kind = self._click_retry(label, btn, texts, allow_ticket=not hopeless)
         if kind is None:
             return False
         logger.info("本战敗退（第 %s 名，总分 %s），使用再挑戦（%s）", f.get("rank"), f.get("score"), kind)
