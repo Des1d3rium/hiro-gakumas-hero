@@ -1,13 +1,17 @@
-# 来源：digital-hiro src/hiro/vision/memory_icons.py（95294d2）；开源版：卡面目录走 AssetSource.card_art_dir()（GPL-3.0-or-later）
-"""回忆小图标认卡：开局第 3 步「メモリー選択」每格回忆右侧的技能卡小图（约 84 像素），以及回忆选择页详情栏的大图标。
+# 来源：digital-hiro src/hiro/vision/memory_icons.py（5af2874）；开源版：渲染库读 cache/card_icons.npz，卡面走 AssetSource.card_art_dir()（GPL-3.0-or-later）
+"""回忆小图标认卡：开局第 3 步「メモリー選択」每格回忆右侧的技能卡小图，以及回忆选择页详情栏的大图标。
 
-做法（2026-11-06，离线 13 个带标注样本 12 个排第一）：
-- 图标四边各裁 7%（去掉外框），缩到 24x24，转 Lab；卡面库（素材包 cards/，每张 256 像素整图）同样处理。
-- 逐像素算 Lab 距离，只取最像的 60% 像素求平均：左侧效果角标、右上「+」、右下费用、左上计数这些叠加物最多盖掉四成，不影响分数。
-- 同一张卡有各偶像的插画版本（文件名后缀 -shro / -amao …）。回忆可以来自别的偶像，所以全部角色都比，按卡汇总（取最像的版本）。
-- 分数越小越像。认对的样本最佳分 4.6–18.7，和第二名至少差 3.8；唯一认错的是 360 宽低清帧、角标压满的アノマリー卡，最佳分 27.4。
-- 「认出」要同时满足：最佳分 ≤ UNKNOWN_SCORE、和第二名差 ≥ MIN_MARGIN、图标不是一片平色（灰度标准差 ≥ MIN_STD）。
-  纯灰图、截到背景的位置最佳分可能不高，但和第二名只差 0.2–1.9，靠分差挡掉。
+主方法（2026-11-06 起，「渲染模板」）：cache/card_icons.npz 里每张卡面都按游戏 UI 真实结构渲染成了干净的小图标
+（hiro.vision.card_icon_render：稀有度底色、六边形 / 圆形分类遮罩、外框都和游戏一样；生成方法见那个模块的说明）。
+截图里的图标缩到 48×48 转 Lab，遮掉角标可能出现的区域（card_icon_render.OVERLAY_BOXES），剩下的像素逐个算 Lab 距离求平均。
+同一张卡的各偶像插画版本都比，按卡汇总。
+离线验证（r305 素材包，2026-11-06）：正例 12 个（第 3 步实机帧 4 格 + 详情栏 8 个大图标）全部排第一，最佳分 ≤15.1、
+和第二名差 ≥13.9（旧方法 ≥3.6）；反例 9 个（低清角标压满的卡、纯灰图、截到背景 / 偏位的位置）和第二名差 ≤6.9。
+比过的其他做法：只取最像的 60–80% 像素、只遮常见角标、不遮，正反例的分差都会重叠或更近。
+
+退路（没有渲染库时，「插画」）：图标四边裁 7%，和卡面目录的整张插画比、取最像的 60% 像素；没有卡面目录时一律「认不出」。
+
+「认出」要同时满足：最佳分 ≤ 认不出线、和第二名差 ≥ 分差线、图标不是一片平色。两种方法的线不同（THRESHOLDS）。
 """
 
 from __future__ import annotations
@@ -20,25 +24,19 @@ import cv2
 import numpy as np
 from cv2.typing import MatLike
 
-INSET = 0.07  # 图标四边裁掉的比例（外框）
-SIZE = 24
-KEEP = 0.6  # 只取最像的这部分像素
-UNKNOWN_SCORE = 22.0  # 最佳分比这个差 = 认不出（遮挡 / 低清 / 布局变了）
-MIN_MARGIN = 3.0  # 和第二名的分差小于这个 = 认不出
+# 第 3 步「メモリー選択」四格回忆的技能卡小图标（720x1280，x1, y1, x2, y2）：用正确答案的渲染图在 2026-11-04 实机帧上
+# 搜出的位置，边长 87（96 设计单位 × 0.906）；顺序 左上、右上、左下、右下
+STEP3_ICONS = ((261, 744, 348, 831), (587, 744, 674, 831), (261, 875, 348, 962), (587, 875, 674, 962))
+DETAIL_ICON = (44, 222, 192, 370)  # 回忆选择页详情栏的大图标（同法在 scan-0001 帧上搜出，边长 148）
+
+ICON = 48  # 渲染模板的边长
+KEEP_RENDER = 1.0  # 遮掉角标后剩下的像素全部参与
+KEEP_ART, INSET_ART, SIZE_ART = 0.6, 0.07, 24
 MIN_STD = 15.0  # 图标灰度标准差小于这个 = 不是图标（平色）
-CACHE = os.path.join("cache", "memory_icon_index.npz")
-
-# 第 3 步「メモリー選択」四格回忆的技能卡小图标（720x1280；2026-11-04 实机帧 tests/fixtures/support/step3-memory.jpg）
-STEP3_ICONS = ((262, 745, 346, 828), (588, 745, 672, 828), (262, 877, 346, 960), (588, 877, 672, 960))
-DETAIL_ICON = (44, 224, 190, 366)  # 回忆选择页详情栏的大图标（x1, y1, x2, y2），同 vision.memory.CARD_ICON
-
-
-def _feat(img: MatLike, inset: float) -> np.ndarray:
-    h, w = img.shape[:2]
-    dy, dx = int(h * inset), int(w * inset)
-    img = img[dy : h - dy, dx : w - dx]
-    g = cv2.resize(img, (SIZE, SIZE), interpolation=cv2.INTER_AREA)
-    return cv2.cvtColor(g, cv2.COLOR_BGR2LAB).astype(np.float32).reshape(-1, 3)
+# 方法 → (认不出线, 分差线)。渲染模板：正例最佳分 ≤15.1、分差 ≥13.9，反例分差 ≤6.9，分差线取中间 10；
+# 插画（退路）：正例最佳分 4.6–18.7、分差 ≥3.6，反例分差 ≤1.9
+THRESHOLDS = {"render": (20.0, 10.0), "art": (22.0, 3.0)}
+ART_CACHE = os.path.join("cache", "memory_icon_index.npz")
 
 
 def card_key(name: str) -> str | None:
@@ -47,40 +45,78 @@ def card_key(name: str) -> str | None:
     return m.group(0) if m else None
 
 
+def _lab(img: MatLike) -> np.ndarray:
+    return cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
+
+
 @lru_cache(maxsize=1)
-def _index() -> tuple[list[str], list[str], np.ndarray]:
-    """(素材名, 卡键, 特征矩阵 N×P×3)。按素材目录的文件数 / 修改时间缓存到 cache/。"""
+def _render_index() -> tuple[list[str], list[str], np.ndarray, np.ndarray] | None:
+    """(素材名, 卡键, Lab 特征 N×P×3, 参与比对的像素掩码)。cache/card_icons.npz 不存在时 None。"""
+    from hiro.vision.card_icon_render import CACHE, overlay_mask
+
+    path = CACHE
+    if not path.exists():
+        return None
+    data = np.load(path, allow_pickle=False)
+    names = [str(n) for n in data["names"]]
+    mask = overlay_mask(ICON)
+    feats = np.stack([_lab(im)[mask] for im in data["imgs"]])
+    return names, [card_key(n) or n for n in names], feats, mask
+
+
+@lru_cache(maxsize=1)
+def _art_index() -> tuple[list[str], list[str], np.ndarray]:
+    """退路：卡面目录的整张插画（四边不裁），24×24 Lab。按目录文件数 / 修改时间缓存到 cache/。没有卡面目录时为空。"""
     from hiro.vision import assets
 
     root = assets.card_art_dir()
     if root is None:
-        return [], [], np.zeros((0, SIZE * SIZE, 3), np.float32)  # 没有卡面素材：一律「认不出」，开局核对只警告
+        return [], [], np.zeros((0, SIZE_ART * SIZE_ART, 3), np.float32)
     folder = str(root)
     files = sorted(n for n in os.listdir(folder) if n.endswith(".png") and "_mid-" not in n)
-    stamp = f"{len(files)}-{int(os.path.getmtime(folder))}-{SIZE}"
-    if os.path.exists(CACHE):
-        data = np.load(CACHE, allow_pickle=False)
+    stamp = f"{len(files)}-{int(os.path.getmtime(folder))}-{SIZE_ART}"
+    if os.path.exists(ART_CACHE):
+        data = np.load(ART_CACHE, allow_pickle=False)
         if str(data["stamp"]) == stamp:
             names = list(data["names"])
             return names, [card_key(n) or n for n in names], data["matrix"]
     names, rows = [], []
     for n in files:
         img = cv2.imread(os.path.join(folder, n))
-        if img is None:
-            continue
-        names.append(n.rsplit(".", 1)[0])
-        rows.append(_feat(img, 0.0))
+        if img is not None:
+            names.append(n.rsplit(".", 1)[0])
+            rows.append(_art_feat(img, 0.0))
     matrix = np.stack(rows)
-    os.makedirs(os.path.dirname(CACHE), exist_ok=True)
-    np.savez(CACHE, names=np.array(names), matrix=matrix, stamp=np.array(stamp))
+    os.makedirs(os.path.dirname(ART_CACHE), exist_ok=True)
+    np.savez(ART_CACHE, names=np.array(names), matrix=matrix, stamp=np.array(stamp))
     return names, [card_key(n) or n for n in names], matrix
 
 
+def _art_feat(img: MatLike, inset: float) -> np.ndarray:
+    h, w = img.shape[:2]
+    dy, dx = int(h * inset), int(w * inset)
+    g = cv2.resize(img[dy : h - dy, dx : w - dx], (SIZE_ART, SIZE_ART), interpolation=cv2.INTER_AREA)
+    return _lab(g).reshape(-1, 3)
+
+
+def method() -> str:
+    """当前用的认卡方法：render（素材包有渲染模板）/ art（退路）。"""
+    return "render" if _render_index() is not None else "art"
+
+
 def rank_cards(icon: MatLike) -> list[tuple[str, float, str]]:
-    """图标 → [(卡键, 分数, 最像的素材名)]，按分数从好到差。"""
-    names, keys, matrix = _index()
-    d = np.linalg.norm(matrix - _feat(icon, INSET)[None], axis=2)
-    k = int(d.shape[1] * KEEP)
+    """图标 → [(卡键, 分数, 最像的素材名)]，分数越小越像，从好到差排。"""
+    idx = _render_index()
+    if idx is not None:
+        names, keys, feats, mask = idx
+        q = _lab(cv2.resize(icon, (ICON, ICON), interpolation=cv2.INTER_AREA))[mask]
+        d = np.linalg.norm(feats - q[None], axis=2)
+        keep = KEEP_RENDER
+    else:
+        names, keys, matrix = _art_index()
+        d = np.linalg.norm(matrix - _art_feat(icon, INSET_ART)[None], axis=2)
+        keep = KEEP_ART
+    k = int(d.shape[1] * keep)
     score = np.sort(d, axis=1)[:, :k].mean(1)
     best: dict[str, tuple[float, str]] = {}
     for key, name, s in zip(keys, names, score):
@@ -90,17 +126,19 @@ def rank_cards(icon: MatLike) -> list[tuple[str, float, str]]:
 
 
 def read_icon(icon: MatLike, expect: list[str] | None = None) -> dict:
-    """一个图标 → {card, score, second, margin, known, asset, expect_scores}。
-    card：最像的卡键；margin：和第二名的分差；known：认出了（见模块说明的三个条件）；
+    """一个图标 → {card, score, second, margin, known, asset, method, expect_scores}。
+    card：最像的卡键；margin：和第二名的分差；known：认出了（见模块说明）；
     expect：想核对的卡键 / 卡 ID 列表时，另给它们各自的分数（expect_scores），供判断「是不是方案里的卡」。"""
     r = rank_cards(icon)
+    m = method()
     if not r:
-        return {"card": None, "score": None, "asset": None, "second": None, "margin": None, "known": False, "expect_scores": {}}
+        return {"card": None, "score": None, "asset": None, "second": None, "margin": None, "method": m, "known": False, "expect_scores": {}}
+    unknown_line, margin_line = THRESHOLDS[m]
     top = r[0]
     margin = r[1][1] - top[1] if len(r) > 1 else 0.0
     std = float(cv2.cvtColor(icon, cv2.COLOR_BGR2GRAY).std()) if icon.ndim == 3 else float(icon.std())
     out = {"card": top[0], "score": round(top[1], 2), "asset": top[2], "second": r[1][0] if len(r) > 1 else None,
-           "margin": round(margin, 2), "known": top[1] <= UNKNOWN_SCORE and margin >= MIN_MARGIN and std >= MIN_STD}  # fmt: skip
+           "margin": round(margin, 2), "method": m, "known": top[1] <= unknown_line and margin >= margin_line and std >= MIN_STD}  # fmt: skip
     if expect:
         scores = {k: s for k, s, _ in r}
         out["expect_scores"] = {e: round(scores[card_key(e)], 2) for e in expect if card_key(e) in scores}
