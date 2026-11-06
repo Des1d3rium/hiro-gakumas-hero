@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 一条命令装好实机游玩环境（macOS + PlayCover；Windows 在 Git Bash 里跑，未实测）：KAA 子模块 → .venv（Python 3.10）→ 安装 → 生成 KAA 的 R.py
+# 一条命令装好实机游玩环境（macOS + PlayCover；Windows 用 scripts/setup.ps1）：KAA 子模块 → .venv（Python 3.10）→ 安装 → 生成 KAA 的 R.py
 # → 下载 KAA 公开游戏数据（主数据 game.db + 卡图，resources/game_data）→ 自检。
 #
 #   scripts/setup.sh            # 第一次装 / 更新后重跑（已有的步骤会跳过）

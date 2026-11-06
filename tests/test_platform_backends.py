@@ -1,5 +1,6 @@
 """设备后端与 OCR 后端：与 KAA 支持的平台对齐（HIRO_DEVICE / HIRO_OCR），以及非 macOS 下能导入。"""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -166,5 +167,7 @@ import os; os.environ.pop('HIRO_OCR', None)
 assert o.engine() == 'rapidocr', o.engine()
 print('ok')
 """
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env={"PYTHONPATH": str(SRC), "PATH": ""})
+    env = {**os.environ, "PYTHONPATH": str(SRC)}  # 保留原环境：Windows 上的 Python 缺 SYSTEMROOT 无法初始化
+    env.pop("HIRO_OCR", None)
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env)
     assert r.returncode == 0 and r.stdout.strip().endswith("ok"), r.stderr[-2000:]
