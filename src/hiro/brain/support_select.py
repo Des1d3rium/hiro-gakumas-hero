@@ -416,6 +416,27 @@ def choose_rental(rentals: list[dict], own_plan: list[dict]) -> dict | None:
     return {**_describe(best, sp_counts(own + [best])), "formation_value": round(best_v)}
 
 
+def rental_scorer(own_entries: list[dict], main_attr: str | None = None, plan: str | None = None):
+    """给租借列表执行侧用的打分函数：row（read_rental_list 的一行）→ 加上这张租借后整个编成的价值；
+    认不出卡、方案不一致、凑不成 4-2（不是主属性）时返回 None。同一张卡同一等级只算一次。"""
+    cache: dict = {}
+
+    def score(row: dict) -> float | None:
+        card = row.get("card") or {}
+        cid, level = card.get("support_card_id"), card.get("level")
+        if not cid or not level:
+            return None
+        key = (cid, level)
+        if key not in cache:
+            with using(main_attr, plan):
+                own = [s for s in (make_slot(e) for e in own_entries) if s]
+                slot = make_slot({"support_card_id": cid, "level": level}, rental=True)
+                cache[key] = formation_value(own + [slot])[0] if slot is not None and _valid(own + [slot]) else None
+        return cache[key]
+
+    return score
+
+
 def evaluate(cards: list[dict]) -> dict:
     """一套现成编成（例如用户原有的编成 1）的价值，和 choose 的结果同一刻度，用来比较「现在 vs 方案」。"""
     bad = [{"support_card_id": e.get("support_card_id"), "why": plan_mismatch(e)} for e in cards if plan_mismatch(e)]

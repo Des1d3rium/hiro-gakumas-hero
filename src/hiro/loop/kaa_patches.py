@@ -875,9 +875,18 @@ RENTAL_ATTR: str | None = None  # 租借挑哪个属性（run_hif 按 --main-att
 
 
 def _default_rental_pick() -> bool:
+    """有开局编成方案：按「加上这张后编成的价值」挑（support_select.rental_scorer，自己 5 张取方案的）；没有方案：主属性、等级最高。"""
+    from hiro import kaa_env
     from hiro.produce import rental
 
-    return rental.pick_rental(attr=RENTAL_ATTR or rental.WANT_ATTR)
+    plan = kaa_env.ACTIVE_PLAN or {}
+    own = [{"support_card_id": o["support_card_id"], "level": o.get("level")} for o in (plan.get("support") or {}).get("own") or []]
+    scorer = None
+    if own:
+        from hiro.brain.support_select import rental_scorer
+
+        scorer = rental_scorer(own, RENTAL_ATTR or kaa_env.PLAN_MAIN_ATTR, (plan.get("idol") or {}).get("plan"))
+    return rental.pick_rental(attr=RENTAL_ATTR or rental.WANT_ATTR, scorer=scorer)
 
 
 RENTAL_PICK: Callable | None = _default_rental_pick  # 默认：主属性、等级最高的一张；策略层可替换成自己的选择
