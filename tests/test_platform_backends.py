@@ -198,3 +198,37 @@ def test_attr_by_band_color(bgr, want):
     img[1090:1120, 100:260] = bgr
     img[1100:1110, 150:210] = 255
     assert action._attr_by_band(img, 180, 1105) == want
+
+
+# ---------------------------------------------------------------- 字形归一后的安全拦截（RapidOCR：「タイトルへ」→「タイトルヘ」）
+def test_textnorm_folds_lookalike_kana():
+    from hiro.vision.textnorm import contains, fold
+
+    assert fold("タイトルヘ") == fold("タイトルへ")
+    assert contains("メタイトルヘ", "タイトルへ")
+    assert contains("通信工ラー", "エラー")
+    assert not contains("リトライ", "タイトルへ")
+
+
+def test_rescue_blocks_title_button_read_as_katakana_he():
+    """LLM 兜底不能点「タイトルへ」：读成片假名「ヘ」也要拦住。"""
+    from hiro.loop.rescue import check
+
+    boxes = [("通信中にエラーが発生しました", 0.99, (60, 1042, 396, 1068)), ("タイトルヘ", 0.96, (112, 1142, 313, 1178)),
+             ("リトライ", 1.0, (470, 1146, 578, 1175))]  # fmt: skip
+    act, why = check({"action": "tap_box", "box": 1}, boxes)
+    assert act["action"] == "stop" and "危险词" in why
+
+
+def test_comm_error_never_picks_merged_title_box():
+    """两个按钮被读成一个框「タイトルヘリトライ」时，不能把它当成リトライ去点（中心落在两个按钮之间）。"""
+    from hiro.loop.comm_error import comm_error
+
+    boxes = [("通信エラー", 0.99, (59, 957, 216, 989)), ("タイトルヘリトライ", 0.9, (112, 1142, 578, 1178))]
+    assert comm_error(boxes)["retry"] is None
+
+
+def test_advance_blocks_title_read_as_katakana_he():
+    from hiro.loop.advance import blocked
+
+    assert blocked(["タイトルヘ"]) is not None

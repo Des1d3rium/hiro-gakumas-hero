@@ -579,7 +579,8 @@ def read_comm_error(img: MatLike, header_y: int | None = None) -> dict:
 
     text = "".join(t for t, _ in boxes)
     retry, close = button("リトライ"), button("閉じる")
-    return {"retry": retry, "title": button("タイトルへ"), "close": close, "text": text,
+    # 「へ」和片假名「ヘ」字形相同，RapidOCR 会读成后者（2026-11-06）
+    return {"retry": retry, "title": button("タイトルへ", "タイトルヘ"), "close": close, "text": text,
             "forced_title": retry is None and (close is not None or "タイトルに戻" in text)}  # fmt: skip
 
 

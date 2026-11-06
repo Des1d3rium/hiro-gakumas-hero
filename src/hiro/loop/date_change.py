@@ -11,6 +11,8 @@ main13 本战（2026-11-02 04:00）：R1 结果页之后弹出这个框，hif.on
 
 from __future__ import annotations
 
+from hiro.vision.textnorm import contains_any
+
 import time
 from collections.abc import Callable
 
@@ -44,7 +46,7 @@ def date_change_button(boxes) -> tuple[int, int] | None:
     texts = [(_norm(t), b) for t, _, b in boxes]
     if not any(any(k in t for k in DATE_TITLES) for t, _ in texts):
         return None
-    return next((_center(b) for t, b in texts if any(k in t for k in TO_TITLE)), None)
+    return next((_center(b) for t, b in texts if contains_any(t, TO_TITLE)), None)
 
 
 def _safe_step(assist, img, boxes) -> bool:

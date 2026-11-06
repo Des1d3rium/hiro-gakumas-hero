@@ -20,6 +20,8 @@
 
 from __future__ import annotations
 
+from hiro.vision.textnorm import contains, contains_any
+
 import json
 import os
 import time
@@ -66,7 +68,7 @@ def check(reply: dict | None, boxes) -> tuple[dict, str | None]:
     if not isinstance(reply, dict) or reply.get("action") not in ACTIONS:
         return {"action": "stop"}, f"回复不合规：{reply!r}"[:200]
     texts = [_norm(t) for t, _, _ in boxes]
-    danger = [w for w in SCREEN_DANGER if any(w in t for t in texts)]
+    danger = [w for w in SCREEN_DANGER if any(contains(t, w) for t in texts)]
     act = reply["action"]
     from hiro.loop.advance import EXAM_MARKS
 
@@ -79,7 +81,7 @@ def check(reply: dict | None, boxes) -> tuple[dict, str | None]:
         if not isinstance(k, int) or not 0 <= k < len(boxes):
             return {"action": "stop"}, f"框编号 {k!r} 不在列表里"
         text = texts[k]
-        if any(w in text for w in TARGET_DANGER):
+        if contains_any(text, TARGET_DANGER):
             return {"action": "stop"}, f"目标框「{text}」含危险词"
         if any(h in t for t in texts for h in CHOICE_HINTS):
             return {"action": "stop"}, f"选择页（{next(t for t in texts if any(h in t for h in CHOICE_HINTS))}）交给决策层，不点「{text}」"
