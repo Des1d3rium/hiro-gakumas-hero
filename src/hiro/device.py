@@ -304,20 +304,21 @@ def is_playcover() -> bool:
 
 
 def _kaa_config(name: str):
-    """KAA 设备工厂要的配置：已 init_kaa 就用当前配置（后端已按环境变量写好），否则（tap 等工具直接 connect）现建一份。"""
+    """KAA 设备工厂要的配置：已 init_kaa 就用当前配置（后端已按环境变量写好）；
+    否则（tap 等工具直接 connect）现建一份，后端按环境变量写。"""
     from kaa.config.schema import KaaConfig
 
-    from hiro.kaa_env import kaa_backend
+    from hiro.kaa_env import kaa_backend_from_env
 
     try:
         from kaa.kaa_context import conf as kaa_conf
 
         config = kaa_conf()
+        if config.backend.lifecycle.type == KAA_BACKENDS[name]:
+            return config
     except Exception:  # noqa: BLE001  KAA 上下文还没初始化
         config = KaaConfig()
-    if config.backend.lifecycle.type != KAA_BACKENDS[name]:
-        config.backend = kaa_backend(name, adb=os.environ.get("HIRO_ADB"), screenshot=os.environ.get("HIRO_SCREENSHOT"),
-                                     instance=os.environ.get("HIRO_EMULATOR_INSTANCE"))  # fmt: skip
+    config.backend = kaa_backend_from_env()
     return config
 
 

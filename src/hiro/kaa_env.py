@@ -15,7 +15,9 @@ KAA 的培育流程通过 `kaa_context.conf()` / `produce_solution()` 读取配�
   HIRO_DEVICE = auto（macOS 上走 PlayCover）/ maatools / quartz / adb / mumu / leidian / dmm；
   HIRO_ADB = adb 地址 ip:port（adb / leidian 用；mumu 不设时由 MuMu SDK 自动取）；
   HIRO_SCREENSHOT = 截图方式（缺省：adb / leidian → adb，mumu → Windows 上 nemu_ipc、其他平台 adb，dmm → windows_background）；
-  HIRO_EMULATOR_INSTANCE = MuMu / 雷电的实例 ID（MuMu 缺省 0，多开时指定）。
+  HIRO_EMULATOR_INSTANCE = MuMu / 雷电的实例 ID（MuMu 缺省 0，多开时指定）；
+  HIRO_MUMU_BACKGROUND = 0 关掉 MuMu 后台模式（缺省开：按游戏包名截它所在的显示。MuMu 6 把应用放在单独的显示里，
+  关掉后 nemu_ipc 截到的是模拟器桌面，2026-11-06 Windows + MuMu 6.8 实测）。
 resume 不读编成号（培育已经开始）。
 """
 
@@ -38,11 +40,11 @@ def kaa_backend_from_env():
     from hiro.device import requested_backend
 
     return kaa_backend(requested_backend(), adb=os.environ.get("HIRO_ADB"), screenshot=os.environ.get("HIRO_SCREENSHOT"),
-                       instance=os.environ.get("HIRO_EMULATOR_INSTANCE"))  # fmt: skip
+                       instance=os.environ.get("HIRO_EMULATOR_INSTANCE"), mumu_background=os.environ.get("HIRO_MUMU_BACKGROUND") != "0")  # fmt: skip
 
 
 def kaa_backend(device: str, *, adb: str | None = None, screenshot: str | None = None, instance: str | None = None,
-                platform: str | None = None):  # fmt: skip
+                platform: str | None = None, mumu_background: bool = True):  # fmt: skip
     """按 HIRO_DEVICE 等构造 KAA 的 BackendConfig；PlayCover 路线（auto / maatools / quartz）返回 None，不动 KAA 默认值。"""
     import sys
 
@@ -58,7 +60,8 @@ def kaa_backend(device: str, *, adb: str | None = None, screenshot: str | None =
     shot = screenshot or shot
     lifecycle = {
         "custom": lambda: CustomDevice(type="custom"),
-        "mumu12v5": lambda: MuMu12V5Device(type="mumu12v5", instance_id=instance or "0"),  # KAA 不设会报错；单开就是 0
+        # KAA 不设实例 ID 会报错，单开就是 0；后台模式按游戏包名截它所在的显示（MuMu 6 把应用放在单独的显示里）
+        "mumu12v5": lambda: MuMu12V5Device(type="mumu12v5", instance_id=instance or "0", mumu_background_mode=mumu_background),
         "leidian": lambda: LeidianDevice(type="leidian", instance_id=instance),
         "dmm": lambda: DmmDevice(type="dmm"),
     }[kind]()
