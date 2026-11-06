@@ -99,6 +99,7 @@ def test_kaa_backend_adb_address_and_instance(kaa_config):
     assert (b.connection.type, b.connection.ip, b.connection.port) == ("tcp", "127.0.0.1", 16384)
     m = kaa_env.kaa_backend("mumu", instance="2", platform="win32")
     assert m.connection.type == "auto" and m.lifecycle.instance_id == "2"
+    assert kaa_env.kaa_backend("mumu", platform="win32").lifecycle.instance_id == "0"  # 单开缺省 0（KAA 不设会报错）
     with pytest.raises(ValueError, match="ip:port"):
         kaa_env.kaa_backend("adb", adb="127.0.0.1")
 

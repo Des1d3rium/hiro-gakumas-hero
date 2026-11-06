@@ -15,7 +15,7 @@ KAA 的培育流程通过 `kaa_context.conf()` / `produce_solution()` 读取配�
   HIRO_DEVICE = auto（macOS 上走 PlayCover）/ maatools / quartz / adb / mumu / leidian / dmm；
   HIRO_ADB = adb 地址 ip:port（adb / leidian 用；mumu 不设时由 MuMu SDK 自动取）；
   HIRO_SCREENSHOT = 截图方式（缺省：adb / leidian → adb，mumu → Windows 上 nemu_ipc、其他平台 adb，dmm → windows_background）；
-  HIRO_EMULATOR_INSTANCE = MuMu / 雷电的实例 ID（多开时用）。
+  HIRO_EMULATOR_INSTANCE = MuMu / 雷电的实例 ID（MuMu 缺省 0，多开时指定）。
 resume 不读编成号（培育已经开始）。
 """
 
@@ -58,7 +58,7 @@ def kaa_backend(device: str, *, adb: str | None = None, screenshot: str | None =
     shot = screenshot or shot
     lifecycle = {
         "custom": lambda: CustomDevice(type="custom"),
-        "mumu12v5": lambda: MuMu12V5Device(type="mumu12v5", instance_id=instance),
+        "mumu12v5": lambda: MuMu12V5Device(type="mumu12v5", instance_id=instance or "0"),  # KAA 不设会报错；单开就是 0
         "leidian": lambda: LeidianDevice(type="leidian", instance_id=instance),
         "dmm": lambda: DmmDevice(type="dmm"),
     }[kind]()

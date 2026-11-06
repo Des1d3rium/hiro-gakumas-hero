@@ -91,12 +91,13 @@
    | `dmm` | Windows DMM 版 | `windows_background`（缺省）/ `windows_native` | 未实机验证 |
 
    - `HIRO_ADB=ip:port` 指 adb 地址（`adb` / `leidian` 用，缺省 `127.0.0.1:5555`；`mumu` 不设时由 MuMu SDK 自动取）；
-     `HIRO_EMULATOR_INSTANCE` 指 MuMu / 雷电的实例 ID（多开时用）。组合不合法时开局前就报错（用 KAA 自己的配置校验）。
+     `HIRO_EMULATOR_INSTANCE` 指 MuMu / 雷电的实例 ID（MuMu 缺省 `0`，多开时指定）。组合不合法时开局前就报错（用 KAA 自己的配置校验）。
    - 非 PlayCover 后端不做 PlayCover 专用的退路（横屏 LIVE 黑屏时切全屏、MaaTools 点了没反应时用真实鼠标再点）。
    - 文字识别（`HIRO_OCR`）：macOS 缺省用 Apple Vision，其他系统自动改用 KAA 自带的 RapidOCR（日文 / 英文模型）。
      RapidOCR 在作者的回归截图上的准确率与速度见 `docs/assets.md`；换平台后先用自己的截图验一遍。
    - Windows 用 PowerShell 版安装脚本：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1`（步骤与 `setup.sh` 相同）。
-     作者的 Windows 台式机上实测过安装、自检和全套离线测试（378 个通过），**还没在 Windows 上实机打过一局**。
+     作者的 Windows 台式机上实测过安装、自检和全套离线测试（378 个通过），以及 `HIRO_DEVICE=mumu`（MuMu 6.8，`nemu_ipc`）
+     连上模拟器并截图；**还没在 Windows 上实机打过一局**。
      KAA 公开数据的下载镜像连不上时，从别处拷一份 `game_data` 目录，用 `-NoData` 加 `HIRO_KAA_GAME_DATA` 指过去。
 3. 素材（见 `docs/assets.md`）：识别用的卡面、图标、字体、Sprite、布局随仓库在 `assets/pack/`，开箱即用。
    客户端更新后认不出新图标时，才打一两场考试，用 `tools/assets/capture_icons.py` 补；设了 `HIRO_BUNDLED_ASSETS=0` 时则必须补，
