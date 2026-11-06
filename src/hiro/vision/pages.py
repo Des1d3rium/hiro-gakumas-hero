@@ -283,7 +283,9 @@ def _brief_pct(img: MatLike, digits: str, b) -> int | None:
     dddd = read_dddd(img, (max(0, x1 - 4), max(0, y1 - 4), x2 + 4, y2 + 4))
     if dddd is None:
         return None
-    return next((int(c) for c in (digits, digits[1:]) if len(c) >= 2 and str(dddd).startswith(c)), None)
+    # 反过来也会发生：RapidOCR 给的框更宽、把「>>」框进去了，ddddocr 读出的首位是箭头（2026-11-06：「1962%」→ 71962）
+    reads = (str(dddd), str(dddd)[1:])
+    return next((int(c) for c in (digits, digits[1:]) if len(c) >= 2 and any(r.startswith(c) for r in reads)), None)
 
 
 def read_exam_briefing(img: MatLike, boxes) -> dict:
@@ -304,7 +306,8 @@ def read_exam_briefing(img: MatLike, boxes) -> dict:
     for attr, cy in BRIEF_ROWS.items():
         row = [(t, b) for t, b in boxes if abs((b[1] + b[3]) // 2 - cy) <= 30]
         p = next((int(t) for t, b in row if re.fullmatch(r"\d{2,4}", t) and b[0] < 230), None)
-        hit = next(((mm.group(1), b) for t, b in row if (mm := re.match(r"(\d{2,6})%", t)) and 260 <= b[0] <= 340), None)
+        # 「%」可能被漏认（RapidOCR：「1413%」→「1413」）；倍率列靠横坐标 260–340 限定，和左边的属性值（< 230）分得开
+        hit = next(((mm.group(1), b) for t, b in row if (mm := re.match(r"(\d{2,6})%?$", t.strip())) and 260 <= b[0] <= 340), None)
         params[attr], mult[attr] = p, _brief_pct(img, *hit) if hit else None
     star = next((int(t) for t, b in boxes if re.fullmatch(r"\d{1,4}", t) and abs((b[1] + b[3]) // 2 - 852) <= 25 and b[0] < 230), None)
     # 「親愛度ボーナス」演出中倍率在往上跳（314% → 471% → 1413%），这时的数不是最终值
