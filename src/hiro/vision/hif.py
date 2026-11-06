@@ -404,11 +404,14 @@ def read_finals_ranking(img: MatLike) -> dict:
             out["npc_scores"].append(None)
             continue
         v = _ocr_int(img, (x, y1, x + FINALS_NPC_W + 1, y2))
-        out["npc_scores"].append(v if v is not None and 10_000 <= v <= 999_999 else None)
+        out["npc_scores"].append(v if v is not None and FINALS_NPC_MIN <= v <= 999_999 else None)
     out["finals_round"] = finals_round_from_npc(out["npc_scores"])
     return out
 
 
+# 本战 NPC 的分数是这一轮的目标分，整场考试不变：R1 约 29–40 万、R2 约 42–60 万。读成五位数一定是掉了首位
+# （Windows 第二局 RapidOCR：451280 → 51280，名次自洽检查拿它当上限，把我方正确的 97371 等分数丢了 8 次），作废
+FINALS_NPC_MIN = 250_000
 FINALS_R2_MIN_NPC2 = 370_000  # 排第二的 NPC：R1 29.4–31.5 万，R2 42.1–49.1 万
 
 
