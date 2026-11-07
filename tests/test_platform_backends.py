@@ -468,3 +468,26 @@ def test_enhance_dialog_scan_win5_stitches():
     assert m["complete"] and m["new_rows"] == [3, 1, 2, 0]
     names = [c["name"] for c in m["cards"]]
     assert "潜在能力" not in names and names.count("えいえいおー") == 1
+
+
+def test_sale_split_and_floor():
+    """原价和 SALE 价读成一个数：按「SALE = 原价 × 0.7 取整」拆开取 SALE 价；小于 5 的残读（「50」读成「0」）去掉。"""
+    from hiro.vision.shop import _sale_split
+
+    assert _sale_split([7049]) == [49] and _sale_split([10573]) == [73] and _sale_split([75, 52]) == [75, 52]
+    assert _sale_split([0]) == [] and _sale_split([1234]) == [1234]
+
+
+@pytest.mark.fixtures
+def test_consult_sale_price_win6():
+    """Windows 第六局相談货架 #124：SALE 卡 70→49，RapidOCR 整块读成 40；非 Vision 后端改为多种读法投票。"""
+    import cv2
+
+    from hiro.vision.offline import load
+    from hiro.vision.shop import read_consult
+
+    f = Path(__file__).parent / "fixtures" / "consult" / "consult-sale-win6-124.jpg"
+    if not f.exists():
+        pytest.skip("需要样例 tests/fixtures/consult/consult-sale-win6-124.jpg")
+    shelf = read_consult(load(cv2.imread(str(f))))["shelf"]
+    assert [e["price"] for e in shelf] == [49, 77, 70, 70, 70, 50, 50, 100]
