@@ -31,3 +31,5 @@ target-version = "py310"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# 不依赖 editable 安装的 .pth（macOS 上 .venv 在 iCloud 同步目录里时 .pth 会被标 hidden、被 Python 跳过）
+pythonpath = ["src", "vendor/kaa"]

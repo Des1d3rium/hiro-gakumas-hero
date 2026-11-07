@@ -39,6 +39,23 @@ PY="$ROOT/.venv/bin/python"
 
 step "3/6 安装本仓库与 KAA（.[dev,play]）"
 uv pip install --python "$PY" -e ".[dev,play]"
+# macOS 上 site-packages 里的 .pth 有时带 hidden 标记（如目录在 iCloud 同步的 Documents 下），新版 Python 会跳过
+# hidden 的 .pth，editable 安装随之失效（import hiro / kaa 报 ModuleNotFoundError）：清掉标记
+if [ "$(uname)" = Darwin ]; then
+  SITE=$("$PY" -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+  if ls -lO "$SITE"/*.pth 2>/dev/null | grep -q hidden; then
+    chflags nohidden "$SITE"/*.pth && echo "已清除 .pth 的 hidden 标记（否则 editable 安装不生效）"
+  fi
+  d="$ROOT"; in_icloud=0
+  while [ "$d" != / ]; do  # 仓库或任一上级目录由 iCloud 云盘（File Provider）同步，比如开了「桌面与文稿」同步的 ~/Documents
+    if xattr "$d" 2>/dev/null | grep -q com.apple.file-provider; then in_icloud=1; break; fi
+    d=$(dirname "$d")
+  done
+  if [ "$in_icloud" = 1 ]; then
+    echo "注意：仓库在 iCloud 同步目录（$d）里，iCloud 会把 .venv 里的文件重新标成 hidden，之后 import hiro 又会失败。" >&2
+    echo "  建议把仓库移到不同步的目录（如 ~/code）后重跑本脚本；临时办法是再跑一次本脚本，或运行时加 PYTHONPATH=src:vendor/kaa。" >&2
+  fi
+fi
 
 step "4/6 生成 KAA 的 kaa/tasks/R.py（KAA 的生成文件，子模块里没有）"
 if [ "$REGEN" = 1 ] || [ ! -f vendor/kaa/kaa/tasks/R.py ]; then
