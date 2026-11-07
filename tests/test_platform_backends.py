@@ -510,3 +510,21 @@ def test_action_costs_gated_by_heart(rel, costs):
         pytest.skip(f"需要样例 tests/fixtures/action_select/{rel}")
     raw, _ = extract("ACTION_SELECT", load(cv2.imread(str(f))))
     assert [(o["kind"], o["hp_cost"]) for o in raw["options"]] == costs
+
+
+def test_r1_done_in_trace(tmp_path):
+    """本局 trace 里出现过 R1 轮次结果页（kind=round_result）就认为 R1 已打完；只有 standings（字段里 round_result: null）不算。"""
+    import json
+    from types import SimpleNamespace as NS
+
+    import hiro.produce.hif as hif
+
+    d = tmp_path / "mainwin10-20261108-032030"
+    d.mkdir()
+    page = lambda kind: json.dumps({"observation": {"page": {"name": "HIF_FINALS_RANKING"}, "fields": {"kind": kind, "round_result": None}}})
+    (d / "steps.jsonl").write_text(page("standings") + "\n", encoding="utf-8")
+    st = hif.HiroHifStrategy.__new__(hif.HiroHifStrategy)
+    st.s = NS(trace=NS(dir=str(d)))
+    assert st._r1_done_in_trace() is False
+    (d / "steps.jsonl").write_text(page("standings") + "\n" + page("round_result") + "\n", encoding="utf-8")
+    assert st._r1_done_in_trace() is True

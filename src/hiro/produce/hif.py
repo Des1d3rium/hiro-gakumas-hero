@@ -630,6 +630,21 @@ class HiroHifStrategy(HifGrindStrategy):
                 load_context(d)
                 logger.info("续跑：读回本战上下文 %s", d / CONTEXT_FILE)
 
+    def _r1_done_in_trace(self) -> bool:
+        """本局（当前和之前的 trace 段）已经出现过本战 R1 的轮次结果页（HIF_FINALS_RANKING kind=round_result）。"""
+        try:
+            dirs = self._prior_trace_dirs()
+        except Exception:  # noqa: BLE001  没有 trace（测试替身）就当没打过
+            return False
+        for d in dirs:
+            f = d / "steps.jsonl"
+            if not f.exists():
+                continue
+            for line in f.open(encoding="utf-8"):
+                if '"kind": "round_result"' in line and "HIF_FINALS_RANKING" in line:
+                    return True
+        return False
+
     def _prior_trace_dirs(self) -> list[Path]:
         """同一局之前的 trace 段：<基名>、<基名>-rN（不含当前目录），再加上当前目录里已有的步骤（run_hif resume --trace 同名续写，
         D43 第三十三局本战）。按时间顺序，当前目录排最后。"""
@@ -1397,6 +1412,10 @@ class HiroHifStrategy(HifGrindStrategy):
                 f = {}
             self.exam_count += 1
             HiroHifStrategy.exams_done = self.exam_count
+            if self._r1_done_in_trace():
+                # R1 打完不会再考 R1：之后的考试一定是 R2（Windows 第十局 04:00 日切换后续跑进 R2 末回合，
+                # NPC 读不到、剩余回合不是 9，退回 KAA 颜色判断成了 r1，再挑戦按 r1 计数又多点了一次）
+                return "r2"
             rnd = finals_label_round(f.get("finals_round"), f.get("remaining_turns"))
             if rnd in (1, 2):
                 return f"r{rnd}"
