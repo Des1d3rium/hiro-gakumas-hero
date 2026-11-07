@@ -28,8 +28,11 @@ POLL = 0.5
 JEWEL = "ジュエル"
 
 
+LATIN_FIX = str.maketrans({"Ä": "A", "Á": "A", "À": "A", "Â": "A", "Ã": "A", "Å": "A", "Ｐ": "P", "Ａ": "A"})  # RapidOCR 把「AP」读成「ÄP」（Windows 第十二局）
+
+
 def _texts(boxes) -> list[tuple[str, int, int]]:
-    return [(t.replace(" ", ""), (b[0] + b[2]) // 2, (b[1] + b[3]) // 2) for t, _, b in boxes]
+    return [(t.replace(" ", "").translate(LATIN_FIX), (b[0] + b[2]) // 2, (b[1] + b[3]) // 2) for t, _, b in boxes]
 
 
 def _lowest(texts, word, *, exact=False, min_y=0):
@@ -39,7 +42,7 @@ def _lowest(texts, word, *, exact=False, min_y=0):
 
 def shortfall(texts) -> int | None:
     """「APがN不足しています」的 N（取最下面那条）。"""
-    hits = [(y, int(m.group(1))) for t, _, y in texts if (m := re.search(r"APが(\d+)不足", t))]
+    hits = [(y, int(m.group(1))) for t, _, y in texts if (m := re.search(r"が(\d+)不足", t))]
     return max(hits)[1] if hits else None
 
 

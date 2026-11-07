@@ -553,3 +553,25 @@ def test_vote_price_sale_single_digit(monkeypatch):
     monkeypatch.setattr(shop, "_cell_price", lambda img, x, band, scale=3: [5])
     monkeypatch.setattr(digits, "read_dddd", lambda img, box: None)
     assert shop._vote_price(np.zeros((1280, 720, 3), np.uint8), 65, (612, 652), [105, 5], sale=True) == 73
+
+
+def test_ap_shortfall_with_accented_a():
+    """RapidOCR 把「APが8不足しています」读成「ÄPが8不足しています」（Windows 第十二局 AP 补充失败）：Ä 归一成 A，缺口照读。"""
+    from hiro.loop import ap_refill as ap
+
+    t = ap._texts([("ÄPが8不足しています", 0.9, (60, 1040, 300, 1070)), ("回復する", 0.9, (470, 1145, 580, 1175))])
+    assert ap.shortfall(t) == 8 and ap._lowest(t, "回復する") is not None
+    assert ap._texts([("ÄPドリンク", 0.9, (0, 0, 10, 10))])[0][0] == "APドリンク"
+
+
+@pytest.mark.fixtures
+def test_ap_shortfall_real_frame_win12():
+    import cv2
+
+    from hiro.loop import ap_refill as ap
+    from hiro.produce.ops import ocr_boxes
+
+    f = Path(__file__).parent / "fixtures" / "ap_refill" / "ap-short-win12.png"
+    if not f.exists():
+        pytest.skip("需要样例 tests/fixtures/ap_refill/ap-short-win12.png")
+    assert ap.shortfall(ap._texts(ocr_boxes(cv2.imread(str(f))))) == 8
