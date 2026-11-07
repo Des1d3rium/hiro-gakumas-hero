@@ -1501,7 +1501,11 @@ class HiroHifStrategy(HifGrindStrategy):
         left = screen_retries_left(texts)
         # 画面上「あと N回」是游戏自己的剩余次数，比数 trace 记录可靠：Windows 第七局通信エラー（ERR_AM_IDTOKEN_FAIL）期间
         # 记了 3 条没真正开始的「免费再挑戦」，按记录数会以为 3 次用完
-        used = max(0, self.MAX_RETRIES_PER_EXAM - left) if left is not None else self._retries_so_far(label)
+        # 游戏上限与我们的上限（3）一致才对得上：读出的 N 比上限大（读错或规则变了）就不信，退回数 trace 记录（协调 2026-11-08）
+        if left is not None and left > self.MAX_RETRIES_PER_EXAM:
+            logger.warning("%s 画面「あと %d回」超过上限 %d，按 trace 记录计数", label, left, self.MAX_RETRIES_PER_EXAM)
+            left = None
+        used = self.MAX_RETRIES_PER_EXAM - left if left is not None else self._retries_so_far(label)
         if used >= self.MAX_RETRIES_PER_EXAM:
             self.s.note(f"{label} 已再挑戦 {used} 次，到上限 {self.MAX_RETRIES_PER_EXAM}，不再挑戦")
             logger.warning("%s 已再挑戦 %d 次（上限 %d），不再挑戦", label, used, self.MAX_RETRIES_PER_EXAM)
