@@ -1456,6 +1456,7 @@ class HiroHifStrategy(HifGrindStrategy):
         return True
 
     exam_restarted = False  # 刚点了再挑戦、同一场考试要重新进入（见 HiroController._rearm_exam）
+    _retry_declined: tuple | None = None  # 已决定不再挑戦的本战结算页（label, 总分, 本轮分）：同一页不再点开确认框
     RETRY_JEWEL = ("ジュエル",)
     RETRY_CONFIRM_WAIT = 15.0
     RETRY_CONFIRM_TAPS = 3
@@ -1558,6 +1559,9 @@ class HiroHifStrategy(HifGrindStrategy):
         f = hit[1]
         if f.get("rank") == 1 or (f.get("outcome") and "敗退" not in str(f.get("outcome")) and f.get("passed") is not False):
             return False
+        page_key = (label, f.get("score"), f.get("round_score"))
+        if page_key == self._retry_declined:
+            return False  # 这张结算页已经决定不再挑戦：别再点开确认框，让调用方点「次へ」收尾
         texts = ocr.ocr()
         btn = next((t for t in texts if button_text(t.text, "再挑戦") and t.rect.center.y > 900), None)
         if btn is None:
@@ -1567,6 +1571,8 @@ class HiroHifStrategy(HifGrindStrategy):
             logger.info("本战差距翻不了盘（%s）：再挑戦只用免费次数，不用券（RETRY_STOP_LOSS）", hopeless)
         kind = self._click_retry(label, btn, texts, allow_ticket=not hopeless)
         if kind is None:
+            # Windows 第七局：止损取消后收尾循环每轮又点开再挑戦、再取消，187s 后空转看门狗停机，一直没点「次へ」
+            self._retry_declined = page_key
             return False
         logger.info("本战敗退（第 %s 名，总分 %s），使用再挑戦（%s）", f.get("rank"), f.get("score"), kind)
         self.s.note(f"本战敗退（第 {f.get('rank')} 名，总分 {f.get('score')}），使用再挑戦（{kind}）")
