@@ -416,3 +416,19 @@ def test_merge_dialog_screens_tolerates_one_misread_cell():
     assert m["unknown"] == [9]
     one = merge_dialog_screens([screen(a), screen([["c1", "XX", "c3", "c4"], ["d1", "d2", "d3"]])], expected=15)
     assert one["new_rows"] == [3, 2] and not one["complete"]
+
+
+@pytest.mark.fixtures
+def test_result_score_over_max_is_dropped(monkeypatch):
+    """结算页分数超过两轮合计上限（Windows 第四局把 1,079,363 读成 36350791）：作废成 None，名次和其他行照常。"""
+    import cv2
+
+    from hiro.vision import hif
+    from hiro.vision.offline import load
+    from hiro.vision.pages import _texts, read_finals_ranking_page
+
+    real = hif._result_score
+    monkeypatch.setattr(hif, "_result_score", lambda img, digits, b: (36350791, None) if digits == "479574" else real(img, digits, b))
+    img = load(cv2.imread(str(Path(__file__).parent / "fixtures" / "finals" / "round1-result.jpg")))
+    r = read_finals_ranking_page(img, _texts(img))
+    assert [(e["rank"], e["score"]) for e in r["entries"]] == [(1, None), (2, 365868), (3, 117846)] and r["rank"] == 3

@@ -477,6 +477,7 @@ def _idol_name(text: str) -> str | None:
     return best if best and SequenceMatcher(None, text, best).ratio() >= 0.6 else None
 
 
+RESULT_SCORE_MAX = 2_999_999  # 本战两轮合计的上限（历史最高 1,303,847；NPC 约 108 万），超过一定是读错
 RESULT_ROW_Y = (324, 503, 682)  # 结算页三行分数框的中心 y（10 张实机图 ±3 像素）
 
 
@@ -514,6 +515,8 @@ def _read_round_result(img: MatLike, boxes, title: str | None) -> dict:
             score = _merged_total(img, re.sub(r"\D", "", total), b, len(total), len(gain) + 1)
         else:
             score, _ = _result_score(img, re.sub(r"\D", "", total), b)
+        if score is not None and score > RESULT_SCORE_MAX:
+            score = None  # Windows 第四局 r2 00219：十王 1,079,363 读成 36350791（Mac 同一帧读对，复现不了），名次照用
         me = log is not None and abs((log[1] + log[3]) // 2 - (b[1] + b[3]) // 2) <= 50
         g = _merged_gain(img, re.sub(r"\D", "", gain), b, len(total), len(gain) + 1) if gain else None
         entries.append({"rank": rank, "name": _row_name(boxes, b), "score": score, "gain": g, "me": me,
