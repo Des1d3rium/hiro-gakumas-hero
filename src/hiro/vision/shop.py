@@ -111,7 +111,7 @@ def read_consult(img: MatLike) -> dict:
             purchased = any("交換済" in t.replace(" ", "") for t in texts_in(xr, (top, top + CELL)))
             price = nums[-1] if nums else None
             if ocr_engine() != "vision" and not purchased:
-                price = _vote_price(img, x, PRICE_BAND[top], nums)
+                price = _vote_price(img, x, PRICE_BAND[top], nums, sale=sale)
             shelf.append({"index": row * 4 + col, **item, "price": price, "sale": sale, "purchased": purchased,
                           "center": [x + CELL // 2, top + CELL // 2]})  # fmt: skip
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -252,14 +252,14 @@ def _sale_split(nums: list[int]) -> list[int]:
         s = str(v)
         for k in range(2, len(s) - 1) if len(s) >= 4 else ():
             a, b = int(s[:k]), int(s[k:])
-            if a >= 10 and b == int(a * SALE_RATE):
+            if a >= 10 and abs(b - a * SALE_RATE) <= 1:  # 75→52 / 75→53 都见过（取整方式不定），差 1 以内都算
                 v = b
                 break
         out.append(v)
     return [v for v in out if v >= PRICE_MIN]
 
 
-def _vote_price(img: MatLike, x: int, band: tuple[int, int], region_nums: list[int]) -> int | None:
+def _vote_price(img: MatLike, x: int, band: tuple[int, int], region_nums: list[int], *, sale: bool = False) -> int | None:
     """非 Vision 后端的货架价格：单格 4 倍、整块、单格 3 倍、ddddocr 四种读法各取末位数投票，平票按这个顺序。
     RapidOCR 整块读价格 80 格只对 39 格（SALE 的「49」读成「40」、「70」读成「10」，Windows 第六局 #124）；
     加上 SALE 拆分和下限后投票 80/80（win2–win6 + A5b 的 11 帧相談货架，Vision 读数作真值）。"""
@@ -273,6 +273,12 @@ def _vote_price(img: MatLike, x: int, band: tuple[int, int], region_nums: list[i
     last = [r[-1] for r in reads if r]
     if not last:
         return None
+    if sale:
+        # SALE 格：任一读法里同时出现原价和约七折的数，取七折的那个（Windows 第七局 #115 记成原价 75，实付 53）
+        seen = {v for r in reads for v in r}
+        paid = sorted(v for v in seen if any(abs(v - o * SALE_RATE) <= 1 for o in seen if o > v))
+        if paid:
+            return paid[0]
     votes = Counter(last)
     top = max(votes.values())
     return next(v for v in last if votes[v] == top)

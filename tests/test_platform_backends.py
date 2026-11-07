@@ -474,7 +474,7 @@ def test_sale_split_and_floor():
     """原价和 SALE 价读成一个数：按「SALE = 原价 × 0.7 取整」拆开取 SALE 价；小于 5 的残读（「50」读成「0」）去掉。"""
     from hiro.vision.shop import _sale_split
 
-    assert _sale_split([7049]) == [49] and _sale_split([10573]) == [73] and _sale_split([75, 52]) == [75, 52]
+    assert _sale_split([7049]) == [49] and _sale_split([10573]) == [73] and _sale_split([7553]) == [53] and _sale_split([75, 52]) == [75, 52]
     assert _sale_split([0]) == [] and _sale_split([1234]) == [1234]
 
 

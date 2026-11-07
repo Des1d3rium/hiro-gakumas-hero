@@ -486,6 +486,19 @@ def _rank_by_row_y(cy: int) -> int | None:
     return next((i + 1 for i, y in enumerate(RESULT_ROW_Y) if abs(cy - y) <= 40), None)
 
 
+def _split_gain_box(boxes, b) -> tuple[str | None, tuple]:
+    """最终页一行的总分和加分被 OCR 拆成两个框（Windows 第七局 r2 00312：「873,015」与「1274,711」，「+」读成「1」）：
+    找同一行紧挨在总分框右边的数字框当加分，去掉读错的「+」（1 / 十 / +），返回 (加分文字, 合并后的框)。没有就 (None, b)。"""
+    cy = (b[1] + b[3]) / 2
+    for t, b2 in boxes:
+        if b2 is b or not (-25 <= b2[0] - b[2] <= 30 and b2[2] > b[2] and abs((b2[1] + b2[3]) / 2 - cy) <= 15):
+            continue
+        g = re.fullmatch(r"[+＋十1]?\s*(\d{1,3}(?:[,、]\d{3})+)", t.replace(" ", ""))
+        if g:
+            return g.group(1).replace("、", ","), (b[0], min(b[1], b2[1]), b2[2], max(b[3], b2[3]))
+    return None, b
+
+
 def _read_round_result(img: MatLike, boxes, title: str | None) -> dict:
     """本战演出后的名次页（结算页布局）：左侧名次数字、名字、分数（带逗号、无 Pt），玩家行白框 + 右侧「ログ」，左下再挑戦。
     - 轮次结果「H.I.F本戦 ラウンド1結果 現在順位」：每行一个分数；
@@ -497,13 +510,17 @@ def _read_round_result(img: MatLike, boxes, title: str | None) -> dict:
     m = re.search(r"ラウンド\s*(\d)", title or "")
     log = next((b for t, b in boxes if t.startswith("ログ")), None)
     rows = []
+    final_page = m is None  # 没有「ラウンドN」：R2 后的最终页，每行「总分 +加分」
     for t, b in boxes:
         t = re.sub(r"[、，.]", ",", t)  # 加分的逗号常读成「、」（「820,463+455、281」整行没对上，名次也跟着错位）
         # 加分的逗号 OCR 常漏（第二十一局 R2 我方行「1,045,084+504068」整行没对上 → 我方第 None 名）：加分部分允许没有逗号
         # 「+」常读错：「:」（main15 #280）、「#」（Windows 第三局 r2 00228，那一行整行丢了、名次跟着错）——分隔符收任意 1–2 个非数字字符
         mm = re.fullmatch(rf"({num})(?:\s*[^\d,\s]{{1,2}}\s*(\d{{1,3}}(?:,\d{{3}})+|\d{{1,7}}))?", t)
         if mm and 200 <= b[0] <= 420:
-            rows.append((b, mm.group(1), mm.group(2)))
+            gain = mm.group(2)
+            if gain is None and final_page:
+                gain, b = _split_gain_box(boxes, b)
+            rows.append((b, mm.group(1), gain))
     rows.sort(key=lambda r: r[0][1])
     # 名次读左侧大字（1 / 2 / 3，与分数同一行），读不到再按行序
     digits = [(int(t), (b[1] + b[3]) // 2) for t, b in boxes if re.fullmatch(r"[1-9]", t) and b[2] <= 140]
