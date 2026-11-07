@@ -81,3 +81,21 @@ def test_brief_permil_cleared_after_exam():
     st = reduce(st, Observation(seq=2, t=0, page=PageObs("HIF_EXAM", "produce", 1.0, 2), fields={"attr": "Da"}, source="screen"))
     st = reduce(st, Observation(seq=3, t=0, page=PageObs("HIF_EXAM_RESULT", "produce", 1.0, 2), fields={}, source="screen"))
     assert st.exam_session.brief_permil is None
+
+
+def test_card_change_carries_stage1_pick():
+    """换卡阶段 2 的 ChangeCard 只带换出卡；换入卡从阶段 1 选中的候选接过来，记账不再每换一次少一张（Windows 第六局记账 17、实际 20）。"""
+    events_from_step("SKILL_CARD_CHANGE_1", {"kind": "ChangeCard", "args": {"stage": 1, "pick_index": 1}}, True,
+                     {"candidates": [{"card_id": "x"}, {"card_id": "y", "upgrade": 0}]}, None, seq=7)  # fmt: skip
+    ev = events_from_step("SKILL_CARD_CHANGE_2", {"kind": "ChangeCard", "args": {"stage": 2, "remove_card_id": "a", "remove_upgrade": 0}},
+                          True, {}, None, seq=8)  # fmt: skip
+    assert ev[0].kind == "CARD_CHANGE" and ev[0].args["card_id"] == "y"
+    st = GameState(produce={"deck": [{"card_id": "a", "upgrade": 0}, {"card_id": "b", "upgrade": 0}]})
+    s2, _ = apply_event(st, ev[0], predictor=lambda s, e: [])
+    assert [c["card_id"] for c in s2.produce["deck"]] == ["b", "y"]
+    # 阶段 2 取消：换入卡作废，下一次换卡不会误用
+    events_from_step("SKILL_CARD_CHANGE_1", {"kind": "ChangeCard", "args": {"stage": 1, "pick_index": 0}}, True,
+                     {"candidates": [{"card_id": "x"}]}, None, seq=9)  # fmt: skip
+    assert events_from_step("SKILL_CARD_CHANGE_2", {"kind": "ChangeCard", "args": {"cancel": True}}, True, {}, None, seq=10) == []
+    ev2 = events_from_step("SKILL_CARD_CHANGE_2", {"kind": "ChangeCard", "args": {"remove_card_id": "b"}}, True, {}, None, seq=11)
+    assert "card_id" not in ev2[0].args
