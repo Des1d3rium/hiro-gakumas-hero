@@ -95,3 +95,14 @@ def test_declined_retry_not_reopened_on_same_page(monkeypatch):
     assert st._finals_retry(None, "r2") is False and st._finals_retry(None, "r2") is False and len(calls) == 1
     page.update(score=900000, round_score=300000)
     assert st._finals_retry(None, "r2") is False and len(calls) == 2
+
+
+def test_retries_left_from_screen_overrides_trace_count():
+    """「あと N回」以画面为准：通信エラー期间 trace 里多记的「再挑戦」不该把剩余次数吃掉。"""
+    from types import SimpleNamespace as NS
+
+    from hiro.produce.hif import screen_retries_left
+
+    assert screen_retries_left([NS(text="あと3回"), NS(text="再挑戦")]) == 3
+    assert screen_retries_left([NS(text="あと 2 回")]) == 2
+    assert screen_retries_left([NS(text="次へ")]) is None

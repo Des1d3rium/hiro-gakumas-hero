@@ -127,6 +127,17 @@ def finals_hopeless(f: dict) -> str | None:
     return None
 
 
+def screen_retries_left(texts) -> int | None:
+    """结算页「再挑戦」按钮上方的「あと N回」→ N；读不到 None。"""
+    import re
+
+    for t in texts or []:
+        m = re.search(r"あと\s*(\d)\s*回", getattr(t, "text", "") or "")
+        if m:
+            return int(m.group(1))
+    return None
+
+
 def finals_label_round(npc_round: int | None, turns: int | None) -> int | None:
     """开考时判本战第几轮。R1 9 回合、R2 12 回合：剩余回合 > 9 一定是 R2；
     否则用 NPC 目标分归的轮（识别层已按主数据区间核对、两位矛盾时给 None）；
@@ -1487,7 +1498,10 @@ class HiroHifStrategy(HifGrindStrategy):
     def _click_retry(self, label: str, btn, texts, *, allow_ticket: bool = True) -> str | None:
         """点「再挑戦」并处理确认框（用户 2026-11-01 授权：免费 / 再挑戦券随便用，消耗ジュエル的绝不点）。
         返回 "free" / "ticket"，没有确认或要花ジュエル（已点キャンセル）时返回 None。"""
-        used = self._retries_so_far(label)
+        left = screen_retries_left(texts)
+        # 画面上「あと N回」是游戏自己的剩余次数，比数 trace 记录可靠：Windows 第七局通信エラー（ERR_AM_IDTOKEN_FAIL）期间
+        # 记了 3 条没真正开始的「免费再挑戦」，按记录数会以为 3 次用完
+        used = max(0, self.MAX_RETRIES_PER_EXAM - left) if left is not None else self._retries_so_far(label)
         if used >= self.MAX_RETRIES_PER_EXAM:
             self.s.note(f"{label} 已再挑戦 {used} 次，到上限 {self.MAX_RETRIES_PER_EXAM}，不再挑戦")
             logger.warning("%s 已再挑戦 %d 次（上限 %d），不再挑戦", label, used, self.MAX_RETRIES_PER_EXAM)
