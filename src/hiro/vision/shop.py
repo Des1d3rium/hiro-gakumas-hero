@@ -283,6 +283,14 @@ def _vote_price(img: MatLike, x: int, band: tuple[int, int], region_nums: list[i
         paid = sorted(v for v in seen if any(abs(v - o * SALE_RATE) <= 1 for o in seen if o > v))
         if paid:
             return paid[0]
+        # 看到了原价，读出的实付价和「原价 × 0.7」只差一位数以内（Windows 第八、十局 70→49 读成 40，几种读法一致地错）：按原价七折取整
+        votes0 = Counter(last).most_common(1)[0][0]
+        for o in sorted(seen, reverse=True):
+            fixed = int(o * SALE_RATE + 0.5)
+            a, b = str(votes0), str(fixed)
+            # 只修「同位数、只差一位数字」的读错（40↔49）；杂数（76 之类）算出来差两位的不改
+            if o > votes0 and len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1:
+                return fixed
     votes = Counter(last)
     top = max(votes.values())
     return next(v for v in last if votes[v] == top)

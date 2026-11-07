@@ -528,3 +528,17 @@ def test_r1_done_in_trace(tmp_path):
     assert st._r1_done_in_trace() is False
     (d / "steps.jsonl").write_text(page("standings") + "\n" + page("round_result") + "\n", encoding="utf-8")
     assert st._r1_done_in_trace() is True
+
+
+def test_vote_price_sale_fixes_one_digit_misread(monkeypatch):
+    """SALE 格：几种读法一致把 49 读成 40、整块读到了原价 70 → 按原价七折取整成 49（Windows 第八、十局）。"""
+    import numpy as np
+
+    from hiro.vision import digits, shop
+
+    monkeypatch.setattr(shop, "_cell_price", lambda img, x, band, scale=3: [40])
+    monkeypatch.setattr(digits, "read_dddd", lambda img, box: 40)
+    img = np.zeros((1280, 720, 3), np.uint8)
+    assert shop._vote_price(img, 65, (612, 652), [70, 40], sale=True) == 49
+    assert shop._vote_price(img, 65, (612, 652), [70, 49], sale=True) == 49
+    assert shop._vote_price(img, 65, (612, 652), [40], sale=False) == 40
