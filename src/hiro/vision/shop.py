@@ -21,6 +21,7 @@ import numpy as np
 from cv2.typing import MatLike
 
 from hiro.vision.items import _library
+from hiro.vision.ocr import engine as ocr_engine
 from hiro.vision.ocr import ocr_boxes
 
 REGION = (40, 470, 700, 1070)
@@ -108,7 +109,10 @@ def read_consult(img: MatLike) -> dict:
             nums = _nums(texts_in(xr, PRICE_BAND[top]))
             sale = len(nums) >= 2 or any("SALE" in t.upper().replace(" ", "") for t in texts_in(xr, SALE_BAND[top]))
             purchased = any("交換済" in t.replace(" ", "") for t in texts_in(xr, (top, top + CELL)))
-            shelf.append({"index": row * 4 + col, **item, "price": nums[-1] if nums else None, "sale": sale, "purchased": purchased,
+            price = nums[-1] if nums else None
+            if ocr_engine() != "vision" and not purchased:
+                price = _vote_price(img, x, PRICE_BAND[top], nums)
+            shelf.append({"index": row * 4 + col, **item, "price": price, "sale": sale, "purchased": purchased,
                           "center": [x + CELL // 2, top + CELL // 2]})  # fmt: skip
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     services = {}
@@ -230,8 +234,45 @@ def read_interval_shelf(img: MatLike) -> dict:
 INTERVAL_MIN_PRICE = 5  # 轮间货架最便宜的东西也有几十 P；更小的读数是 OCR 把首位读丢了
 
 
-def _cell_price(img: MatLike, x: int, band: tuple[int, int]) -> list[int]:
+def _cell_price(img: MatLike, x: int, band: tuple[int, int], scale: int = 3) -> list[int]:
     """整块 OCR 漏掉某格价格（第五局格 5 隔帧为 None）时，单独把这格的价格条放大再读。"""
     y1, y2 = band
     # 只放大一次（3 倍）：原来先 resize 3 倍、ocr_boxes 又默认放大 3 倍，实际 9 倍，Apple Vision 还读得出，RapidOCR 把「50」读成「0」
-    return _nums([t for t, _, _ in ocr_boxes(img[y1:y2, x + 30 : x + CELL + 5], scale=3)])
+    return _nums([t for t, _, _ in ocr_boxes(img[y1:y2, x + 30 : x + CELL + 5], scale=scale)])
+
+
+SALE_RATE = 0.7  # SALE 价 = 原价 × 0.7 取整（75→52、70→49、100→70、105→73）
+PRICE_MIN = 5  # 货架价格不会低于这个数：更小的是「50」漏读首位
+
+
+def _sale_split(nums: list[int]) -> list[int]:
+    """原价和 SALE 价读成一个数（「7049」「10573」）：拆成原价 | 原价×0.7 取整的那一种，取 SALE 价；去掉 < PRICE_MIN 的残读。"""
+    out = []
+    for v in nums:
+        s = str(v)
+        for k in range(2, len(s) - 1) if len(s) >= 4 else ():
+            a, b = int(s[:k]), int(s[k:])
+            if a >= 10 and b == int(a * SALE_RATE):
+                v = b
+                break
+        out.append(v)
+    return [v for v in out if v >= PRICE_MIN]
+
+
+def _vote_price(img: MatLike, x: int, band: tuple[int, int], region_nums: list[int]) -> int | None:
+    """非 Vision 后端的货架价格：单格 4 倍、整块、单格 3 倍、ddddocr 四种读法各取末位数投票，平票按这个顺序。
+    RapidOCR 整块读价格 80 格只对 39 格（SALE 的「49」读成「40」、「70」读成「10」，Windows 第六局 #124）；
+    加上 SALE 拆分和下限后投票 80/80（win2–win6 + A5b 的 11 帧相談货架，Vision 读数作真值）。"""
+    from collections import Counter
+
+    from hiro.vision.digits import read_dddd
+
+    y1, y2 = band
+    dddd = read_dddd(img, (x + 30, y1, x + CELL + 5, y2))
+    reads = [_sale_split(r) for r in (_cell_price(img, x, band, 4), region_nums, _cell_price(img, x, band, 3), [dddd] if dddd is not None else [])]
+    last = [r[-1] for r in reads if r]
+    if not last:
+        return None
+    votes = Counter(last)
+    top = max(votes.values())
+    return next(v for v in last if votes[v] == top)
