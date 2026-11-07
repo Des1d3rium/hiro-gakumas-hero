@@ -169,6 +169,21 @@ def _customized(cell: MatLike) -> bool:
     return green >= CUSTOM_MIN_PX_125 * area
 
 
+DIM_VOTE_GAINS = (0.8, 0.9, 1.0)  # 压暗格按这几档提亮各认一次（乘在 gain 上），至少 2 次一致才算
+
+
+def _dimmed_card(crop: MatLike, gain: float, match):
+    """压暗的格子（强化对话框里已强化的卡）：原图直接认会认成别的卡（Windows 第五局「えいえいおー」→「潜在能力」），
+    提亮过头也会（「アイドル宣言」→「ハートの合図」/「準備運動」）。几档提亮投票，多数一致才用，否则 None（拼接时当通配）。"""
+    from collections import Counter
+
+    hits = [c for k in DIM_VOTE_GAINS if (c := match(cv2.convertScaleAbs(crop, alpha=gain * k))) is not None]
+    if not hits:
+        return None
+    best, n = Counter(c._id for c in hits).most_common(1)[0]
+    return next(c for c in hits if c._id == best) if n >= 2 else None
+
+
 def read_card_grid(img: MatLike, region: tuple[int, int, int, int], geometry: str | None = None) -> list[dict]:
     """region 内整格可见的卡：[{index, row, col, card_id, name, upgrade, customized, rect, center}]，从左到右、从上到下。
 
@@ -198,8 +213,9 @@ def read_card_grid(img: MatLike, region: tuple[int, int, int, int], geometry: st
         dimmed = v_mean < DIM_V_MAX
         # 压暗的格子（强化对话框里不能再强化的卡、特別指導里不能定制的卡）：「+」与定制徽章的颜色跟着变暗，先按亮度比例提亮再判
         #（main10 相談強化：届いて！+ / デイドリーミング+ / 紙吹雪+ 压暗后 upgrade 全读成 0）
-        look = cv2.convertScaleAbs(crop, alpha=min(DIM_GAIN_MAX, DIM_TARGET_V / max(v_mean, 1.0))) if dimmed else crop
-        card = match_card_region(crop) or (match_card_region(look) if dimmed else None)
+        gain = min(DIM_GAIN_MAX, DIM_TARGET_V / max(v_mean, 1.0))
+        look = cv2.convertScaleAbs(crop, alpha=gain) if dimmed else crop
+        card = _dimmed_card(crop, gain, match_card_region) if dimmed else match_card_region(crop)
         upgrade = _plus(look) if card is not None else None
         out.append({
             "index": len(out), "row": len(row_ys) - 1, "col": int(col),

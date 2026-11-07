@@ -432,3 +432,39 @@ def test_result_score_over_max_is_dropped(monkeypatch):
     img = load(cv2.imread(str(Path(__file__).parent / "fixtures" / "finals" / "round1-result.jpg")))
     r = read_finals_ranking_page(img, _texts(img))
     assert [(e["rank"], e["score"]) for e in r["entries"]] == [(1, None), (2, 365868), (3, 117846)] and r["rank"] == 3
+
+
+def test_dimmed_card_needs_two_agreeing_gains():
+    """压暗格几档提亮投票：两档一致才用；各档都不一样就当没认出（不交出认错的卡）。"""
+    import numpy as np
+
+    from hiro.vision.deck import _dimmed_card
+
+    class C:
+        def __init__(self, i):
+            self._id = i
+
+    crop = np.full((10, 10, 3), 100, np.uint8)
+    seq = iter([None, C("a"), C("a")])
+    assert _dimmed_card(crop, 2.0, lambda im: next(seq))._id == "a"
+    seq2 = iter([C("a"), C("b"), C("c")])
+    assert _dimmed_card(crop, 2.0, lambda im: next(seq2)) is None
+
+
+@pytest.mark.fixtures
+def test_enhance_dialog_scan_win5_stitches():
+    """Windows 第五局强化翻牌组：MuMu 每滑一次约 1.5 行，第 2、3 屏只重叠一行，压暗格又认错两张 → 「第 3 屏没有重叠的行」、拼出 25 张。
+    压暗格投票后拼出整副（记账 20 张，容差内）。"""
+    import cv2
+
+    from hiro.vision.deck import ENHANCE_GRID, merge_dialog_screens, read_card_dialog
+    from hiro.vision.offline import load
+
+    d = Path(__file__).parent / "fixtures" / "deck_scan" / "win5-enhance"
+    if not d.is_dir():
+        pytest.skip("需要样例 tests/fixtures/deck_scan/win5-enhance")
+    screens = [read_card_dialog(load(cv2.imread(str(d / f"screen{i:02d}.png"))), ENHANCE_GRID)["cards"] for i in range(4)]
+    m = merge_dialog_screens(screens, expected=20)
+    assert m["complete"] and m["new_rows"] == [3, 1, 2, 0]
+    names = [c["name"] for c in m["cards"]]
+    assert "潜在能力" not in names and names.count("えいえいおー") == 1
