@@ -557,9 +557,13 @@ class HiroController(ProduceController):
         return self._texts
 
     def _is_date_changed(self) -> bool:
-        from hiro.loop.date_change import DATE_TITLES
+        from hiro.loop.date_change import FORCED_TITLES
 
-        return any(k in t.replace(" ", "") for t in self._ocr_texts() for k in DATE_TITLES)
+        from hiro.vision.textnorm import contains_any
+
+        texts = [t.replace(" ", "") for t in self._ocr_texts()]
+        # 标题和「タイトルへ」按钮都要在（「データ更新」这类字样别处也可能出现）
+        return any(k in t for t in texts for k in FORCED_TITLES) and any(contains_any(t, ("タイトルへ",)) for t in texts)
 
     # 盖在開始確認页上的设置框（第二十三局：データ連携重新登录后，开局点了开始先弹「早送り設定」再弹「演出スキップ設定」，
     # 背景的「2.開始確認」被 OCR 读到 → 判成开始确认页停机，实际已开局、AP 已扣）

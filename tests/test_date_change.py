@@ -128,3 +128,38 @@ def test_landscape_frame_skipped_no_crash():
 
     cb = dc.loop_callback(boom, every=0, clock=lambda: 0.0)
     assert cb(type("L", (), {"screenshot": np.zeros((1280, 720, 3), np.uint8)})()) is False
+
+
+@_real('date_change/data-update-win4-206.jpg')
+def test_data_update_dialog_detected():
+    """Windows 第四局 R2 最后一回合：游戏弹「データ更新 / データ更新があります。」只有「タイトルへ」，看门狗空转 183s 停机。
+    和日期切换走同一条路：认出来、点タイトルへ、回首页续跑。"""
+    img = cv2.imread(str(FIX / "data-update-win4-206.jpg"))
+    pos = dc.date_change_button(dc.strip_boxes(img, ops.ocr_boxes))
+    assert pos and abs(pos[0] - 360) < 50 and abs(pos[1] - 1157) < 20
+    cb = dc.loop_callback(ops.ocr_boxes, every=0, clock=lambda: 0.0)
+    with pytest.raises(dc.DateChanged, match="データ更新"):
+        cb(FakeLoop(img))
+
+
+def test_recover_accepts_download_and_never_cancels():
+    """回标题后要下载数据：有「ダウンロード」字样时点 OK / ダウンロード，绝不点キャンセル；下载中只等不点空白。"""
+    seq = [
+        [box("データ更新", 360, 970), box("タイトルへ", 360, 1157)],
+        [box("追加データをダウンロードします", 360, 600), box("キャンセル", 220, 1000), box("OK", 500, 1000)],
+        [box("ダウンロード中", 360, 1100), box("45%", 360, 1150)],
+        [box("TAP TO START", 360, 1100)],
+        "home",
+    ]
+    i = {"n": 0}
+    clicks = []
+
+    def shoot():
+        n = i["n"]
+        i["n"] = min(n + 1, len(seq) - 1)
+        return n
+
+    t = {"now": 0.0}
+    ok = dc.recover_to_home(shoot, lambda x, y: clicks.append((x, y)), lambda n: seq[n], lambda n: seq[n] == "home",
+                            clock=lambda: t["now"], sleep=lambda x: t.__setitem__("now", t["now"] + x))  # fmt: skip
+    assert ok and clicks == [(360, 1157), (500, 1000), (360, 1100)]

@@ -1,5 +1,5 @@
 # 来源：digital-hiro hiro/loop/date_change.py（c3fc27f）
-"""游戏日切换（凌晨 4:00）「日付変更 / 日付が変わりました。/ タイトルへ」的处理。
+"""游戏日切换（凌晨 4:00）「日付変更 / 日付が変わりました。/ タイトルへ」与数据更新「データ更新 / データ更新があります。/ タイトルへ」的处理。
 
 main13 本战（2026-11-02 04:00）：R1 结果页之后弹出这个框，hif.on_exam_entered 收尾的 `for _ in Loop()` 一直找到压在弹窗下面的
 「次へ」并点它（没反应），没有日志、没有超时，空转 5 分钟（kotonebot 的 Loop 不检查 timeout 参数）。
@@ -21,10 +21,18 @@ from hiro.log import logging
 logger = logging.getLogger(__name__)
 
 DATE_TITLES = ("日付変更", "日付が変わりました")
+# 游戏推送数据更新（Windows 第四局 R2 最后一回合 09:40：「データ更新 / データ更新があります。」只有「タイトルへ」一个按钮，
+# 看门狗空转 183s 停机）：和日期切换一样是游戏强制回标题，同一条路处理（协调 2026-11-07 批准点タイトルへ）
+DATA_UPDATE_TITLES = ("データ更新",)
+FORCED_TITLES = DATE_TITLES + DATA_UPDATE_TITLES
 TO_TITLE = ("タイトルへ",)
+# 回标题后可能要下载数据：有「ダウンロード」字样时点这些按钮，绝不点キャンセル（不下载就进不去）
+DOWNLOAD_HINTS = ("ダウンロード",)
+DOWNLOAD_OK = ("ダウンロード", "OK", "はい", "同意する")
 TAP_TO_START = ("TAPTOSTART",)
 CLOSE = ("閉じる", "キャンセル")
 PURCHASE_HINTS = ("購入", "ジュエル", "パック", "ショップ", "円")
+MAX_RECOVER_S = 900.0  # 下载会续时间，但总共不超过 15 分钟
 BLANK_TAP = (360, 220)  # 登录奖励 / 公告：点空白推进（画面上方，避开底部按钮与横幅）
 
 
@@ -42,9 +50,9 @@ def _center(b) -> tuple[int, int]:
 
 
 def date_change_button(boxes) -> tuple[int, int] | None:
-    """OCR 结果里有日期切换弹窗就返回「タイトルへ」的位置，否则 None。"""
+    """OCR 结果里有日期切换 / 数据更新弹窗就返回「タイトルへ」的位置，否则 None（要标题和按钮都在）。"""
     texts = [(_norm(t), b) for t, _, b in boxes]
-    if not any(any(k in t for k in DATE_TITLES) for t, _ in texts):
+    if not any(any(k in t for k in FORCED_TITLES) for t, _ in texts):
         return None
     return next((_center(b) for t, b in texts if contains_any(t, TO_TITLE)), None)
 
@@ -68,8 +76,8 @@ def recover_to_home(shoot: Callable, click: Callable[[int, int], None], ocr: Cal
     from hiro.loop.assist import Assist
 
     assist = Assist("日切换恢复", click=click)  # 快速判页 + 卡住交 LLM（同主循环；登录奖励等认不出的画面）
-    t0 = clock()
-    while clock() - t0 < timeout:
+    t0 = start = clock()
+    while clock() - t0 < timeout and clock() - start < MAX_RECOVER_S:
         img = shoot()
         if at_home(img):
             logger.info("日期切换：已回到首页（%.0fs）", clock() - t0)
@@ -77,8 +85,16 @@ def recover_to_home(shoot: Callable, click: Callable[[int, int], None], ocr: Cal
         boxes = ocr(img)
         texts = [(_norm(t), b) for t, _, b in boxes]
         if pos := date_change_button(boxes):
-            logger.info("日期切换：点「タイトルへ」")
+            logger.info("日期切换 / 数据更新：点「タイトルへ」")
             click(*pos)
+        elif any(any(k in t for k in DOWNLOAD_HINTS) for t, _ in texts):
+            ok = next((_center(b) for t, b in texts if t in DOWNLOAD_OK and _center(b)[1] > 700), None)
+            if ok:
+                logger.info("回首页：下载确认，点「%s」", next(t for t, b in texts if _center(b) == ok))
+                click(*ok)
+            else:
+                logger.info("回首页：数据下载中，等待")
+            t0 = max(t0, clock() - timeout / 2)  # 下载可能很久：看到下载字样就把剩余时间至少续到一半
         elif tap := next((_center(b) for t, b in texts if any(k in t.upper() for k in TAP_TO_START)), None):
             logger.info("日期切换：标题页点「TAP TO START」")
             click(*tap)
@@ -121,8 +137,9 @@ def loop_callback(ocr: Callable, *, every: float = 5.0, clock: Callable[[], floa
             logger.warning("日期切换检测出错（%s），本轮跳过", e)
             return False
         if date_change_button(boxes) is not None:
-            logger.warning("日期切换：在 KAA 循环里认出「日付変更」，打断当前流程")
-            raise DateChanged("日付変更")
+            kind = "データ更新" if any(any(k in _norm(t) for k in DATA_UPDATE_TITLES) for t, _, _ in boxes) else "日付変更"
+            logger.warning("日期切换 / 数据更新：在 KAA 循环里认出「%s」，打断当前流程", kind)
+            raise DateChanged(kind)
         # 通信エラー（第二十二局轮间卡死 195s）：同一条带里认，リトライ就点；只能回标题就点閉じる并抛 CommErrorToTitle（同日期切换的回首页路）
         from hiro.loop import comm_error
 
