@@ -399,3 +399,20 @@ def test_finals_label_round_from_turns_when_npc_unsure():
     assert finals_label_round(1, 12) == 2
     assert finals_label_round(2, 7) == 2
     assert finals_label_round(None, 7) is None
+
+
+def test_merge_dialog_screens_tolerates_one_misread_cell():
+    """两屏重叠两行、其中一格两屏认成不同的卡：仍按两行对齐（不再整块接在后面拼出 27 张），那一格记成没认全。
+    只重叠一行时不放宽（牌组里常有同名卡，一行三格相同不足以对齐）。"""
+    from hiro.vision.deck import merge_dialog_screens
+
+    def screen(rows):
+        return [{"row": r, "col": c, "card_id": cid, "name": cid, "upgrade": 1} for r, row in enumerate(rows) for c, cid in enumerate(row)]
+
+    a = [["a1", "a2", "a3", "a4"], ["b1", "b2", "b3", "b4"], ["c1", "c2", "c3", "c4"]]
+    b = [["b1", "b2", "b3", "b4"], ["c1", "XX", "c3", "c4"], ["d1", "d2", "d3"]]
+    m = merge_dialog_screens([screen(a), screen(b)], expected=15)
+    assert m["complete"] and m["new_rows"] == [3, 1] and len(m["cards"]) == 15
+    assert m["unknown"] == [9]
+    one = merge_dialog_screens([screen(a), screen([["c1", "XX", "c3", "c4"], ["d1", "d2", "d3"]])], expected=15)
+    assert one["new_rows"] == [3, 2] and not one["complete"]

@@ -404,18 +404,24 @@ def _cell_match(a: dict, b: dict) -> bool | None:
     return a["card_id"] == b["card_id"] and (a.get("upgrade") is None or b.get("upgrade") is None or a["upgrade"] == b["upgrade"])
 
 
+BLOCK_CONFLICT_MIN_ROWS = 2  # 至少几行的重叠块才容许一格两屏认得不一样
+
+
 def _block_match(ra: list[list[dict]], rb: list[list[dict]]) -> bool:
     """两块行对得上：每行张数相同、每格相同或通配，且两边都认出且相同的格数 ≥ 行数（全是通配的块不作对齐依据；
-    第十四局第 1 屏末行两格都没认出，按行要求会整块对不上）。"""
-    hits = 0
+    第十四局第 1 屏末行两格都没认出，按行要求会整块对不上）。
+    ≥ 2 行的块容许一格两屏认得不一样（卡图识别偶尔认错一格；Windows 第四局 MuMu 换卡阶段 2 每次都因此「第 3 屏没有重叠的行」，
+    拼出 27–28 张），但其余格要几乎全对上（相同格 ≥ 3×行数 − 1）。"""
+    hits = conflicts = 0
     for x, y in zip(ra, rb, strict=True):
         if len(x) != len(y):
             return False
         res = [_cell_match(a, b) for a, b in zip(x, y, strict=True)]
-        if False in res:
-            return False
         hits += res.count(True)
-    return hits >= len(ra)
+        conflicts += res.count(False)
+    if conflicts == 0:
+        return hits >= len(ra)
+    return conflicts == 1 and len(ra) >= BLOCK_CONFLICT_MIN_ROWS and hits >= 3 * len(ra) - 1
 
 
 DECK_SIZE_TOL = 2  # 拼出的张数与记账张数最多差几张（记账会漏记少数事件）
@@ -433,7 +439,7 @@ def merge_dialog_screens(screens: list[list[dict]], expected: int | None = None)
     没认全的卡另列 unknown（也写进 problems），不影响 complete。
     第十四局相談删除：18 张一屏放得下，滑了一次画面没变，两屏没认出的格不同 → 旧版对不上、整屏接在后面，拼成 36 张。"""
     rows: list[list[dict]] = []
-    new_rows, problems = [], []
+    new_rows, problems, problems_soft = [], [], []  # problems_soft：只提示，不影响 complete
     for n, cards in enumerate(screens):
         by_row: dict[int, list] = {}
         for c in cards:
@@ -444,10 +450,13 @@ def merge_dialog_screens(screens: list[list[dict]], expected: int | None = None)
             if _block_match(rows[len(rows) - size :], screen_rows[:size]):
                 k = size
                 break
-        for i in range(k):  # 对齐的行：用这一屏认出的补上前一屏没认出的格
+        for i in range(k):  # 对齐的行：用这一屏认出的补上前一屏没认出的格；两屏认得不一样的格不知道信哪边，记成没认全
             old = rows[len(rows) - k + i]
             for j, (x, y) in enumerate(zip(old, screen_rows[i], strict=True)):
-                if (x.get("card_id") is None or x.get("upgrade") is None) and y.get("card_id") is not None and y.get("upgrade") is not None:
+                if _cell_match(x, y) is False:
+                    old[j] = {**x, "card_id": None, "name": None, "upgrade": None}
+                    problems_soft.append(f"第 {n + 1} 屏第 {i + 1} 行第 {j + 1} 格和上一屏认得不一样（{x.get('name')} / {y.get('name')}），记成没认全")
+                elif (x.get("card_id") is None or x.get("upgrade") is None) and y.get("card_id") is not None and y.get("upgrade") is not None:
                     old[j] = y
         if rows and k == 0 and screen_rows:
             problems.append(f"第 {n + 1} 屏和上一屏没有重叠的行（滑过了头？），按接在后面处理")
@@ -464,6 +473,7 @@ def merge_dialog_screens(screens: list[list[dict]], expected: int | None = None)
         problems.append(f"拼出 {len(out)} 张，记账 {expected} 张，差太多")
     unknown = [c["deck_index"] for c in out if c["card_id"] is None or c["upgrade"] is None]
     complete = not problems  # 个别卡没认全不算拼接错（决策不会选认不出的卡），另列 unknown
+    problems.extend(problems_soft)
     if unknown:
         problems.append(f"第 {unknown} 张没认全")
     return {"cards": out, "new_rows": new_rows, "problems": problems, "unknown": unknown, "complete": complete}

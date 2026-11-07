@@ -278,7 +278,7 @@ def _save_scan_frames(frames, problems) -> None:
         d = CALIB_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}-牌组拼接"
         d.mkdir(parents=True, exist_ok=True)
         for i, f in enumerate(frames):
-            imgio.imwrite(str(d / f"screen{i:02d}.jpg"), f)
+            imgio.imwrite(str(d / f"screen{i:02d}.png"), f)  # PNG：JPEG 压缩后卡图识别结果会变（实机认出的卡离线成了「?」），复现不了
         (d / "problems.txt").write_text("\n".join(map(str, problems)), encoding="utf-8")
         logger.info("牌组拼接不可信，%d 屏存到 %s", len(frames), d)
     except Exception as e:  # noqa: BLE001
