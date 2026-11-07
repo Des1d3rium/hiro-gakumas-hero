@@ -120,7 +120,7 @@ def _attr_by_band(img: MatLike, cx: int, ty: int) -> str | None:
     return best if counts[best] >= 0.5 * vivid.sum() else None
 
 
-COST_HEART_AREA = (300, 1200)  # 课程卡右上角绿色爱心（体力消耗徽章）的像素数，实测约 640
+COST_HEART_AREA = (150, 1200)  # 课程卡右上角绿色爱心（体力消耗徽章）的像素数：整颗约 640，只绿一半约 290
 
 
 def _cost_by_heart(img: MatLike, cx: int, ty: int, read: int | None) -> int | None:
@@ -134,7 +134,7 @@ def _cost_by_heart(img: MatLike, cx: int, ty: int, read: int | None) -> int | No
     hsv = cv2.cvtColor(band, cv2.COLOR_BGR2HSV)
     mask = ((hsv[:, :, 0] >= 35) & (hsv[:, :, 0] <= 85) & (hsv[:, :, 1] >= 120) & (hsv[:, :, 2] >= 120)).astype(np.uint8)
     n, _, st, _ = cv2.connectedComponentsWithStats(mask, 8)
-    hearts = [st[i] for i in range(1, n) if COST_HEART_AREA[0] <= st[i][4] <= COST_HEART_AREA[1] and 20 <= st[i][2] <= 45 and 20 <= st[i][3] <= 45]
+    hearts = [st[i] for i in range(1, n) if COST_HEART_AREA[0] <= st[i][4] <= COST_HEART_AREA[1] and 12 <= st[i][2] <= 45 and 15 <= st[i][3] <= 45]
     if not hearts:
         return None
     if read is not None:
