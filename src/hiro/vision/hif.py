@@ -292,7 +292,6 @@ def _longest_run(flags) -> tuple[int, int] | None:
 FINALS_BADGE_BOX = (220, 2, 480, 45)  # 本战排名条顶上的 1st / 2nd / 3rd 名次徽章（橙金色）
 FINALS_TURNS_MIN = 0.45
 FINALS_BADGE_MIN = 400  # 橙金像素：本战考试 1409–1451，选拔考试 0
-FINALS_R2_MIN_NPC = 500_000  # 本战 NPC 分数：R1 第 1 名 39.7–40.3 万（produce_008-01），R2 59.0–61.0 万（-02）
 FINALS_NPC_W = 69  # NPC 卡宽；玩家卡约 122
 
 
@@ -381,7 +380,7 @@ def read_finals_ranking(img: MatLike) -> dict:
     - 玩家卡：白框顶边右端 − 122；名次 = 左边 NPC 卡数 + 1（徽章文字 OCR 不可靠：「Lst」「2na」「13ral」）。
     - 玩家分数：整张卡宽的分数行，放大 OCR / 字体比对 / ddddocr 三票取多数（窄框会切掉末位：1085→108）。
     - NPC 分数：单格放大 OCR（5–6 位；ddddocr 会掉末位、字体比对认不出这号小字）。
-    - finals_round：NPC 最高分 ≥ 50 万为 R2，否则 R1（主数据 produce_008-01 / -02）。"""
+    - finals_round：两位 NPC 的目标分按主数据区间归轮（finals_round_from_npc）；区间外 / 互相矛盾的读数作废。"""
     from hiro.vision.digits import read_dddd
 
     out = {"my_rank_index": None, "my_score": None, "my_score_read": None, "npc_scores": [], "finals_round": None}
@@ -413,26 +412,34 @@ def read_finals_ranking(img: MatLike) -> dict:
             # ddddocr 框向右放宽 4 像素读 6 位数：本战 11 帧要么全对、要么读出一两位被下限作废，没给过错值
             v = read_dddd(img, (x, y1, x + FINALS_NPC_W + 5, y2))
         out["npc_scores"].append(v if v is not None and FINALS_NPC_MIN <= v <= 999_999 else None)
-    out["finals_round"] = finals_round_from_npc(out["npc_scores"])
+    rnd = out["finals_round"] = finals_round_from_npc(out["npc_scores"])
+    # 不在本轮区间的读数是读错的（两位互相矛盾时两位都不可信）：作废，别让决策拿 R2 的目标分打 R1
+    out["npc_scores"] = [v if v is not None and rnd is not None and npc_round(i, v) == rnd else None
+                         for i, v in enumerate(out["npc_scores"])]
     return out
 
 
 # 本战 NPC 的分数是这一轮的目标分，整场考试不变：R1 约 29–40 万、R2 约 42–60 万。读成五位数一定是掉了首位
 # （Windows 第二局 RapidOCR：451280 → 51280，名次自洽检查拿它当上限，把我方正确的 97371 等分数丢了 8 次），作废
 FINALS_NPC_MIN = 250_000
-FINALS_R2_MIN_NPC2 = 370_000  # 排第二的 NPC：R1 29.4–31.5 万，R2 42.1–49.1 万
+# 本战 NPC 目标分（主数据 ProduceExamBattleNpcGroup produce_008-01 / -02，8 位 NPC 偶像的 scoreMin–scoreMax 合并）：
+# 第一位 / 第二位各自落在很窄的区间，两轮不重叠。(第一位, 第二位) 的 (下限, 上限)
+FINALS_NPC_BANDS = {1: ((397_457, 409_161), (293_847, 322_182)), 2: ((590_229, 618_779), (417_672, 507_672))}
+
+
+def npc_round(pos: int, v: int) -> int | None:
+    """第 pos 位（0 / 1）NPC 的目标分属于哪一轮；不在任何一轮的区间里给 None（读错）。"""
+    return next((r for r, bands in FINALS_NPC_BANDS.items() if pos < len(bands) and bands[pos][0] <= v <= bands[pos][1]), None)
 
 
 def finals_round_from_npc(npc: list[int | None]) -> int | None:
-    """按 NPC 分数判本战第几轮。npc 从左到右 = NPC 之间的名次（第一位总是分数高的那位）。
-    第一位读到：≥ 50 万为 R2；只读到第二位：≥ 37 万为 R2；都读不到（加分特效挡住，r2 00197）给 None，不按半截判。"""
-    first = npc[0] if npc else None
-    second = npc[1] if len(npc) > 1 else None
-    if first is not None:
-        return 2 if first >= FINALS_R2_MIN_NPC else 1
-    if second is not None:
-        return 2 if second >= FINALS_R2_MIN_NPC2 else 1
-    return None
+    """按 NPC 目标分判本战第几轮。npc 从左到右 = NPC 之间的名次（第一位总是分数高的那位）。
+    每位按主数据区间归到一轮；区间外的读数当读错。两位都归上了必须是同一轮，否则 None：
+    Windows 第三局 ddddocr 把 R1 的 399562 读成 599562（3→5），单看第一位落在 R2 区间，R1 整场被当成 R2 打；
+    第二位 303083 仍是 R1，互相矛盾就不判，交给调用方的其他信号（剩余回合、考试场次）。
+    都读不到（加分特效挡住，r2 00197）给 None。"""
+    rounds = {npc_round(i, v) for i, v in enumerate(npc[:2]) if v is not None} - {None}
+    return rounds.pop() if len(rounds) == 1 else None
 
 
 def read_ranking(img: MatLike) -> dict:

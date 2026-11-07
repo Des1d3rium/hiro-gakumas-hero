@@ -372,7 +372,7 @@ def read_finals_ranking_page(img: MatLike, boxes) -> dict:
     """本战名次页「現在順位」：已演出的人按名次从上到下（大字 1st / 2nd + 右下「399,645Pt」），玩家卡是青色底；
     还没演出时玩家卡在「NEXT」下面、没有分数。
     {entries: [{rank, score, me}], next: 有「NEXT」, my_score, rank（玩家已演出才有）, finals_round: 1 / 2 / None}。
-    finals_round 按 NPC 最高分：≥ 50 万为 R2（主数据 produce_008-02），否则 R1。"""
+    finals_round 按 NPC 目标分落在主数据哪一轮的区间（hif.finals_round_from_npc）。"""
     from hiro.vision.hif import _result_score, finals_round_from_npc, read_retry
 
     title = next((t for t, b in boxes if "ラウンド" in t and "結果" in t), None)
@@ -477,6 +477,14 @@ def _idol_name(text: str) -> str | None:
     return best if best and SequenceMatcher(None, text, best).ratio() >= 0.6 else None
 
 
+RESULT_ROW_Y = (324, 503, 682)  # 结算页三行分数框的中心 y（10 张实机图 ±3 像素）
+
+
+def _rank_by_row_y(cy: int) -> int | None:
+    """名次大字没读到时按分数行的位置定名次。按行序数会在漏读一行时错位（Windows 第三局 r2 00228：倉本行没读到，我方第 3 被当成第 2）。"""
+    return next((i + 1 for i, y in enumerate(RESULT_ROW_Y) if abs(cy - y) <= 40), None)
+
+
 def _read_round_result(img: MatLike, boxes, title: str | None) -> dict:
     """本战演出后的名次页（结算页布局）：左侧名次数字、名字、分数（带逗号、无 Pt），玩家行白框 + 右侧「ログ」，左下再挑戦。
     - 轮次结果「H.I.F本戦 ラウンド1結果 現在順位」：每行一个分数；
@@ -491,7 +499,8 @@ def _read_round_result(img: MatLike, boxes, title: str | None) -> dict:
     for t, b in boxes:
         t = re.sub(r"[、，.]", ",", t)  # 加分的逗号常读成「、」（「820,463+455、281」整行没对上，名次也跟着错位）
         # 加分的逗号 OCR 常漏（第二十一局 R2 我方行「1,045,084+504068」整行没对上 → 我方第 None 名）：加分部分允许没有逗号
-        mm = re.fullmatch(rf"({num})(?:\s*[+＋:：;]\s*(\d{{1,3}}(?:,\d{{3}})+|\d{{1,7}}))?", t)  # 「+」偶尔读成「:」（main15 #280）
+        # 「+」常读错：「:」（main15 #280）、「#」（Windows 第三局 r2 00228，那一行整行丢了、名次跟着错）——分隔符收任意 1–2 个非数字字符
+        mm = re.fullmatch(rf"({num})(?:\s*[^\d,\s]{{1,2}}\s*(\d{{1,3}}(?:,\d{{3}})+|\d{{1,7}}))?", t)
         if mm and 200 <= b[0] <= 420:
             rows.append((b, mm.group(1), mm.group(2)))
     rows.sort(key=lambda r: r[0][1])
@@ -500,7 +509,7 @@ def _read_round_result(img: MatLike, boxes, title: str | None) -> dict:
     entries = []
     for i, (b, total, gain) in enumerate(rows):
         cy = (b[1] + b[3]) // 2
-        rank = next((d for d, y in digits if abs(y - cy) <= 60), i + 1)
+        rank = next((d for d, y in digits if abs(y - cy) <= 60), None) or _rank_by_row_y(cy) or i + 1
         if gain:
             score = _merged_total(img, re.sub(r"\D", "", total), b, len(total), len(gain) + 1)
         else:

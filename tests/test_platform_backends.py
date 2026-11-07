@@ -359,7 +359,6 @@ def test_finals_npc_score_with_dropped_digit_is_rejected(monkeypatch):
     from hiro.vision import hif
 
     img = cv2.imread(str(Path(__file__).parent / "fixtures" / "finals" / "exam-r2-t12.jpg"))
-    monkeypatch.setattr(hif, "ocr_engine", lambda: "vision")
     monkeypatch.setattr(hif, "ocr_engine", lambda: "vision")  # 测的是 Vision 读法下掉首位的作废；非 Vision 后端走 ddddocr
     reads = iter([598516, 60505])
     monkeypatch.setattr(hif, "_ocr_int", lambda im, box: next(reads) if box[2] - box[0] == hif.FINALS_NPC_W + 1 else None)
@@ -376,3 +375,27 @@ def test_imwrite_handles_non_ascii_path(tmp_path):
     p = tmp_path / "20261107-063238-换卡" / "01-阶段1.jpg"
     p.parent.mkdir()
     assert imwrite(p, np.full((8, 8, 3), 200, np.uint8)) and cv2.imdecode(np.frombuffer(p.read_bytes(), np.uint8), 1).shape == (8, 8, 3)
+
+
+def test_finals_round_needs_both_npc_in_one_round():
+    """本战 NPC 目标分按主数据区间归轮：Windows 第三局 ddddocr 把 R1 的 399562 读成 599562，单看第一位像 R2；
+    第二位 303083 仍是 R1，两位矛盾就不判。区间外的读数（703083）当读错。"""
+    from hiro.vision.hif import finals_round_from_npc
+
+    assert finals_round_from_npc([399562, 303083]) == 1
+    assert finals_round_from_npc([599112, 455627]) == 2
+    assert finals_round_from_npc([599112, None]) == 2
+    assert finals_round_from_npc([599562, 303083]) is None
+    assert finals_round_from_npc([None, 703083]) is None
+    assert finals_round_from_npc([None, None]) is None
+
+
+def test_finals_label_round_from_turns_when_npc_unsure():
+    """开考判轮：剩余回合 > 9 只能是 R2；NPC 判不了时剩余 9 回合是 R1 刚开考（R2 开考是 12）。"""
+    from hiro.produce.hif import finals_label_round
+
+    assert finals_label_round(None, 9) == 1
+    assert finals_label_round(None, 12) == 2
+    assert finals_label_round(1, 12) == 2
+    assert finals_label_round(2, 7) == 2
+    assert finals_label_round(None, 7) is None

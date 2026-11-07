@@ -127,6 +127,18 @@ def finals_hopeless(f: dict) -> str | None:
     return None
 
 
+def finals_label_round(npc_round: int | None, turns: int | None) -> int | None:
+    """开考时判本战第几轮。R1 9 回合、R2 12 回合：剩余回合 > 9 一定是 R2；
+    否则用 NPC 目标分归的轮（识别层已按主数据区间核对、两位矛盾时给 None）；
+    NPC 判不了而剩余回合正好 9：R2 开考是 12，只能是 R1 刚开考（Windows 第三局 R1 开考帧 NPC 读成 [599562, 303083]）。
+    都判不了给 None，调用方退回 KAA。"""
+    if turns is not None and turns > 9:
+        return 2
+    if npc_round in (1, 2):
+        return npc_round
+    return 1 if turns == 9 else None
+
+
 class HiroHifStrategy(HifGrindStrategy):
     recorder: Recorder | None = None
     session: Session | None = None  # run_hif 注入；None 时自动建一个（trace 仍会写）
@@ -1366,15 +1378,15 @@ class HiroHifStrategy(HifGrindStrategy):
 
         scene = classify_current().scene
         if scene == "HIF_EXAM" and self.scenario != HifScenario.QUALIFY:
-            # 本战：识别-05 给 finals_round（按 NPC 最高分区分 R1 / R2）；读不到时退回 KAA 的 is_final_exam
             try:
                 from hiro.vision.hif import read_hif_exam
 
-                rnd = read_hif_exam(device.screenshot()).get("finals_round")
+                f = read_hif_exam(device.screenshot())
             except Exception:
-                rnd = None
+                f = {}
             self.exam_count += 1
             HiroHifStrategy.exams_done = self.exam_count
+            rnd = finals_label_round(f.get("finals_round"), f.get("remaining_turns"))
             if rnd in (1, 2):
                 return f"r{rnd}"
             return "r2" if ctx.is_final_exam() else "r1"
