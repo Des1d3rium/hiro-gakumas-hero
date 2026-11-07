@@ -491,3 +491,22 @@ def test_consult_sale_price_win6():
         pytest.skip("需要样例 tests/fixtures/consult/consult-sale-win6-124.jpg")
     shelf = read_consult(load(cv2.imread(str(f))))["shelf"]
     assert [e["price"] for e in shelf] == [49, 77, 70, 70, 70, 50, 50, 100]
+
+
+@pytest.mark.fixtures
+@pytest.mark.parametrize(("rel", "costs"), [
+    ("class-no-cost-win6-011.jpg", [("class", None)] * 3),  # 授業卡没有消耗徽章：RapidOCR 读出幻影「18」
+    ("open-lesson-cost-win6-083.jpg", [("rest", None), ("open_lesson", 8), ("open_lesson", 8), ("open_lesson", 6)]),  # 「-6」被漏读
+])  # fmt: skip
+def test_action_costs_gated_by_heart(rel, costs):
+    """选行动页课程卡的体力消耗以绿色爱心徽章为准（非 Vision 后端）：没有爱心不认数字，有爱心没读到就单独读爱心右边。"""
+    import cv2
+
+    from hiro.vision.extract import extract
+    from hiro.vision.offline import load
+
+    f = Path(__file__).parent / "fixtures" / "action_select" / rel
+    if not f.exists():
+        pytest.skip(f"需要样例 tests/fixtures/action_select/{rel}")
+    raw, _ = extract("ACTION_SELECT", load(cv2.imread(str(f))))
+    assert [(o["kind"], o["hp_cost"]) for o in raw["options"]] == costs
