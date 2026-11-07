@@ -1467,6 +1467,7 @@ class HiroHifStrategy(HifGrindStrategy):
         return True
 
     exam_restarted = False  # 刚点了再挑戦、同一场考试要重新进入（见 HiroController._rearm_exam）
+    _retry_comm_error = False  # 上一次点再挑戦遇到通信エラー（不算决定不再挑戦）
     _retry_declined: tuple | None = None  # 已决定不再挑戦的本战结算页（label, 总分, 本轮分）：同一页不再点开确认框
     RETRY_JEWEL = ("ジュエル",)
     RETRY_CONFIRM_WAIT = 15.0
@@ -1521,6 +1522,12 @@ class HiroHifStrategy(HifGrindStrategy):
             device.screenshot()
             boxes = ocr.ocr()
             words = " ".join(t.text for t in boxes)
+            if "通信" in words and ("エラー" in words or "リトライ" in words):
+                # 点了再挑戦却弹出通信エラー（Windows 第七局 ERR_AM_IDTOKEN_FAIL）：这次没开始，不记账；弹窗交给 comm_error 处理
+                self.s.note(f"{label} 点再挑戦后出现通信エラー：这次不算再挑戦")
+                logger.warning("%s 点再挑戦后出现通信エラー，这次不算再挑戦", label)
+                self._retry_comm_error = True  # 不是「决定不再挑戦」：恢复后同一页还要再判断
+                return None
             if any(j in words for j in self.RETRY_JEWEL):
                 cancel = next((t for t in boxes if "キャンセル" in t.text), None)
                 if cancel is not None:
@@ -1587,10 +1594,12 @@ class HiroHifStrategy(HifGrindStrategy):
         hopeless = RETRY_STOP_LOSS and finals_hopeless(f)
         if hopeless:
             logger.info("本战差距翻不了盘（%s）：再挑戦只用免费次数，不用券（RETRY_STOP_LOSS）", hopeless)
+        self._retry_comm_error = False
         kind = self._click_retry(label, btn, texts, allow_ticket=not hopeless)
         if kind is None:
             # Windows 第七局：止损取消后收尾循环每轮又点开再挑戦、再取消，187s 后空转看门狗停机，一直没点「次へ」
-            self._retry_declined = page_key
+            if not self._retry_comm_error:
+                self._retry_declined = page_key
             return False
         logger.info("本战敗退（第 %s 名，总分 %s），使用再挑戦（%s）", f.get("rank"), f.get("score"), kind)
         self.s.note(f"本战敗退（第 {f.get('rank')} 名，总分 {f.get('score')}），使用再挑戦（{kind}）")

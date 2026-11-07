@@ -106,3 +106,20 @@ def test_retries_left_from_screen_overrides_trace_count():
     assert screen_retries_left([NS(text="あと3回"), NS(text="再挑戦")]) == 3
     assert screen_retries_left([NS(text="あと 2 回")]) == 2
     assert screen_retries_left([NS(text="次へ")]) is None
+
+
+def test_comm_error_after_retry_not_counted(monkeypatch):
+    """点再挑戦后弹的是通信エラー：返回 None（不记成免费再挑戦）。"""
+    from types import SimpleNamespace as NS
+
+    import hiro.produce.hif as hif
+
+    st = hif.HiroHifStrategy.__new__(hif.HiroHifStrategy)
+    notes = []
+    st.s = NS(note=notes.append, trace=NS(dir="/nonexistent/x"), notes=[])
+    st._retries_so_far = lambda label: 0
+    monkeypatch.setattr(hif, "device", NS(click=lambda *a: None, screenshot=lambda: None))
+    monkeypatch.setattr(hif, "sleep", lambda s: None)
+    monkeypatch.setattr(hif, "ocr", NS(ocr=lambda: [NS(text="通信エラー"), NS(text="リトライしますか?"), NS(text="はい")]))
+    btn = NS(text="再挑戦", rect=NS(center=NS(y=1100)))
+    assert st._click_retry("r2", btn, [btn]) is None and any("通信エラー" in n for n in notes)
