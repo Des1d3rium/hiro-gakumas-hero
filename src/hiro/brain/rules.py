@@ -11,6 +11,7 @@
 """
 
 import math
+import re
 from dataclasses import dataclass, field
 
 from hiro.brain.state import BattleState
@@ -268,6 +269,50 @@ def fallback(state: BattleState) -> Decision:
         best = max(others, key=score)
         d = Decision(f"play:{best.slot}", "兜底启发式（避开终结牌）", "fallback")
     return d
+
+
+# 社区打法规则层（协调 2026-11-07）：放在 LLM 前面，只接管两类很确定的局面，其余照旧问 LLM。
+# 依据：平台模块离线评估（.temp/platforms/eval-decide/汇总.md，657 个考试步）分歧最大的 10 步里，两个 LLM 和实机一致、
+# 兜底启发式更差的 9 步，正确打法都是：末回合先喝行动饮料再兑现（#1–3）、不耗行动的牌同回合先打（#4 #7 #9 #8）。
+# 行为变化，默认关；HIRO_EXAM_PLAYBOOK=1 打开
+EXAM_PLAYBOOK = __import__("os").environ.get("HIRO_EXAM_PLAYBOOK") == "1"
+
+
+def playbook_rules(state: BattleState) -> Decision | None:
+    """B 任何回合：有不耗行动、不清空元気、不是眠気的牌 → 先打它（顺序见下）。
+    A 末回合、没有 B 可打时：有加行动的饮料、且可兑现的耗行动牌比剩余行动数多 → 喝（多打一张兑现）。
+    先 B 后 A：不耗行动的牌多半加元気，先打再喝、再兑现分更多（离线 6 步 LLM 都是这个顺序）。
+    都不满足时 None（交给 LLM / 兜底）。"""
+    from hiro.state.knowledge import drink_class
+
+    legal = set(state.legal_actions())
+    free = [c for c in state.hand if f"play:{c.slot}" in legal and c.card_id and state.gives_action(c)
+            and not c.tags.clears_genki and not c.tags.is_sleep]  # fmt: skip
+    if free:
+        def item(c) -> bool:  # 触发固有道具的牌：要趁体力 ≥ 50% 先打，先打扣体力的牌会让它触发不了（えいえいおー）
+            return bool(state.item_trigger_card and c.card_id and c.card_id.startswith(state.item_trigger_card))
+
+        def installs(c) -> bool:  # 装上长期效果的（エウレカ 等）：越早装结算回合越多
+            return bool(c.tags.permanent_trigger or c.tags.sustained_turns)
+
+        def yaruki(c) -> bool:  # 加やる気的（ゆめみごこち）：やる気越高后面每张牌加的元気越多，先加
+            return bool(re.search(r"やる気\+\d", c.text or ""))
+
+        # 顺序：试过几种排法，对照 657 个考试步里 LLM / 实机的选择，这个一致率最高（88%，2026-11-07）：
+        # 加やる気（含顺带加的）> 固有道具牌 > 装长期效果 > 强化版 > 使用数追加 > 抽牌 > 费用低
+        best = max(free, key=lambda c: (yaruki(c), item(c), installs(c), c.upgrade or 0, c.tags.extra_actions > 0, c.tags.draws or 0,
+                                        -((c.cost or 0) + 2 * (c.hp_cost or 0))))  # fmt: skip
+        why = ("加やる気，后面的牌元気更多" if yaruki(best) else "触发固有道具，趁体力还够先打" if item(best)
+               else "装长期效果，越早结算回合越多" if installs(best) else "使用数追加" if best.tags.extra_actions else "不减行动")  # fmt: skip
+        return Decision(f"play:{best.slot}", f"不耗行动的 {best.name}（{why}）同回合先打，再决定其他牌（社区打法）", "rule")
+    if state.remaining_turns == 1:
+        cash = [c for c in _cash_out_cards(state) if not state.gives_action(c) and _cash_value(state, c)]
+        n = state.actions_left if state.actions_left is not None else 1
+        action_drinks = [d for d in state.drinks if f"drink:{d.slot}" in legal and drink_class(d.drink_id) == "action"]
+        if action_drinks and len(cash) > n:
+            d = action_drinks[0]
+            return Decision(f"drink:{d.slot}", f"末回合：可兑现的牌 {len(cash)} 张多于剩余行动 {n}，先喝加行动的 {d.name} 再兑现（社区打法）", "rule")
+    return None
 
 
 def _cash_value(state: BattleState, card) -> int | None:

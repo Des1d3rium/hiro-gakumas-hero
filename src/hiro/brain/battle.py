@@ -12,6 +12,7 @@ from dataclasses import asdict
 import logging
 
 from hiro.brain.llm import LLMAdapter, load_prompt, prompt_version
+from hiro.brain import rules as _rules
 from hiro.brain.rules import final_turn_override, Decision, fallback, soft_warnings, trivial, violations
 from hiro.brain.state import BattleState, ExamMemory, IdolProfile
 
@@ -37,7 +38,9 @@ class BattleBrain:
         if d := self._follow_plan(state, memory):
             d.warnings = soft_warnings(state, d)
             return self._final_turn(state, memory, d)
-        d = self._ask(state) if self.llm else None
+        d = _rules.playbook_rules(state) if _rules.EXAM_PLAYBOOK else None
+        if d is None:
+            d = self._ask(state) if self.llm else None
         if d is None:
             d = fallback(state)
         d.warnings = soft_warnings(state, d)
