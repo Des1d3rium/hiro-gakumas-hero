@@ -42,3 +42,31 @@ def test_inside_exam_no_sync():
     s = reduce(s, _obs(1, "ACTION_SELECT", {}))
     s = reduce(s, _obs(2, "HIF_EXAM", {"drinks": []}, source="save"))
     assert s.produce["drinks"] == FOUR  # 还在考试里：不动
+
+
+def _run_screen(exam_fields, after_page="HIF_ROUND_INTERVAL"):
+    s = GameState(mode="produce", produce={"drinks": list(FOUR)})
+    s = reduce(s, _obs(1, "ACTION_SELECT", {}))
+    s = reduce(s, _obs(2, "HIF_EXAM", exam_fields))
+    for seq in (3, 4, 5):
+        s = reduce(s, _obs(seq, after_page, {}))
+    return s
+
+
+def _slot(i, state, drink_id=None):
+    return {"slot": i, "state": state, "drink_id": drink_id}
+
+
+def test_screen_unknown_slot_keeps_old():
+    """画面识别：认不出的格在 exam.drinks 里被略掉，和空格分不开；drink_slots 有 unknown 时不能当成喝掉了。"""
+    drinks = [{"slot": 0, "name": "ブーストエキス", "drink_id": FOUR[0]}]
+    slots = [_slot(0, "drink", FOUR[0]), _slot(1, "unknown"), _slot(2, "empty"), _slot(3, "empty")]
+    s = _run_screen({"drinks": drinks, "drink_slots": slots})
+    assert s.produce["drinks"] == FOUR
+
+
+def test_screen_all_sure_syncs_in_slot_order():
+    drinks = [{"slot": 2, "name": None, "drink_id": FOUR[3]}, {"slot": 0, "name": None, "drink_id": FOUR[1]}]
+    slots = [_slot(0, "drink", FOUR[1]), _slot(1, "empty"), _slot(2, "drink", FOUR[3]), _slot(3, "empty")]
+    s = _run_screen({"drinks": drinks, "drink_slots": slots})
+    assert s.produce["drinks"] == [FOUR[1], FOUR[3]]  # 按格号从左到右，不按 id 排序

@@ -87,16 +87,28 @@ def _enter(s: GameState, page: str, area: str, seq: int, *, frames: int = 1) -> 
 def _sync_exam_drinks(s: GameState, seq: int) -> None:
     """离开考试（R1 结束进轮间、R2 结束）：用考试里最后读到的饮料栏（exam.drinks）覆盖 produce.drinks。
     考试里喝饮料只改 exam.drinks（考试页字段进 exam 分区），produce.drinks 一直停在开局的值（第二十九局 seq 115 起是开局 4 瓶的
-    pending 旧值，轮间按它决策）。exam.drinks 里有认不出的饮料（没有 drink_id）时不覆盖，宁可留旧值等下一次看到饮料栏。"""
-    drinks = (s.exam or {}).get("drinks")
+    pending 旧值，轮间按它决策）。exam.drinks 里有认不出的饮料（没有 drink_id）时不覆盖，宁可留旧值等下一次看到饮料栏。
+    画面识别时 exam.drinks 只列认出的饮料（认不出的格和空格一样被略掉），所以还要看 exam.drink_slots：有一格 state=unknown
+    （被特效挡住等）也不覆盖，否则那瓶会被当成已经喝掉。顺序按饮料栏格号（从左到右），与培育页底栏读数一致。"""
+    exam = s.exam or {}
+    drinks = exam.get("drinks")
     if not isinstance(drinks, list) or s.produce is None:
+        return
+    slots = exam.get("drink_slots")
+    src_drinks, src_slots = s.sources.get("exam.drinks"), s.sources.get("exam.drink_slots")
+    same_frame = src_drinks is not None and src_slots is not None and src_drinks.origin != "save" and src_slots.seq == src_drinks.seq
+    if same_frame and isinstance(slots, list) and any(isinstance(d, dict) and d.get("state") == "unknown" for d in slots):
+        _note(s, f"seq {seq}: 离开考试时饮料栏有认不出的格，produce.drinks 保持原值")
         return
     ids = [d.get("drink_id") if isinstance(d, dict) else d for d in drinks]
     if any(not isinstance(i, str) or not i for i in ids):
         _note(s, f"seq {seq}: 离开考试时饮料栏有认不出的饮料，produce.drinks 保持原值")
         return
+    order = [d.get("slot") if isinstance(d, dict) else None for d in drinks]
+    if all(isinstance(k, int) for k in order):
+        ids = [i for _, i in sorted(zip(order, ids))]
     old = s.produce.get("drinks")
-    s.produce["drinks"] = sorted(ids)
+    s.produce["drinks"] = ids
     src = s.sources.get("exam.drinks")
     s.sources["produce.drinks"] = Source(src.origin if src is not None else "screen", seq)
     s.field_status["produce.drinks"] = "observed"

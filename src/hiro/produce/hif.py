@@ -534,7 +534,7 @@ class HiroHifStrategy(HifGrindStrategy):
         t0 = time.monotonic()
         obs = self.s.observe(scene="SELECT_DRINK")
         # 用户规则（2026-11-01）：饮料满不能默认放弃新饮料，要走换饮料决策。新饮料不比持有的强 → 决策不收（勾受け取らない）；
-        # 新饮料更好 → 需要先在底栏丢一瓶再领取，这一步还没有执行器 → 停下；持有 / 新饮料认不出 → 停下
+        # 新饮料更好 → 先在底栏丢一瓶再领取（drink_swap.discard_then_receive，没完成就停下）；持有 / 新饮料认不出 → 停下
         from dataclasses import replace as dc_replace
 
         from hiro.brain import drinks as dk

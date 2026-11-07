@@ -190,6 +190,33 @@ def _buy(r: Run, item: dict, purchased, confirm_reader=_read_dialog) -> Executio
     return r.result(True)
 
 
+def _swap_buy(r: Run, item: dict, discard: int, purchased, confirm_reader=_read_dialog) -> ExecutionResult:
+    """饮料栏满时买饮料：「交換する」要有空位才亮，所以先丢底栏第 discard 瓶（drink_swap.discard_owned：点那瓶 →
+    「Pドリンク詳細」→「捨てる」→「廃棄確認」はい），再走 _buy。丢之前先核对能买（格子在、没换过、P 点够），
+    免得丢了买不成；丢了但没买成时 error 写明，由上层停手（不会再丢第二瓶）。相談页底栏在培育页那一行（y 1213）。
+    实机核实（2026-11-07，calib 20261107-043326-相談）：相談页点底栏饮料同样弹「Pドリンク詳細」，「捨てる」在 (605,939)，
+    丢第 3 格リカバリ、买货架第 7 格ホエイ，P 380→280，7.3s 完成。"""
+    from hiro.produce.drink_swap import discard_owned
+
+    index, center = item["index"], item.get("center")
+    if not center:
+        return r.result(False, f"货架第 {index} 格没有坐标，不丢饮料")
+    if item.get("purchased"):
+        return r.result(False, f"货架第 {index} 格已经换过，不丢饮料")
+    img = r.shoot()
+    r.snap(img, "swap-open")
+    p = read_p(img, r.ocr)
+    if p is None or item.get("price") is None or p < item["price"]:
+        return r.result(False, f"P 点 {p} 读不到或不够买第 {index} 格（{item.get('price')}P），不丢饮料")
+    if err := discard_owned(r, discard, None):
+        return r.result(False, f"换饮料：{err}")
+    logger.info("相談：已丢底栏第 %d 瓶，买货架第 %d 格", discard, index)
+    res = _buy(r, item, purchased, confirm_reader)
+    if not res.ok:
+        res.error = f"已丢掉底栏第 {discard} 瓶，但买货架第 {index} 格没成：{res.error}"
+    return res
+
+
 def _service(r: Run, name: str, services: dict, card_id: str | None = None, choose_card=None, deck_size: int | None = None) -> ExecutionResult:
     """相談「強化 / 削除」：点服务键打开选卡页 → 读卡格 → card_id（动作给的，或 choose_card(kind, cards) 让决策选）
     → 点卡、核对选中 →「強化 / 削除」→ 确认框 →「〜しました」→ 回到相談。走 kaa_patches._card_op；
@@ -400,5 +427,11 @@ def execute_shop(
         item = next((s for s in page_fields.get("shelf") or [] if s.get("index") == args["index"]), None)
         if item is None:
             return r.result(False, f"货架里没有第 {args['index']} 格")
+        if args.get("discard") is not None:
+            if click is None:  # 实机：MaaTools 点了没反应时退回真实鼠标（同 drink_swap.swap_receive）
+                from hiro import real_click
+
+                r.real_click = real_click.click
+            return _swap_buy(r, item, int(args["discard"]), purchased)
         return _buy(r, item, purchased)
     return r.result(False, f"相談执行器不支持 {action}")

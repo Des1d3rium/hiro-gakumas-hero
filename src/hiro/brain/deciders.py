@@ -33,6 +33,13 @@ PAGES = ("ACTION_SELECT", "SELECT_CARD", "SELECT_DRINK", "CONSULT", "STUDY", "OU
          "SKILL_CARD_CHANGE_1", "SKILL_CARD_CHANGE_2", "SKILL_CARD_REMOVAL", "SKILL_CARD_ENHANCE", "PDRINK_MAX_CONFIRM")
 
 
+def CONSULT_DRINK_SWAP() -> bool:  # noqa: N802
+    """相談饮料栏满时先丢后买（用户 2026-11-07）。实机核实后（calib 20261107-043326-相談）按用户要求默认开；HIRO_CONSULT_DRINK_SWAP=0 关掉。"""
+    import os
+
+    return os.environ.get("HIRO_CONSULT_DRINK_SWAP", "1") != "0"
+
+
 def action_key(a: Action) -> str:
     """动作的简写（黄金用例的 accept / forbid 用）：training:Da:sp / class:Vo / outing / pick:1 / exclude:0 / reroll / event:2 /
     buy:3 / buy:delete:15 / upgrade:12 / ShopEnd / ibuy:4 / ibuy:recover / iupgrade:12 / IntervalEnd /
@@ -1310,8 +1317,12 @@ class ProduceDeciders:
         items = [it for it in _items(shelf, "drink") if it.get("drink_id") and it.get("price") is not None and it["price"] <= p]
         deck_n = len(ps.deck) if ps.deck else None
         r1p = FINALS_P_VALUE["r1_reward"]
+        if free <= 0 and items:
+            d = self._finals_consult_swap(state, ps, shelf, p, deck_n, key)
+            if d is not None:
+                return d
         if free <= 0 or not items:
-            self._finals_drink_why = "饮料栏满（相談里换不了）" if free <= 0 else "货架没有买得起的饮料"
+            self._finals_drink_why = (getattr(self, "_finals_swap_why", "") or "饮料栏满、没有值得换的") if free <= 0 else "货架没有买得起的饮料"
             self._finals_drink_plan = {"key": key, "buy": [], "reason": "", "source": "rule", "cands": [], "warnings": [], "why_end": self._finals_drink_why}
             return None
         opts = [dk.Option("none", "不买（留 P 给轮间）", hold, None, cost=0, extra={"buy": []})]
@@ -1350,6 +1361,107 @@ class ProduceDeciders:
             return None
         return Decision(Action(ActionKind.SHOP_BUY, {"index": pick.extra["buy"][0]}), reason, source, 0.8, cands, warnings=w, decider="consult")
 
+    def _consult_swap_held(self, state: GameState, capacity: int) -> tuple[list | None, str]:
+        """相談换饮料用的持有：只认这一帧在相談页底栏读到的（page_fields.drinks，从左到右，下标 = 底栏格号）。
+        状态机里的 produce.drinks 可能是旧帧 / 别的页面的值，按它的下标去点底栏会丢错瓶，所以不用。返回 (held, 不能换的原因)。"""
+        drinks = state.page_fields.get("drinks")
+        src = state.sources.get("produce.drinks")
+        if not isinstance(drinks, list) or src is None or src.seq != state.seq:
+            return None, "这一帧没读全底栏饮料"
+        if len(drinks) < capacity or not all(isinstance(d, str) and d for d in drinks):
+            return None, f"底栏读到 {len(drinks)} 瓶，不是满栏 {capacity} 瓶"
+        return [{"index": i, "drink_id": d} for i, d in enumerate(drinks)], ""
+
+    def _consult_swap_options(self, state: GameState, ps: ProduceState, shelf: list, limit: int, stage: str, ok=None):
+        """栏满时相談的候选：不买 / 丢底栏第 j 瓶、买货架上的某一瓶（「交換する」要有空位才亮，所以先丢再买）。
+        ok(option) 过滤候选（本战用）。返回 (opts, held, 原因)；不能换时 opts 为 None。"""
+        from hiro.brain import drinks as dk
+        from hiro.state.context import drink_name
+
+        if not CONSULT_DRINK_SWAP():
+            return None, None, "相談换饮料开关没开（HIRO_CONSULT_DRINK_SWAP=1）"
+        capacity = (ps.drink_capacity if ps is not None and ps.drink_capacity else None) or 4
+        held, why = self._consult_swap_held(state, capacity)
+        if held is None:
+            return None, None, why
+        items = [it for it in _items(shelf, "drink") if it.get("drink_id") and _affordable(it, limit)]
+        if not items:
+            return None, held, "货架没有买得起的饮料"
+        hold = [h["drink_id"] for h in held]
+        opts = [dk.Option("none", "不买（保持现有）", hold, Action(ActionKind.SHOP_END))]
+        for it in items:
+            name = it.get("name") or drink_name(it["drink_id"])
+            for j, h in enumerate(held):
+                o = dk.Option(f"drink{it['index']}-drop{h['index']}", f"丢 {drink_name(h['drink_id'])}、买 {name}",
+                              hold[:j] + hold[j + 1:] + [it["drink_id"]],
+                              Action(ActionKind.SHOP_BUY, {"index": it["index"], "discard": h["index"]}),
+                              cost=it["price"], extra={"index": it["index"], "buy": [it["index"]], "discard": h["index"]})  # fmt: skip
+                if ok is None or ok(o):
+                    opts.append(o)
+        return opts, held, ""
+
+    def _consult_swap_drinks(self, state: GameState, ps: ProduceState, shelf: list, p: int, budget: int, *, stage: str,
+                             only_accident: bool, go=None) -> Decision | None:  # fmt: skip
+        """选拔相談、栏满：新饮料比持有里最差的一瓶好就先丢后买（用户 2026-11-07：「相談满的时候也换，丢了就有空位了」）。
+        同 select_drink / PDRINK_MAX：按换完之后的持有组合比较，打平时不换。花钱上限同 _consult_drinks（事故时到 p，否则预算内）。"""
+        from hiro.brain import drinks as dk
+
+        capacity = (ps.drink_capacity if ps is not None and ps.drink_capacity else None) or 4
+        hold = [d for d in (state.page_fields.get("drinks") or []) if d]
+        trouble = dk.accident(hold, stage, capacity)
+        if only_accident and not trouble:
+            return None
+        opts, _, why = self._consult_swap_options(state, ps, shelf, p if trouble else budget, stage)
+        if not opts or len(opts) < 2:
+            if why:
+                logger.info("相談饮料栏满，不换：%s", why)
+            return None
+        res = dk.choose(opts, stage, capacity, sim_context=self._drink_sim_context(ps, stage), where="CONSULT")
+        pick = res["pick"]
+        if pick.key == "none":
+            return None
+        tier = "第一档：换饮料（栏满，先丢后买" + ("；事故：" + "、".join(trouble) if trouble else "") + "）"
+        if go is None:
+            dec = self._drink_decision(res, opts, stage, "consult", [])
+            dec.reason = f"【相談·栏满换饮料】{dec.reason}"
+            return dec
+        dec = go(pick.action, pick.label, pick.cost, tier, index=pick.extra.get("index"))
+        sub = self._drink_decision(res, opts, stage, "consult", [])
+        dec.reason += f"；{sub.reason}"
+        dec.candidates = dec.candidates + sub.candidates
+        dec.warnings = dec.warnings + sub.warnings
+        dec.source = sub.source
+        return dec
+
+    def _finals_consult_swap(self, state: GameState, ps: ProduceState, shelf: list, p: int, deck_n, key) -> Decision | None:
+        """本战相談、栏满：同 _finals_consult_drinks 的社区默认——换进来的那瓶在新持有里是 0–1 档、花的 P 不挤占轮间需要量，
+        且换完的持有组合比现在好（打平不换）。一次相談最多换一瓶（换完记进 _finals_drink_plan，同一货架不再算）。"""
+        from hiro.brain import drinks as dk
+        from hiro.state.knowledge import FINALS_P_VALUE, interval_p_value
+
+        self._finals_swap_why = ""
+        r1p = FINALS_P_VALUE["r1_reward"]
+        need_loss = lambda o: interval_p_value(p + r1p, deck_n) - interval_p_value(p - o.cost + r1p, deck_n)  # noqa: E731
+
+        def ok(o) -> bool:
+            return dk.tag(o.drinks, "r1")[-1][0] <= 1 and need_loss(o) <= FINALS_P_VALUE["low"] * o.cost + 1e-6
+
+        opts, _, why = self._consult_swap_options(state, ps, shelf, p, "r1", ok=ok)
+        if not opts or len(opts) < 2:
+            self._finals_swap_why = f"饮料栏满、不换（{why or '没有 0–1 档且不挤占轮间 P 的饮料'}）"
+            return None
+        capacity = len(opts[0].drinks)
+        res = dk.choose(opts, "r1", capacity, sim_context=self._drink_sim_context(ps, "r1"), where="CONSULT")
+        pick = res["pick"]
+        if pick.key == "none":
+            self._finals_swap_why = "饮料栏满、换了也不比现在好"
+            return None
+        dec = self._drink_decision(res, opts, "r1", "consult", [])
+        dec.reason = f"【本战相談·栏满换饮料】{dec.reason}，剩 {p - pick.cost}P"
+        self._finals_drink_plan = {"key": key, "buy": [], "reason": "", "source": dec.source, "cands": [], "warnings": [],
+                                   "why_end": "本次相談已换过一瓶饮料"}  # fmt: skip
+        return dec
+
     def _consult_drinks(self, state: GameState, ps: ProduceState, shelf: list, p: int, budget: int, *, stage: str, only_accident: bool,
                         go=None, fill: bool = False) -> Decision | None:  # fmt: skip
         """相談买饮料：候选 = 买货架上的每一瓶（栏有空位时；栏满时「交換する」不亮，买不了）/ 不买，按买完的持有组合比较
@@ -1363,7 +1475,9 @@ class ProduceDeciders:
             full = True  # 执行侧看到「所持上限」/ 识别读到饮料栏满（第六局第 12、19 天：栏满时买饮料「交換する」不亮，重试也没用）
         hold = [h.get("drink_id") for h in held or []]
         if full or len(hold) >= capacity:
-            return None
+            if fill:
+                return None  # 收尾只补空栏
+            return self._consult_swap_drinks(state, ps, shelf, p, budget, stage=stage, only_accident=only_accident, go=go)
         trouble = dk.accident(hold, stage, capacity)
         if only_accident and not trouble:
             return None

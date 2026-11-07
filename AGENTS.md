@@ -117,6 +117,7 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | `HIRO_ASSET_SOURCE` / `HIRO_EXAM_STATE_SOURCE` / `HIRO_EXAM_ADVISOR` | 换插件实现（`包.模块:类名`） |
 | `HIRO_STRATEGY` | 换培育策略类（KAA `HifGrindStrategy` 子类），默认 `hiro.produce.hif:HiroHifStrategy` |
 | `HIRO_PAUSE_FLAG` | 外部暂停旗标文件路径：文件存在就暂停对局 |
+| `HIRO_CONSULT_DRINK_SWAP=0` | 关掉相談栏满换饮料（默认开：货架上的饮料比持有里最差的一瓶好就先丢后买） |
 | `HIRO_RESCUE_LLM=0` | 关掉认不出画面时的 LLM 看图兜底（默认开） |
 | `HIRO_DEBUG_RECOG=1` | 把全部识别互验写进 trace，页面变化都存帧 |
 
