@@ -46,6 +46,13 @@ CHANGE2_CARD_AREA = (66, 623, 641, 1106)  # KAA DialogCardChange2.BoxCardArea（
 CHANGE_CANCEL_TAP = (211, 1160)  # 阶段 2 左下「キャンセル」（KAA 参考图 dialog_card_change_2.png）
 CHANGE1_MARK_X = (213, 352, 491)  # 阶段 1 三张候选的角标 x（参考图实测，列距 139）
 CHANGE1_COL_TOL = 40
+# 阶段 1 角标漏检时的兜底：用找到的任一角标对准列（容差 CHANGE1_ANCHOR_TOL），按列距推算目标列，点角标上方的卡面
+#（卡面中心在角标右上：x +9、y -48，参考图实测）
+CHANGE1_ANCHOR_TOL = 20
+CHANGE1_CARD_DX, CHANGE1_CARD_DY = 9, -48
+# 阶段 2 按卡格偏移定位（_change_offset_target）：对话框滚到顶时第一行卡格左上 y；角标推出的格子与列 / 行网格的容差
+CHANGE2_TOP_ROW_Y = 638
+CHANGE2_COL_TOL, CHANGE2_ROW_TOL = 6, 14
 
 # 删卡 / 强化页（全屏选卡）
 CARD_OP_REGION = {"remove": (0, 380, 720, 1110), "enhance": (0, 690, 720, 1115)}  # 同识别 deck.REMOVAL_GRID / ENHANCE_GRID  # 强化页上方两格详情栏里也有卡面，卡格从 y≈700 起
@@ -147,6 +154,18 @@ def _stage1_mark(marks: list, index: int):
     return next((m for m in row if abs(m.rect.x1 - CHANGE1_MARK_X[index]) <= CHANGE1_COL_TOL), None)
 
 
+def _stage1_inferred_point(marks: list, index: int) -> tuple[int, int] | None:
+    """目标列角标漏检时：找一个能对准某列的角标，按列距推算第 index 列卡面的点击位置；没有能对准的角标返回 None。"""
+    if not 0 <= index < len(CHANGE1_MARK_X):
+        return None
+    for mark in sorted(marks, key=lambda m: m.rect.x1):
+        r = mark.rect
+        col = min(range(len(CHANGE1_MARK_X)), key=lambda i: abs(r.x1 - CHANGE1_MARK_X[i]))
+        if abs(r.x1 - CHANGE1_MARK_X[col]) <= CHANGE1_ANCHOR_TOL:
+            return (int(r.x1 + CHANGE1_MARK_X[index] - CHANGE1_MARK_X[col] + CHANGE1_CARD_DX), int(r.y1 + CHANGE1_CARD_DY))
+    return None
+
+
 def change_stage1(self, index: int = 0, cancel: bool = False) -> bool:
     """换卡阶段 1：点第 index 张候选新卡（从左到右）→ 次へ，直到出现阶段 2。返回是否到了阶段 2。
 
@@ -172,9 +191,13 @@ def change_stage1(self, index: int = 0, cancel: bool = False) -> bool:
             img = device.screenshot()
             _change_run().snap(img, "stage1")
             device.click(target)
-            logger.info("换卡阶段 1：换入第 %d 张候选「%s」（找到 %d 个角标）", index, _mark_card_name(img, target), len(marks))
+            logger.info("换卡阶段 1：换入第 %d 列候选「%s」（找到 %d 个角标）", index, _mark_card_name(img, target), len(marks))
+        elif marks and (point := _stage1_inferred_point(marks, index)) is not None:
+            _change_run().snap(device.screenshot(), "stage1-inferred")
+            device.click(*point)
+            logger.info("换卡阶段 1：第 %d 列角标漏检（找到 %d 个），按列距推算点 %s", index, len(marks), point)
         elif marks:
-            logger.info("换卡阶段 1：第 %d 列的候选角标没找到（找到 %d 个），等下一帧", index, len(marks))
+            logger.info("换卡阶段 1：第 %d 列的候选角标没找到、也没法按列距推算（找到 %d 个），等下一帧", index, len(marks))
         else:
             logger.info("换卡阶段 1：候选卡还没出现，等入场动画")
         time.sleep(CHANGE_POLL)
@@ -289,8 +312,73 @@ def _mark_card_name(img, mark) -> str:
     return card.name if card else "?"
 
 
+def _change_offset_target(img, index, card_id, upgrade, layout):
+    """阶段 2 按卡格偏移定位要换出的卡。返回 (anchored, target)：
+    anchored = 能把这一屏的卡格对上牌组网格（滚到顶时按 y；没到顶时用整副扫描的 layout 认锚点卡所在行）；
+    target = 目标卡格（整格可见时），不可见为 None。index 是牌组序号（有 layout 时）/ 本屏格子号（滚到顶时二者相同）。
+    只按位置推算、不认目标格本身——点下去后由 _read_change_selection 核对。"""
+    from hiro.vision.deck import GEOMETRY, _marks, dialog_scroll, read_card_cell
+
+    if not card_id or index is None or index < 0:
+        return False, None
+    grid = GEOMETRY["dialog"]
+    size, pitch, row_pitch = grid["cell"], grid["pitch"], grid["row_pitch"]
+    row, col = divmod(index, 4)
+    if layout:
+        entry = next((c for c in layout if c.get("index") == index and c.get("card_id") == card_id), None)
+        if entry is None:
+            return False, None
+        row, col = entry["row"], entry["col"]
+    top = dialog_scroll(img, CHANGE2_CARD_AREA)["at_top"]
+    for mx, my in _marks(img, CHANGE2_CARD_AREA):
+        x, y = mx + grid["dx"], my + grid["dy"]
+        anchor_col = round((x - grid["x0"]) / pitch)
+        if not 0 <= anchor_col < 4 or abs(x - grid["x0"] - anchor_col * pitch) > CHANGE2_COL_TOL:
+            continue
+        if not CHANGE2_CARD_AREA[1] <= y <= CHANGE2_CARD_AREA[3] - size:
+            continue
+        if top:
+            anchor_row = round((y - CHANGE2_TOP_ROW_Y) / row_pitch)
+            if abs(y - CHANGE2_TOP_ROW_Y - anchor_row * row_pitch) > CHANGE2_ROW_TOL:
+                continue
+        elif layout:
+            anchor = read_card_cell(img[y:y + size, x:x + size])
+            rows = {c["row"] for c in layout if c.get("col") == anchor_col and anchor["card_id"]
+                    and c.get("card_id") == anchor["card_id"] and c.get("upgrade") == anchor["upgrade"]}
+            if len(rows) != 1:
+                return False, None
+            anchor_row = rows.pop()
+        else:
+            return False, None
+        x += (col - anchor_col) * pitch
+        y += round((row - anchor_row) * row_pitch)
+        if not CHANGE2_CARD_AREA[1] <= y <= CHANGE2_CARD_AREA[3] - size:
+            return True, None
+        return True, {"card_id": card_id, "name": None, "upgrade": upgrade,
+                      "rect": (x, y, size, size), "center": (x + size // 2, y + size // 2)}
+    return False, None
+
+
+def _read_change_selection(img, target):
+    """阶段 2 点卡后读「选中了哪张」：先 OCR 详情栏的卡名，读不出再看目标格有没有选中光标、有就认这一格。认不出返回 {}。"""
+    import cv2
+
+    from hiro.vision.deck import CURSOR_MIN_PX_118, DETAIL_BOX, _cursor_px, card_from_name, read_card_cell
+    from hiro.vision.ocr import ocr_boxes
+
+    x1, y1, x2, y2 = DETAIL_BOX
+    for text, _, _ in ocr_boxes(img[y1:y2, x1:x2], scale=2):
+        if card := card_from_name(text):
+            return card
+    if rect := target.get("rect"):
+        if _cursor_px(cv2.cvtColor(img, cv2.COLOR_BGR2HSV), rect) >= CURSOR_MIN_PX_118:
+            x, y, w, h = rect
+            return read_card_cell(img[y:y + h, x:x + w])
+    return {}
+
+
 def change_stage2(self, index: int = 0, card_id: str | None = None, cancel: bool = False, remove_index: int | None = None,
-                  remove_upgrade: int | None = None) -> bool:  # fmt: skip
+                  remove_upgrade: int | None = None, layout=None) -> bool:  # fmt: skip
     """换卡阶段 2：选被换掉的原卡 → チェンジ → 确认。认不出 / 只剩保护卡时点キャンセル，返回 False；画面不在阶段 2 也返回 False。
 
     阶段 2 点「キャンセル」之后去哪：没有实机帧，[推断] 回到阶段 1（换入候选的选择页）。理由：阶段 1 没有取消键，セレクトチェンジ
@@ -300,60 +388,73 @@ def change_stage2(self, index: int = 0, card_id: str | None = None, cancel: bool
     """
     from kaa.tasks import R
 
-    from hiro.vision.deck import read_card_dialog
+    from hiro.vision.deck import dialog_scroll, read_card_grid
 
     if not _poll(lambda: R.InProduce.DialogCardChange2.Title.exists(), CHANGE_STAGE_TIMEOUT):
         logger.warning("换卡阶段 2：画面不在阶段 2（阶段 1 未完成？），交回主循环")
         return False
     run = _change_run()
     deadline = time.monotonic() + CHANGE_STAGE_TIMEOUT
-    dialog = {"cards": []}
-    while time.monotonic() < deadline:
+    def locate(img):
+        anchored, target = _change_offset_target(img, remove_index, card_id, remove_upgrade, layout)
+        if anchored:
+            return target, "按卡格偏移定位", True, None
+        cards = read_card_grid(img, CHANGE2_CARD_AREA, "dialog")
+        # 有 layout（整副扫描过）时 remove_index 是牌组序号、不是这一屏的格子号：退回按 card_id + 强化次数找
+        target, why = pick_change_target(cards, index, card_id, remove_index=None if layout else remove_index,
+                                         remove_upgrade=remove_upgrade)  # fmt: skip
+        if target is not None and remove_upgrade is not None:
+            if target.get("upgrade") not in (None, remove_upgrade):
+                target, why = None, "卡格里的强化次数与目标不符"
+            else:
+                target = {**target, "upgrade": remove_upgrade}
+        signature = [(c.get("card_id"), c.get("upgrade")) for c in cards]
+        return target, why, False, signature
+
+    while True:
         img = device.screenshot()
-        dialog = read_card_dialog(img, CHANGE2_CARD_AREA)
-        if dialog["cards"]:
+        target, why, anchored, seen = (None, "决策判定不换", False, None) if cancel else locate(img)
+        if cancel or anchored or seen or time.monotonic() >= deadline:
             break
         time.sleep(CHANGE_POLL)
     run.snap(img, "stage2-deck")
-    target, why = (None, "决策判定不换") if cancel else pick_change_target(dialog["cards"], index, card_id, remove_index=remove_index,
-                                                                         remove_upgrade=remove_upgrade)  # fmt: skip
-    if target is None and not cancel and card_id and not any(c.get("card_id") == card_id for c in dialog["cards"]):
-        # 牌组一屏放不下、目标不在这一屏（决策按整副选的）：往下、再往上翻屏找同 card_id + 强化次数的那张
-        from hiro.vision.deck import dialog_scroll
-
-        if dialog_scroll(img, CHANGE2_CARD_AREA)["scrollable"]:
-            swipe = lambda x1, y1, x2, y2: device.swipe(x1, y1, x2, y2, duration=CARD_OP_SWIPE_DURATION)  # noqa: E731
-            for down in (True, False):
-                seen = None
-                for _ in range(CARD_OP_MAX_SCREENS):
-                    _dialog_swipe(CHANGE2_CARD_AREA, down, swipe)
-                    time.sleep(CARD_OP_SCROLL_SETTLE)
-                    img = device.screenshot()
-                    dialog = read_card_dialog(img, CHANGE2_CARD_AREA)
-                    target, why = pick_change_target(dialog["cards"], index, card_id, remove_upgrade=remove_upgrade)
-                    if target is not None or any(c.get("card_id") == card_id for c in dialog["cards"]):
-                        break
-                    ids = [(c.get("card_id"), c.get("upgrade")) for c in dialog["cards"]]
-                    if ids == seen or (not down and dialog_scroll(img, CHANGE2_CARD_AREA).get("at_top")):
-                        break  # 到底（画面没变）/ 到顶
-                    seen = ids
-                if target is not None:
-                    why += "（翻屏找到）"
+    if target is None and not cancel and card_id and dialog_scroll(img, CHANGE2_CARD_AREA)["scrollable"]:
+        swipe = lambda x1, y1, x2, y2: device.swipe(x1, y1, x2, y2, duration=CARD_OP_SWIPE_DURATION)  # noqa: E731
+        for down in (True, False):
+            for _ in range(CARD_OP_MAX_SCREENS):
+                before = dialog_scroll(img, CHANGE2_CARD_AREA)
+                _dialog_swipe(CHANGE2_CARD_AREA, down, swipe)
+                time.sleep(CARD_OP_SCROLL_SETTLE)
+                img = device.screenshot()
+                target, why, anchored, current = locate(img)
+                scroll = dialog_scroll(img, CHANGE2_CARD_AREA)
+                if target is not None or (anchored and scroll["thumb"] == before["thumb"]) or (not down and scroll["at_top"]):
                     break
-            run.snap(img, "stage2-scrolled")
+                if current is not None and current == seen:
+                    break
+                seen = current
+            if target is not None:
+                break
+        run.snap(img, "stage2-scrolled")
     if target is None:
-        logger.warning("换卡阶段 2：%s，不换，点「キャンセル」（卡格 %s）", why, [c.get("name") for c in dialog["cards"]])
+        logger.warning("换卡阶段 2：%s，不换，点「キャンセル」", why)
         device.click(*CHANGE_CANCEL_TAP)
         time.sleep(CHANGE_POLL)
         run.snap(device.screenshot(), "stage2-cancel")
         return False
     device.click(*target["center"])
     time.sleep(CHANGE_POLL)
-    picked = read_card_dialog(device.screenshot(), CHANGE2_CARD_AREA)
-    run.snap(device.screenshot(), "stage2-picked")
-    sel = picked.get("selected_card") or {}
+    img = device.screenshot()
+    run.snap(img, "stage2-picked")
+    sel = _read_change_selection(img, target)
     chosen, chosen_up = sel.get("card_id"), sel.get("upgrade")
-    if chosen and (chosen != target["card_id"] or (target.get("upgrade") is not None and chosen_up is not None and chosen_up != target["upgrade"])):
+    verified = chosen == target["card_id"] and (target.get("upgrade") is None or chosen_up == target["upgrade"])
+    if not chosen:
+        img = device.screenshot()
+        sel = _read_change_selection(img, target)
+        chosen, chosen_up = sel.get("card_id"), sel.get("upgrade")
+        verified = chosen == target["card_id"] and (target.get("upgrade") is None or chosen_up == target["upgrade"])
+    if (anchored or chosen) and not verified:
         logger.warning("换卡阶段 2：选中的是 %s（强化 %s），不是要换的 %s（强化 %s），点「キャンセル」", chosen, chosen_up, target["card_id"],
                        target.get("upgrade"))  # fmt: skip
         device.click(*CHANGE_CANCEL_TAP)
@@ -364,18 +465,30 @@ def change_stage2(self, index: int = 0, card_id: str | None = None, cancel: bool
     while time.monotonic() < deadline:
         time.sleep(CHANGE_POLL)
         img = device.screenshot()
-        if confirm_change_dialog(img, run):
+        if verified and confirm_change_dialog(img, run):
             gone = 0
-        elif R.InProduce.DialogCardChange2.ButtonConfirm.try_click():
+        elif verified and R.InProduce.DialogCardChange2.ButtonConfirm.try_click():
             logger.info("换卡阶段 2：已点「チェンジ」")
             gone = 0
         elif R.InProduce.DialogCardChange2.Title.exists():
-            gone = 0  # 还在阶段 2、确认框还没弹出来：接着等（第二十局 03:21：这里曾被当成完成，确认框晚弹出没人点）
+            gone = 0
+            if not verified:
+                sel = _read_change_selection(img, target)
+                verified = sel.get("card_id") == target["card_id"] and (
+                    target.get("upgrade") is None or sel.get("upgrade") == target["upgrade"]
+                )
         else:
             gone += 1
+            if gone >= 2 and not verified:
+                # 没核对上选中的卡、也就没点过「チェンジ」，阶段 2 却不见了：不能当换完（画面被别的东西打断），交回主循环
+                run.snap(img, "stage2-gone-unverified")
+                logger.warning("换卡阶段 2：选中的卡未核对、没点「チェンジ」，阶段 2 画面已不在，按未完成处理")
+                return False
             if gone >= 2:  # 连续两帧阶段 2 标题和确认框都不在：换完了
                 run.snap(img, "stage2-done")
                 return True
+    if not verified and R.InProduce.DialogCardChange2.Title.exists():
+        device.click(*CHANGE_CANCEL_TAP)
     logger.warning("换卡阶段 2：%.0fs 内确认框没有关闭", CHANGE_STAGE_TIMEOUT)
     return False
 

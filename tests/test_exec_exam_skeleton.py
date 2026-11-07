@@ -142,3 +142,24 @@ def test_missing_plugins_raise(monkeypatch, env):
     monkeypatch.setattr(ex, "_plugin", lambda kind: None)
     with pytest.raises(RuntimeError):
         ex.run_exam(Brain(), "r1", Rec(), lambda: True)
+
+
+def test_strict_stops_after_repeated_stale_frames(monkeypatch, env):
+    """strict：过时判定不放宽，连续 STRICT_STALE_MAX 次过时就停下交人核对，不无限重决策、也不在过时帧上点。"""
+    from hiro.loop.errors import ResumeBlocked
+
+    monkeypatch.setattr(ex, "_stale_before_tap", lambda f: "手牌变了")
+    taps = []
+    monkeypatch.setattr(ex, "_execute", lambda d, f: taps.append(d) or [[100, 1010]])
+    with pytest.raises(ResumeBlocked):
+        ex.run_exam(Brain(), "r1", Rec(), lambda: False, source=Source([]), advisor=Advisor(), strict=True)
+    assert taps == []
+
+
+def test_non_strict_taps_after_stale_max(monkeypatch, env):
+    """默认（非 strict）行为不变：连续 STALE_MAX 次过时后不再判过时，照常点。"""
+    monkeypatch.setattr(ex, "_stale_before_tap", lambda f: "手牌变了")
+    src = Source([])
+    done = iter([False] * (ex.STALE_MAX + 1) + [True])
+    ex.run_exam(Brain(), "r1", Rec(), lambda: next(done, True), source=src, advisor=Advisor())
+    assert ("executed", "PlayCard", True) in src.calls

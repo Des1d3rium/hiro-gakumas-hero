@@ -43,6 +43,12 @@ STATUS_MIN_SCORE = 0.6
 CAPTURED_MIN_SCORE, CAPTURED_MIN_MARGIN = 0.72, 0.12
 ENCHANT_MIN_SCORE = 0.6
 CARD_INNER = 24  # 卡面比对的缩放边长
+# 指针（姿态）图标不是蓝底：強気 橙色火焰蓝底占比 0.078（贴着 BLUE_MIN_RATIO 上下跳）、のんびり 淡紫 0.027，
+# 按蓝底分流会被当成卡牌效果去比卡面（強気 认成「あのときの約束」0.603）。没过蓝底时，字形图库第一名是指针、
+# 且比卡面比对高出 STANCE_OVER_ENCHANT，就按状态读（第一局本战 R1 停机帧：強気 0.929 vs 卡面 0.603；のんびり 0.62 vs 0.52）。
+# 按图标名判断（自建素材里截的同名变体，如 examoverpreservation-live，也算指针）
+STANCE_NAMES = frozenset({"強気", "温存", "のんびり", "全力", "指針解除"})
+STANCE_OVER_ENCHANT = 0.08
 
 
 def _slot_y(k: int) -> int:
@@ -267,8 +273,16 @@ def _read_slot(img: MatLike, k: int) -> dict:
                 entry["alternatives"] = alternatives
     else:
         score, asset = match_enchant_card(img, k)
+        glyph = match_status_icon(patch)
+        gscore, gkey = glyph[0]
+        if meta.get(gkey, {}).get("name") in STANCE_NAMES and _accepted(meta, glyph) and gscore - score >= STANCE_OVER_ENCHANT:
+            info = meta.get(gkey, {})
+            entry = {"slot": k, "kind": "status", "key": gkey, "type": info.get("type"), "name": info.get("name"),
+                     "score": round(gscore, 3), "margin": round(gscore - glyph[1][0], 3), "stance_glyph": True}  # fmt: skip
+            entry["value"], entry["unit"] = _value(img, k, "status", None)
+            return entry
         card = _card_from_asset(asset) if score >= ENCHANT_MIN_SCORE else None
-        grey = None if card is not None else match_status_icon(patch)
+        grey = None if card is not None else glyph
         if grey and _accepted(meta, grey):
             # 培育计划的核心状态（やる気 等）为 0 时以灰底常驻、不显示数值；卡面认不出而字形能认出即是这种槽
             gscore, key = grey[0]
@@ -284,3 +298,49 @@ def _read_slot(img: MatLike, k: int) -> dict:
 def status_summary(entries: list[dict]) -> dict:
     """{图标键: 数值}，方便按类型取值（如 examcardplayaggressive=やる気、examreview=好印象）。"""
     return {e["key"]: e.get("value") for e in entries if e["kind"] == "status" and e.get("key")}
+
+
+# ---------------------------------------------------------------- H.I.F 回忆能力（メモリーアビリティ）
+# 考试开局时状态栏指针下面一排卡面菱形、各带「N回」：每个是一项回忆能力，图上是触发卡的卡面（第一局本战 R1 第 1 回合：
+# オープニングアクト / トレーニングの成果 / ラッキー♪ / 達成感）。只在 115 张触发卡里比卡面，比全卡库稳（角色专属卡面也归到同一张卡）。
+MEMORY_ABILITY_MAX = 4
+MEMORY_ABILITY_MIN_SCORE = 0.6
+
+
+@lru_cache(maxsize=1)
+def _memory_card_index() -> tuple[list[str], np.ndarray]:
+    from hiro.brain.memory_ability import table
+
+    keys, matrix = _card_index()
+    triggers = set(table())
+    keep = [i for i, k in enumerate(keys) if (c := _card_from_asset(k)) is not None and c._id in triggers]
+    return [keys[i] for i in keep], matrix[keep] if keep else np.zeros((0, matrix.shape[1] if matrix.ndim == 2 else 1), np.float32)
+
+
+def read_memory_abilities(img: MatLike) -> list[dict]:
+    """状态栏里的回忆能力（从上往下，最多 4 项）：[{slot, card_id, card, kind, count, score, left_on_screen}]。
+    从第一个认出的触发卡槽开始，连续认出的才算（指针槽、认不出的空槽之后停止）。没有主数据 / 卡面库时返回空。"""
+    from hiro.brain.memory_ability import ability
+
+    keys, matrix = _memory_card_index()
+    if not keys:
+        return []
+    out = []
+    for k in range(MAX_SLOTS):
+        vecs = np.stack([_norm(_inner(_slot(img, k, half, dy))) for half in (24, 26, 28) for dy in (-3, 0, 3)], axis=1)
+        scores = matrix @ vecs
+        i, j = np.unravel_index(int(scores.argmax()), scores.shape)
+        score = float(scores[i, j])
+        value, _unit = _value(img, k, "enchant", None)
+        card = _card_from_asset(keys[i]) if score >= MEMORY_ABILITY_MIN_SCORE else None
+        info = ability(card._id) if card is not None else None
+        real = info is not None and (value is not None or diamond_score(img, k) >= DIAMOND_MIN)
+        if not real:
+            if out:
+                break
+            continue
+        out.append({"slot": k, "card_id": card._id, "card": info["card"] or card.name, "kind": info["kind"], "count": info["count"],
+                    "score": round(score, 3), "left_on_screen": value})  # fmt: skip
+        if len(out) >= MEMORY_ABILITY_MAX:
+            break
+    return out

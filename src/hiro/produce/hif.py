@@ -1154,9 +1154,11 @@ class HiroHifStrategy(HifGrindStrategy):
         else:
             self._change_cancels = 0
         card_id = None if cancel else args.get("remove_card_id")
-        # 整副扫描过（多屏）时 remove_index 是牌组序号、不是这一屏的格子号：只按 card_id + 强化次数找（翻屏）
-        changed = ctx.commit_stage2(0, card_id=card_id, cancel=cancel, remove_index=None if cancel or scanned else args.get("remove_index"),
-                                    remove_upgrade=None if cancel else args.get("remove_upgrade"))  # 自带确认框处理；取消 / 不符时点キャンセル 返回 False  # fmt: skip
+        # 整副扫描过（多屏）时 remove_index 是牌组序号：把整副卡格（含全局行列）交给执行侧按偏移定位；
+        # 定位不上时执行侧只按 card_id + 强化次数找，不把牌组序号当这一屏的格子号
+        layout = {"layout": self.s.state.page_fields["cards"]} if scanned and not cancel else {}
+        changed = ctx.commit_stage2(0, card_id=card_id, cancel=cancel, remove_index=None if cancel else args.get("remove_index"),
+                                    remove_upgrade=None if cancel else args.get("remove_upgrade"), **layout)  # fmt: skip
         result = self.s.verify(d.action, page_before="SKILL_CARD_CHANGE_2", taps=[], retries=0)
         result = replace(result, ok=bool(changed) or cancel, error=None if changed or cancel else "换卡未完成（见 kaa_patches 日志与 stage2 帧）")
         self.s.record(obs, decision=d, execution=result, timings_ms={"total": (time.monotonic() - t0) * 1000})

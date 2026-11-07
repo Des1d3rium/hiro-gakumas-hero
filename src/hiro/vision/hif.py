@@ -23,7 +23,7 @@ from hiro.vision.card_art import match_card_art
 from hiro.vision.cards import card_summary, card_version
 from hiro.vision.digits import _iou, _scale, _templates, read_dddd, read_int, read_number, read_score
 from hiro.vision.items import read_drink_slots, read_pitems
-from hiro.vision.ocr import ocr, ocr_batch
+from hiro.vision.ocr import ocr, ocr_batch, ocr_boxes
 from hiro.vision.region_cache import RegionCache, cached
 from hiro.vision.status import read_status_column, status_summary
 
@@ -657,7 +657,7 @@ NAME_EXACT_CONF = 0.9  # 卡名与卡面不一致、以卡名为准时的置信�
 NAME_PREFIX_CONF = 0.7  # 同上，卡名只是前缀命中（被下一张卡盖住）
 
 
-def _read_card(img: MatLike, slot: int, letter: Rect, next_cx: int | None = None) -> dict:
+def _read_card(img: MatLike, slot: int, letter: Rect, next_cx: int | None = None, *, read_name=None) -> dict:
     """一张手牌。卡面相关定卡、卡名栏数「+」定强化次数；卡面没把握（< ART_SURE）时 OCR 卡名栏交叉核对（约 100ms）：
     两者一致 → 置信度 1.0；不一致且卡名唯一对应一张卡 → 以卡名为准（卡面结果记在 art_name）；卡名读不出 → 保留卡面结果。
     两者都定不了卡时 name 为 None（不猜）。"""
@@ -671,7 +671,8 @@ def _read_card(img: MatLike, slot: int, letter: Rect, next_cx: int | None = None
     art = _asset_to_card(key) if score >= ART_MIN_SCORE or consensus >= 3 else None
     name_text, named, exact = None, None, False
     if art is None or score < ART_SURE:
-        name_text = _clean_name("".join(t for t, _ in ocr(_name_crop(img, letter, next_cx))))
+        text = read_name(slot) if read_name else "".join(t for t, _ in ocr(_name_crop(img, letter, next_cx)))
+        name_text = _clean_name(text)
         named, exact = _card_from_name(name_text, top)
     art_name = None
     if named is not None and (art is None or named._id != art._id):
@@ -823,18 +824,56 @@ def hand_layout(xs: list[int]) -> str:
     return "shifted"
 
 
-def read_hand(img: MatLike, *, letters: list[Rect] | None = None, cache: RegionCache | None = None) -> tuple[list[dict], int]:
+# 批量 OCR（_hand_names）把各张卡名栏拼成一张图读，卡名栏左边的卡框竖线常被读成开头的「｜」「「」「．」，
+# 「+」后面还会多出杂字（「仕切り直し+一」）：卡名不会以这些字开头，强化标记「+」后面也不会再有字
+#（实机 203 帧 546 张对比逐张 OCR：不清理时 16 张认不出卡）
+_BATCH_NAME_LEAD = re.compile(r"^[｜|「『．.・,，、/／:：;；\s]+")
+_BATCH_NAME_TAIL = re.compile(r"(?<=[+＋])[^+＋]*$")
+
+
+def _clean_batch_name(text: str) -> str:
+    return _BATCH_NAME_TAIL.sub("", _BATCH_NAME_LEAD.sub("", text))
+
+
+def _hand_names(img, letters):
+    """所有可见卡名栏拼成一张图只跑一次 OCR，按槽位返回各自的文字（已去掉拼图带来的首尾杂字）。"""
+    crops = [_name_crop(img, letter, letters[i + 1].center.x if i + 1 < len(letters) else None)
+             for i, letter in enumerate(letters)]
+    height = max(c.shape[0] for c in crops) + 20
+    width = max(c.shape[1] for c in crops) + 20
+    canvas = np.full((height * len(crops), width, 3), 255, dtype=np.uint8)
+    for slot, crop in enumerate(crops):
+        y = slot * height + 10
+        canvas[y:y + crop.shape[0], 10:10 + crop.shape[1]] = crop
+    names = [[] for _ in crops]
+    for text, _, box in ocr_boxes(canvas):
+        slot = (box[1] + box[3]) // (2 * height)
+        if 0 <= slot < len(names):
+            names[slot].append((box[0], text))
+    return [_clean_batch_name("".join(text for _, text in sorted(parts))) for parts in names]
+
+
+def read_hand(img: MatLike, *, letters: list[Rect] | None = None, cache: RegionCache | None = None, batch_names: bool = False) -> tuple[list[dict], int]:
     """手牌：按 KAA 的卡名首字母框定位每张卡，用灰度相关识别卡面（对压暗的不可用卡也有效），卡面没把握时用卡名栏 OCR 核对；
     每张另读左上角预计得分徽章（badge_score）。cache：某张卡（卡面 + 卡名栏 + 首字母框）/ 徽章区与上次相同则复用。"""
     if letters is None:
         letters = sorted(_locate_letters(img), key=lambda r: r.x1)
     hand = []
+    names = None
+
+    def read_name(slot):
+        nonlocal names
+        if names is None:
+            names = _hand_names(img, letters)
+        return names[slot]
+
     for slot, letter in enumerate(letters):
         x2, y2 = letter.center.x, letter.top_left.y
         x1, y1 = x2 - kaa_ui.CARD_OFFSET[0], y2 - kaa_ui.CARD_OFFSET[1]
         region = img[max(0, y1 - 12) : letter.y1 + 46, max(0, x1 - 8) : min(img.shape[1], letter.x1 + letter.w // 2 + 96)]
         next_cx = letters[slot + 1].x1 + letters[slot + 1].w // 2 if slot + 1 < len(letters) else None
-        entry = cached(cache, f"card@{x2}", region, lambda slot=slot, letter=letter, nx=next_cx: _read_card(img, slot, letter, nx))
+        entry = cached(cache, f"card:{batch_names}@{x2}", region, lambda: _read_card(
+            img, slot, letter, next_cx, read_name=read_name if batch_names else None))
         cx = letter.x1 + letter.w // 2
         bx1, bx2 = max(0, cx + BADGE_X[0]), cx + BADGE_X[1] if next_cx is None else min(cx + BADGE_X[1], next_cx - NEXT_CARD_GAP)
         badge_crop = img[BADGE_Y[0] : BADGE_Y[1], bx1 : max(bx1 + 1, bx2)]
@@ -865,20 +904,20 @@ def read_hif_hud(img: MatLike, *, fallback: bool = False) -> dict:
             "genki": read(img, BOX_GENKI, align=True)}  # fmt: skip
 
 
-def read_hif_exam(img: MatLike, *, cache: RegionCache | None = EXAM_CACHE) -> dict:
+def read_hif_exam(img: MatLike, *, cache: RegionCache | None = EXAM_CACHE, batch_names: bool = False) -> dict:
     """考试画面完整读取。cache 为区域缓存：整帧与上次几乎相同时直接返回上次结果；
     否则只重读变了的区域（状态栏槽位、手牌、P 道具、饮料、文字、HUD 数字、排名栏）。"""
     if cache is None:
-        return _read_hif_exam(img, None)
-    return cached(cache, "frame", cv2.resize(img, (img.shape[1] // 2, img.shape[0] // 2), interpolation=cv2.INTER_AREA),
-                  lambda: _read_hif_exam(img, cache))  # fmt: skip
+        return _read_hif_exam(img, None, batch_names=batch_names)
+    return cached(cache, f"frame:{batch_names}", cv2.resize(img, (img.shape[1] // 2, img.shape[0] // 2), interpolation=cv2.INTER_AREA),
+                  lambda: _read_hif_exam(img, cache, batch_names=batch_names))  # fmt: skip
 
 
-def _read_hif_exam(img: MatLike, cache: RegionCache | None) -> dict:
+def _read_hif_exam(img: MatLike, cache: RegionCache | None, *, batch_names: bool = False) -> dict:
     letters = sorted(_locate_letters(img), key=lambda r: r.x1)
     finals = is_finals_strip(img)  # 本战：没有突破线，顶部是 3 人名次条
     texts = _texts({"attr": _attr_crop(img)} if finals else {"attr": _attr_crop(img), "break": _breakthrough_crop(img)}, cache)
-    hand, missing = read_hand(img, letters=letters, cache=cache)
+    hand, missing = read_hand(img, letters=letters, cache=cache, batch_names=batch_names)
     statuses = read_status_column(img, cache=cache)
 
     def num(name: str, box) -> int | None:

@@ -60,6 +60,7 @@ class ExamMemory:
     installed: list[Installed] = field(default_factory=list)
     item_charges_left: int | None = None
     used_once: list[str] = field(default_factory=list)
+    strategy_data: dict = field(default_factory=dict)  # 策略可持久化的场内记账
     this_turn: list[str] = field(default_factory=list)  # 本回合已执行的动作描述
     history: list[str] = field(default_factory=list)  # 「T3 打 デイドリーミング+」之类，只留最近若干条
     plan: list[dict] = field(default_factory=list)  # LLM 给出、尚未执行完的本回合计划

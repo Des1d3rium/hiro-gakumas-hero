@@ -29,7 +29,9 @@ from kotonebot.config.config import conf
 from kotonebot.primitives.geometry import Size
 
 BUNDLE_ID = "jp.co.bandainamcoent.BNEI0421"
-CLICK_HOLD_SECONDS = 0.06
+# 按下到抬起的间隔。0.06s 时考试里点牌约 1/5 没被接收（第一局本战 R1：38 次出牌 8 次第一下没选中、3 次两下都丢）：
+# 舞台特效让游戏掉帧到 <16fps 时，按下和抬起落在同一帧，Unity 会丢掉这次触摸。0.12s 仍远短于长按。
+CLICK_HOLD_SECONDS = 0.12
 ACTIVATE_SETTLE_SECONDS = 0.3
 SWIPE_FPS = 60
 MAATOOLS_PORT = 1717
@@ -42,6 +44,10 @@ RECONNECT_INTERVAL = 1.0
 SOCKET_TIMEOUT = 5.0
 
 logger = logging.getLogger(__name__)
+
+
+class MaaToolsEmptyFrame(RuntimeError):
+    """A screenshot response arrived with no pixel payload."""
 
 
 class MaaToolsImpl:
@@ -148,7 +154,7 @@ class MaaToolsImpl:
     def _read_bgr(self, sock: socket.socket):
         w, h, n = struct.unpack(">III", self._recv(sock, 12))
         if n == 0:
-            raise RuntimeError("MaaTools 返回空帧")
+            raise MaaToolsEmptyFrame(f"MaaTools 返回空帧（响应头 {w}×{h}，0 字节）")
         # 数据本身就是 BGR 顺序，可直接给 OpenCV
         return np.frombuffer(self._recv(sock, n), np.uint8).reshape(h, w, 3)
 
@@ -163,9 +169,17 @@ class MaaToolsImpl:
         return "landscape" if w > h else "portrait"
 
     def screenshot(self):
-        image = self._call(b"BGR\x01", reply=self._read_bgr)
-        self._size = (image.shape[1], image.shape[0])
-        return image
+        for attempt, delay in enumerate((0.15, 0.3, 0.6, None), start=1):
+            try:
+                image = self._call(b"BGR\x01", reply=self._read_bgr)
+            except MaaToolsEmptyFrame as exc:
+                if delay is None:
+                    raise MaaToolsEmptyFrame(f"{exc}，连续 {attempt} 次") from exc
+                logger.warning("%s，%.2fs 后重取（第 %d 次）", exc, delay, attempt)
+                time.sleep(delay)
+                continue
+            self._size = (image.shape[1], image.shape[0])
+            return image
 
     def _touch(self, phase: int, x: int, y: int) -> None:
         tx, ty = round(x / CATALYST_IDIOM_SCALE), round(y / CATALYST_IDIOM_SCALE)

@@ -169,13 +169,23 @@ def _customized(cell: MatLike) -> bool:
     return green >= CUSTOM_MIN_PX_125 * area
 
 
+def read_card_cell(crop: MatLike) -> dict:
+    from kaa.game_ui.skill_card_select import match_card_region
+
+    v_mean = float(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)[:, :, 2].mean())
+    dimmed = v_mean < DIM_V_MAX
+    look = cv2.convertScaleAbs(crop, alpha=min(DIM_GAIN_MAX, DIM_TARGET_V / max(v_mean, 1.0))) if dimmed else crop
+    card = match_card_region(crop) or (match_card_region(look) if dimmed else None)
+    return {"card_id": card._id if card else None, "name": card.name if card else None,
+            "upgrade": _plus(look) if card else None, "customized": _customized(look) if card else None,
+            "dimmed": dimmed}
+
+
 def read_card_grid(img: MatLike, region: tuple[int, int, int, int], geometry: str | None = None) -> list[dict]:
     """region 内整格可见的卡：[{index, row, col, card_id, name, upgrade, customized, rect, center}]，从左到右、从上到下。
 
     index 是本屏内的顺序；row 从 0 起，是本屏可见的第几行（不是牌组里的绝对行号）。
     """
-    from kaa.game_ui.skill_card_select import match_card_region
-
     marks = _marks(img, region)
     if not marks:
         return []
@@ -194,17 +204,8 @@ def read_card_grid(img: MatLike, region: tuple[int, int, int, int], geometry: st
         if not row_ys or abs(row_ys[-1] - y) > ROW_TOL:
             row_ys.append(y)
         crop = img[y : y + cell, x : x + cell]
-        v_mean = float(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)[:, :, 2].mean())
-        dimmed = v_mean < DIM_V_MAX
-        # 压暗的格子（强化对话框里不能再强化的卡、特別指導里不能定制的卡）：「+」与定制徽章的颜色跟着变暗，先按亮度比例提亮再判
-        #（main10 相談強化：届いて！+ / デイドリーミング+ / 紙吹雪+ 压暗后 upgrade 全读成 0）
-        look = cv2.convertScaleAbs(crop, alpha=min(DIM_GAIN_MAX, DIM_TARGET_V / max(v_mean, 1.0))) if dimmed else crop
-        card = match_card_region(crop) or (match_card_region(look) if dimmed else None)
-        upgrade = _plus(look) if card is not None else None
         out.append({
-            "index": len(out), "row": len(row_ys) - 1, "col": int(col),
-            "card_id": card._id if card else None, "name": card.name if card else None,
-            "upgrade": upgrade, "customized": _customized(look) if card is not None else None, "dimmed": dimmed,
+            "index": len(out), "row": len(row_ys) - 1, "col": int(col), **read_card_cell(crop),
             "rect": (int(x), int(y), int(cell), int(cell)), "center": (int(x + cell // 2), int(y + cell // 2)),
         })  # fmt: skip
     return out

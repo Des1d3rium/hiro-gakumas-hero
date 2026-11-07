@@ -91,11 +91,22 @@ def _Run(action: Action, shoot, click, clock, sleep, ocr=None, calib: bool = Tru
     return Run(action, PAGE, shoot, click, clock, sleep, label="相談", ocr=ocr, calib=calib)
 
 
+P_DIGITS = (330, 95, 450, 135)  # read_number 读 P 的区域（只含数字，不含左边的「P」图标）
 P_DIGIT_FIX = str.maketrans({"ろ": "3", "る": "3", "O": "0", "o": "0", "〇": "0", "l": "1", "I": "1", "S": "5", "B": "8"})  # 数字 OCR 混淆
 
 
 def read_p(img: np.ndarray, ocr) -> int | None:
-    """顶部 P 点（相談页 x 300–460、y 90–140 的数字）。"""
+    """顶部 P 点（相談页 x 300–460、y 90–140 的数字）。
+    先用游戏数字读取器读这一小块（约 30ms）：两局 44 张相談 / 轮间帧与整帧 OCR 比对，不一致的 4 张全是它对——
+    整帧 OCR 把 340 读成 540、130 读成 150，单个「0」读不出（返回 None）。读不出时才退回整帧 OCR。"""
+    from hiro.vision.digits import read_number
+
+    try:
+        v = read_number(img, P_DIGITS)
+    except Exception:  # 读数异常不能打断商店流程
+        v = None
+    if v is not None:
+        return v
     for t, _, (x1, y1, x2, y2) in ocr(img):
         v = t.strip().translate(P_DIGIT_FIX)
         if P_BAND[0] <= (x1 + x2) // 2 <= P_BAND[2] and P_BAND[1] <= (y1 + y2) // 2 <= P_BAND[3] and v.isdigit():
