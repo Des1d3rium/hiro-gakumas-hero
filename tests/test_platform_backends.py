@@ -542,3 +542,14 @@ def test_vote_price_sale_fixes_one_digit_misread(monkeypatch):
     assert shop._vote_price(img, 65, (612, 652), [70, 40], sale=True) == 49
     assert shop._vote_price(img, 65, (612, 652), [70, 49], sale=True) == 49
     assert shop._vote_price(img, 65, (612, 652), [40], sale=False) == 40
+
+
+def test_vote_price_sale_single_digit(monkeypatch):
+    """SALE 实付价读成个位数（105→73 读成 5）：按看到的原价七折取整。"""
+    import numpy as np
+
+    from hiro.vision import digits, shop
+
+    monkeypatch.setattr(shop, "_cell_price", lambda img, x, band, scale=3: [5])
+    monkeypatch.setattr(digits, "read_dddd", lambda img, box: None)
+    assert shop._vote_price(np.zeros((1280, 720, 3), np.uint8), 65, (612, 652), [105, 5], sale=True) == 73

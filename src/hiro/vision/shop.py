@@ -247,6 +247,7 @@ def _cell_price(img: MatLike, x: int, band: tuple[int, int], scale: int = 3) -> 
 
 SALE_RATE = 0.7  # SALE 价 = 原价 × 0.7 取整（75→52、70→49、100→70、105→73）
 PRICE_MIN = 5  # 货架价格不会低于这个数：更小的是「50」漏读首位
+SALE_PAID_MIN = 20  # SALE 实付价不会低于这个数（见过的最低 49）：更小的是丢了位
 
 
 def _sale_split(nums: list[int]) -> list[int]:
@@ -285,8 +286,12 @@ def _vote_price(img: MatLike, x: int, band: tuple[int, int], region_nums: list[i
             return paid[0]
         # 看到了原价，读出的实付价和「原价 × 0.7」只差一位数以内（Windows 第八、十局 70→49 读成 40，几种读法一致地错）：按原价七折取整
         votes0 = Counter(last).most_common(1)[0][0]
+        big = [o for o in seen if o >= SALE_PAID_MIN]
+        if votes0 < SALE_PAID_MIN and big:
+            # 实付价读成了个位数（Windows 第十一局 #103：105→73 读成 5）：按看到的最大原价七折取整
+            return int(max(big) * SALE_RATE)
         for o in sorted(seen, reverse=True):
-            fixed = int(o * SALE_RATE + 0.5)
+            fixed = int(o * SALE_RATE)
             a, b = str(votes0), str(fixed)
             # 只修「同位数、只差一位数字」的读错（40↔49）；杂数（76 之类）算出来差两位的不改
             if o > votes0 and len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1:
