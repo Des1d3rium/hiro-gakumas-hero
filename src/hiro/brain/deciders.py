@@ -1662,6 +1662,8 @@ class ProduceDeciders:
             better = [(dk.holding_key(held + [it["drink_id"]], "r2", ps.drink_capacity), it) for it in _items(shelf, "drink")
                       if it.get("drink_id") and _affordable(it, budget)]  # fmt: skip
             better = [x for x in better if x[0] < cur]
+            if INTERVAL_REFRESH and (why := self._interval_refresh_why(items, shelf, budget)):
+                return done(Action(ActionKind.REROLL, {"scope": "interval"}), why)
             if better:
                 it = min(better, key=lambda x: x[0])[1]
                 return done(Action(ActionKind.INTERVAL_BUY, {"index": it["index"]}),
@@ -1686,6 +1688,34 @@ class ProduceDeciders:
         if recover_ok:
             return done(Action(ActionKind.INTERVAL_BUY, {"service": "recover"}), f"回体力到目标 {target}（{hp}/{max_hp}）")
         return done(Action(ActionKind.INTERVAL_END), f"没有要买的（剩 {p}P，体力 {hp}/{max_hp}，目标 {target}）")
+
+    def _interval_refresh_why(self, items: dict, shelf: list, budget: int) -> str | None:
+        """轮间货架没有 R2 优先档饮料（复制 / 爆发）时先刷新再买（开关 HIRO_INTERVAL_REFRESH）。
+        Windows 第七局：货架只有 ホエイ + 青汁，买完剩 380P 没花；A5b 买到了复制饮料 特製ハツボシエキス。
+        只在还没买饮料时刷（买过以后持有数未知，再买可能溢出）；两格饮料都认出才判断；刷完货架没变（没刷成）、
+        刷满 INTERVAL_REFRESH_MAX 次、或刷完不够买两瓶 100P 饮料就不刷。返回刷新理由，不刷返回 None。"""
+        from hiro.brain import drinks as dk
+
+        drinks = _items(shelf, "drink")
+        refresh = items.get("refresh") or {}
+        price = refresh.get("price")
+        if not drinks or any(it.get("purchased") for it in (items.get("drinks") or [])) or any(not it.get("drink_id") for it in drinks):
+            return None
+        if refresh.get("available") is False or price is None or budget - price < INTERVAL_DRINK_RESERVE:
+            return None
+        if any(dk.tag([it["drink_id"]], "r2")[0][0] == 0 for it in drinks):
+            return None  # 已有复制 / 爆发
+        sig = tuple(sorted((it.get("index"), it.get("card_id") or it.get("drink_id")) for it in shelf))
+        tried = getattr(self, "_interval_rerolls", None)
+        if tried is None or tried["budget_hint"] < budget:  # P 变多 = 新的一次轮间（每局只有一次，防跨局残留）
+            tried = self._interval_rerolls = {"sigs": [], "budget_hint": budget}
+        tried["budget_hint"] = budget
+        if (tried["sigs"] and tried["sigs"][-1] == sig) or len(tried["sigs"]) >= INTERVAL_REFRESH_MAX:
+            return None
+        tried["sigs"].append(sig)
+        names = "、".join(it.get("name") or it["drink_id"] for it in drinks)
+        return (f"【刷新】轮间货架饮料（{names}）没有复制 / 爆发（R2 优先档），刷新找一次（{price}P，第 {len(tried['sigs'])} 次，"
+                f"最多 {INTERVAL_REFRESH_MAX} 次；刷完还剩 {budget - price}P）")
 
     def _interval_state(self, state: GameState) -> tuple[ProduceState | None, set[str]]:
         """轮间用的 ProduceState：体力 / 最大体力 / P 点取本页页头读数（识别-06 / ef5d764 三读投票），其余字段由 ProduceState 补。
@@ -1786,6 +1816,10 @@ SELECTION_LEAN_PICK = False  # 选拔里必拿已齐、候选无核心卡时按�
 # 结果换进来的往往正是下次最先换掉的那类（Win2：换进「止められない想い」价值 2，下一次换卡就把它换掉，牌组里 3 张元気な挨拶 没动）。
 # 开：换入挑 cull_key 最大的（最晚才会被删），同档再比价值。行为变化，默认关；HIRO_CHANGE_PICK_BY_CULL=1 打开
 CHANGE_PICK_BY_CULL = __import__("os").environ.get("HIRO_CHANGE_PICK_BY_CULL") == "1"
+# 轮间货架没有复制 / 爆发饮料时先刷新（协调 2026-11-08，Windows 第七局剩 380P）。默认关
+INTERVAL_REFRESH = __import__("os").environ.get("HIRO_INTERVAL_REFRESH") == "1"
+INTERVAL_REFRESH_MAX = 3
+INTERVAL_DRINK_RESERVE = 200  # 刷完至少还够买两瓶 100P 饮料
 CHANGE_JUNK_VALUE = 1.0  # card_value ≤ 它算「废牌」（冲突 0、基础卡 0.5、好印象系 1）：授業セレクトチェンジ 只在有废牌时才选
 # 授業是セレクトチェンジ 的日子 [wiki]：选拔第 10、17 天，本战第 1、4 天（step = 日程位置）
 CHANGE_STUDY_DAYS = {("produce-007", 10), ("produce-007", 17), ("produce-008", 1), ("produce-008", 4)}
