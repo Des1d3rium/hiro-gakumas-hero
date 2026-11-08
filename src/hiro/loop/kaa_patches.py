@@ -242,7 +242,8 @@ def scan_dialog_deck(region: tuple[int, int, int, int], *, expected: int | None 
     swipe = swipe or (lambda x1, y1, x2, y2: device.swipe(x1, y1, x2, y2, duration=CARD_OP_SWIPE_DURATION))
     max_screens = max_screens or CARD_OP_MAX_SCREENS
     img = shoot()
-    first = read_card_dialog(img, region)["cards"]
+    icons = region == CHANGE2_CARD_AREA  # 换卡阶段 2：KAA 认不出的格子用图片认卡补（HIRO_CARD_ICON，默认关）
+    first = read_card_dialog(img, region, icons=icons)["cards"]
     if not first or not dialog_scroll(img, region)["scrollable"]:
         return {"cards": first, "complete": bool(first), "screens": 1, "problems": [] if first else ["卡格没读到"]}
     screens = [first]
@@ -250,7 +251,7 @@ def scan_dialog_deck(region: tuple[int, int, int, int], *, expected: int | None 
     for _ in range(max_screens):
         _dialog_swipe(region, True, swipe)
         sleep(CARD_OP_SCROLL_SETTLE)
-        screens.append(read_card_dialog(shoot(), region)["cards"])
+        screens.append(read_card_dialog(shoot(), region, icons=icons)["cards"])
         merged = merge_dialog_screens(screens, expected=expected)
         if merged["new_rows"][-1] == 0:
             break
@@ -310,7 +311,7 @@ def change_stage2(self, index: int = 0, card_id: str | None = None, cancel: bool
     dialog = {"cards": []}
     while time.monotonic() < deadline:
         img = device.screenshot()
-        dialog = read_card_dialog(img, CHANGE2_CARD_AREA)
+        dialog = read_card_dialog(img, CHANGE2_CARD_AREA, icons=True)
         if dialog["cards"]:
             break
         time.sleep(CHANGE_POLL)
@@ -329,7 +330,7 @@ def change_stage2(self, index: int = 0, card_id: str | None = None, cancel: bool
                     _dialog_swipe(CHANGE2_CARD_AREA, down, swipe)
                     time.sleep(CARD_OP_SCROLL_SETTLE)
                     img = device.screenshot()
-                    dialog = read_card_dialog(img, CHANGE2_CARD_AREA)
+                    dialog = read_card_dialog(img, CHANGE2_CARD_AREA, icons=True)
                     target, why = pick_change_target(dialog["cards"], index, card_id, remove_upgrade=remove_upgrade)
                     if target is not None or any(c.get("card_id") == card_id for c in dialog["cards"]):
                         break
@@ -349,7 +350,7 @@ def change_stage2(self, index: int = 0, card_id: str | None = None, cancel: bool
         return False
     device.click(*target["center"])
     time.sleep(CHANGE_POLL)
-    picked = read_card_dialog(device.screenshot(), CHANGE2_CARD_AREA)
+    picked = read_card_dialog(device.screenshot(), CHANGE2_CARD_AREA, icons=True)
     run.snap(device.screenshot(), "stage2-picked")
     sel = picked.get("selected_card") or {}
     chosen, chosen_up = sel.get("card_id"), sel.get("upgrade")

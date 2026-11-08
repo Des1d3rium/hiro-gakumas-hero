@@ -154,7 +154,7 @@ EXTRACTORS = {
     "SKILL_CARD_REMOVAL": _removal_dialog,
     "SKILL_CARD_ENHANCE": _enhance_dialog,
     "SKILL_CARD_CHANGE_1": lambda img: __import__("hiro.vision.deck", fromlist=["read_change_candidates"]).read_change_candidates(img),
-    "SKILL_CARD_CHANGE_2": _card_dialog,
+    "SKILL_CARD_CHANGE_2": lambda img: {**read_card_dialog(img, icons=True), "confirm": read_confirm_dialog(img)},  # 换卡：KAA 认不出的格子用图片认卡补（HIRO_CARD_ICON）
     "SPECIAL_GUIDANCE": lambda img: __import__("hiro.vision.pages", fromlist=["page_fields"]).page_fields("SPECIAL_GUIDANCE", img),
     "HIF_ROUND_INTERVAL": lambda img: __import__("hiro.vision.pages", fromlist=["read_interval"]).read_interval(img),
     "PDRINK_MAX": lambda img: read_pdrink_max(img) or {"error": "没有读到「手持ちのドリンク」"},

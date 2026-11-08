@@ -69,7 +69,7 @@ def test_scan_dialog_deck_merges_and_returns_to_top(monkeypatch):
 
     screens = _screens(_deck())
     pos = {"i": 0, "swipes": []}
-    monkeypatch.setattr(vd, "read_card_dialog", lambda img, region: {"cards": screens[pos["i"]]})
+    monkeypatch.setattr(vd, "read_card_dialog", lambda img, region, **kw: {"cards": screens[pos["i"]]})
     monkeypatch.setattr(vd, "dialog_scroll", lambda img, region: {"scrollable": True, "at_top": pos["i"] == 0})
 
     def swipe(x1, y1, x2, y2):
@@ -88,7 +88,7 @@ def test_scan_single_screen_does_not_swipe(monkeypatch):
 
     one = _screens(_deck(12))[0]
     swipes = []
-    monkeypatch.setattr(vd, "read_card_dialog", lambda img, region: {"cards": one})
+    monkeypatch.setattr(vd, "read_card_dialog", lambda img, region, **kw: {"cards": one})
     monkeypatch.setattr(vd, "dialog_scroll", lambda img, region: {"scrollable": False, "at_top": True})
     out = kp.scan_dialog_deck(kp.CHANGE2_CARD_AREA, shoot=lambda: None, swipe=lambda *a: swipes.append(a), sleep=lambda s: None)
     assert out["screens"] == 1 and len(out["cards"]) == 12 and swipes == []
