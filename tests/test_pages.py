@@ -4,6 +4,7 @@
 夹具 tests/fixtures/pages/ 取自 datasets/20261029-224103-hif-qualify、reports/live（实机探测图）与 KAA 参考截图，真值按截图目视。
 """
 
+import os
 from pathlib import Path
 
 import cv2
@@ -121,8 +122,10 @@ def test_pdrink_max_two_incoming():
      # 本地 trace（tools/fixtures/build_local.py）：轮间页 4 格全空
      ("trace/interval-shop-empty-bar.jpg", [None, None, None, None], 1213),
      # 本地 trace 考试页：第 3 格是 初星ホエイプロテイン（考试记忆 veil_drinks 记着；当时执行层报「局面与画面对不上：drink:2」）
+     # 原画模板下判成 unknown；分支 claude/drink-insitu-templates 的实机模板（HIRO_DRINK_INSITU=1）补认，见下面 test_drink_bar_insitu
      pytest.param("trace/exam-strong1.jpg", ["ブーストエキス", "センブリソーダ", "初星ホエイプロテイン", "センブリソーダ"], 1200,
-                  marks=pytest.mark.xfail(strict=True, reason="初星ホエイプロテイン 的图标匹配分 0.46、判成 unknown")),
+                  marks=pytest.mark.xfail(os.environ.get("HIRO_DRINK_INSITU") != "1", strict=True,
+                                          reason="原画模板下 初星ホエイプロテイン 匹配分 0.46、判成 unknown")),
      ],
 )  # fmt: skip
 def test_drink_bar_on_produce_and_exam_pages(rel, names, y):
@@ -390,3 +393,18 @@ def test_walkthrough_page_classes(name, page, fallback):
     got = classify_page(img)
     assert (got[0] if got else None) == page
     assert fallback_page(img) == fallback
+
+
+def test_drink_bar_insitu(monkeypatch):
+    """开实机模板（HIRO_DRINK_INSITU=1，分支 claude/drink-insitu-templates）后，考试页第 3 格 初星ホエイプロテイン 认得出、
+    其余格不变。没合入那个分支或本机没建实机模板（tools/assets/capture_drinks.py build）时跳过。"""
+    from hiro.vision import items
+
+    if not hasattr(items, "insitu_enabled"):
+        pytest.skip("还没合入饮料实机模板（claude/drink-insitu-templates）")
+    if not items._insitu_library(items.DRINK_SIZE).keys:
+        pytest.skip("本机没有饮料实机模板（HIRO_USER_ASSETS/icons/drink_exam）")
+    monkeypatch.setenv("HIRO_DRINK_INSITU", "1")
+    slots = items.read_drink_slots(cv2.imread(str(FIX / "trace" / "exam-strong1.jpg")))
+    assert [s["name"] for s in slots] == ["ブーストエキス", "センブリソーダ", "初星ホエイプロテイン", "センブリソーダ"]
+    assert slots[2].get("method") == "insitu"

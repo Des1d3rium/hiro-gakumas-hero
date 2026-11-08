@@ -8,6 +8,7 @@
 from pathlib import Path
 
 import cv2
+import numpy as np
 import pytest
 
 import hiro  # noqa: F401
@@ -57,12 +58,29 @@ class Fake:
                 return
 
     def ocr(self, im):
-        state = next(k for k, v in self.frames.items() if v is im)
+        """整帧或整帧的裁切（read_hp 等只识别顶部一小块：interval._crop_ocr 传 img[y1:y2, x1:x2]，是同一块内存的视图）。
+        texts 覆盖的状态按整帧坐标给文字：裁切时只返回落在这一块里的、坐标换成裁切内的。"""
+        state, (ox, oy) = self._locate(im)
         if state in self.texts:
-            return [(t, 1.0, (x - 20, y - 10, x + 20, y + 10)) for t, (x, y) in self.texts[state]]
+            h, w = im.shape[:2]
+            return [(t, 1.0, (x - ox - 20, y - oy - 10, x - ox + 20, y - oy + 10)) for t, (x, y) in self.texts[state]
+                    if 0 <= x - ox < w and 0 <= y - oy < h]
+        if im is not self.frames[state]:
+            return ops.ocr_boxes(im)
         if state not in self._ocr:
             self._ocr[state] = ops.ocr_boxes(im)
         return self._ocr[state]
+
+    def _locate(self, im):
+        for k, v in self.frames.items():
+            if v is im:
+                return k, (0, 0)
+        for k, v in self.frames.items():
+            if np.shares_memory(v, im):
+                off = im.__array_interface__["data"][0] - v.__array_interface__["data"][0]
+                y, rest = divmod(off, v.strides[0])
+                return k, (rest // v.strides[1], y)
+        raise AssertionError("OCR 的图不是假设备给出的帧")
 
     def clock(self):
         return self.t
