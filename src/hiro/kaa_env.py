@@ -14,7 +14,9 @@ KAA 的培育流程通过 `kaa_context.conf()` / `produce_solution()` 读取配�
 - 设备（与 KAA 支持的平台对齐，见 hiro.device）：
   HIRO_DEVICE = auto（macOS 上走 PlayCover）/ maatools / quartz / adb / mumu / leidian / dmm；
   HIRO_ADB = adb 地址 ip:port（adb / leidian 用；mumu 不设时由 MuMu SDK 自动取）；
-  HIRO_SCREENSHOT = 截图方式（缺省：adb / leidian → adb，mumu → Windows 上 nemu_ipc、其他平台 adb，dmm → windows_background）；
+  HIRO_SCREENSHOT = 截图方式（缺省：adb / leidian / mumu → adb，dmm → windows_background）。KAA 的点击走同一个实现：
+    Windows + MuMu 6 写 nemu_ipc 时截图正常（后台模式），点击却送不到游戏所在的显示，页面一直不变
+    （2026-11-09 GKMS 第一–三局：设置检查读不到、guard_new 15 秒超时；之前 22 局都靠终端预设 adb 才没暴露）；
   HIRO_EMULATOR_INSTANCE = MuMu / 雷电的实例 ID（MuMu 缺省 0，多开时指定）；
   HIRO_MUMU_BACKGROUND = 0 关掉 MuMu 后台模式（缺省开：按游戏包名截它所在的显示。MuMu 6 把应用放在单独的显示里，
   关掉后 nemu_ipc 截到的是模拟器桌面，2026-11-06 Windows + MuMu 6.8 实测）。
@@ -45,9 +47,8 @@ def kaa_backend_from_env():
 
 def kaa_backend(device: str, *, adb: str | None = None, screenshot: str | None = None, instance: str | None = None,
                 platform: str | None = None, mumu_background: bool = True):  # fmt: skip
-    """按 HIRO_DEVICE 等构造 KAA 的 BackendConfig；PlayCover 路线（auto / maatools / quartz）返回 None，不动 KAA 默认值。"""
-    import sys
-
+    """按 HIRO_DEVICE 等构造 KAA 的 BackendConfig；PlayCover 路线（auto / maatools / quartz）返回 None，不动 KAA 默认值。
+    platform 现在只保留给调用方 / 测试（各平台缺省一致）。"""
     from kaa.config.base_config import (
         AutoConnection, BackendConfig, CustomDevice, DmmDevice, LeidianDevice, MuMu12V5Device, TcpConnection,
     )  # fmt: skip
@@ -56,7 +57,7 @@ def kaa_backend(device: str, *, adb: str | None = None, screenshot: str | None =
         return None
     kind, shot = _KAA_DEVICE[device]
     if kind == "mumu12v5" and shot is None:
-        shot = "nemu_ipc" if (platform or sys.platform) == "win32" else "adb"
+        shot = "adb"  # Windows 上 nemu_ipc 的点击送不到 MuMu 6 的应用显示（见模块说明）；要试 nemu_ipc 就显式写 HIRO_SCREENSHOT
     shot = screenshot or shot
     lifecycle = {
         "custom": lambda: CustomDevice(type="custom"),

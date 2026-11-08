@@ -79,7 +79,7 @@ def test_playcover_keeps_kaa_default(kaa_config):
     [
         ("adb", "darwin", "custom", "adb"),
         ("leidian", "win32", "leidian", "adb"),
-        ("mumu", "win32", "mumu12v5", "nemu_ipc"),
+        ("mumu", "win32", "mumu12v5", "adb"),  # nemu_ipc 点击送不到应用显示（GKMS 第一–三局）
         ("mumu", "darwin", "mumu12v5", "adb"),
         ("dmm", "win32", "dmm", "windows_background"),
     ],
@@ -102,6 +102,7 @@ def test_kaa_backend_adb_address_and_instance(kaa_config):
     d = kaa_env.kaa_backend("mumu", platform="win32")
     assert d.lifecycle.instance_id == "0"  # 单开缺省 0（KAA 不设会报错）
     assert d.lifecycle.mumu_background_mode is True  # MuMu 6 不开后台模式，nemu_ipc 截到的是桌面
+    assert kaa_env.kaa_backend("mumu", platform="win32", screenshot="nemu_ipc").screenshot_impl == "nemu_ipc"  # 显式指定仍可用
     assert kaa_env.kaa_backend("mumu", platform="win32", mumu_background=False).lifecycle.mumu_background_mode is False
     with pytest.raises(ValueError, match="ip:port"):
         kaa_env.kaa_backend("adb", adb="127.0.0.1")

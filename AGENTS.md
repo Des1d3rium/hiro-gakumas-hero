@@ -88,7 +88,7 @@
    | `maatools` | macOS + hguandl 分支 PlayCover | 游戏进程内 MaaTools | 作者实机验证（6 次夺冠） |
    | `quartz` | macOS + 原版 PlayCover | Quartz 截图 + `CGEventPostToPid`，要游戏在前台 | 作者实机用过 |
    | `adb` | 任意安卓设备 / 模拟器（KAA 的 custom） | `HIRO_SCREENSHOT=adb`（缺省）或 `uiautomator2` | 未实机验证 |
-   | `mumu` | MuMu 12 | Windows 上缺省 `nemu_ipc`，其他系统 `adb` | 未实机验证 |
+   | `mumu` | MuMu 12 | `adb`（缺省；Windows 上 `nemu_ipc` 截图可用但点击送不到游戏，别用） | Windows + MuMu 6.8 实机打过（见下） |
    | `leidian` | 雷电模拟器 | `adb` / `uiautomator2` | 未实机验证 |
    | `dmm` | Windows DMM 版 | `windows_background`（缺省）/ `windows_native` | 未实机验证 |
 
@@ -100,8 +100,9 @@
    - 文字识别（`HIRO_OCR`）：macOS 缺省用 Apple Vision，其他系统自动改用 KAA 自带的 RapidOCR（日文 / 英文模型）。
      RapidOCR 在作者的回归截图上的准确率与速度见 `docs/assets.md`；换平台后先用自己的截图验一遍。
    - Windows 用 PowerShell 版安装脚本：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1`（步骤与 `setup.sh` 相同）。
-     作者的 Windows 台式机上实测过安装、自检和全套离线测试（378 个通过），以及 `HIRO_DEVICE=mumu`（MuMu 6.8，`nemu_ipc`）
-     连上模拟器并截图；**还没在 Windows 上实机打过一局**。
+     作者的 Windows 台式机上实测过安装、自检和全套离线测试，以及 `HIRO_DEVICE=mumu`（MuMu 6.8，截图 / 点击 `adb`）
+     实机打 H.I.F 本战（2026-11-07–09，22 局 3 次夺冠，RapidOCR + Codex）。`HIRO_SCREENSHOT=nemu_ipc` 时截图正常、
+     点击不生效（页面一直不变，开局 guard_new 15 秒超时），缺省已改成 `adb`。
      KAA 公开数据的下载镜像连不上时，从别处拷一份 `game_data` 目录，用 `-NoData` 加 `HIRO_KAA_GAME_DATA` 指过去。
 3. 素材（见 `docs/assets.md`）：识别用的卡面、图标、字体、Sprite、布局随仓库在 `assets/pack/`，开箱即用。
    客户端更新后认不出新图标时，才打一两场考试，用 `tools/assets/capture_icons.py` 补；设了 `HIRO_BUNDLED_ASSETS=0` 时则必须补，
