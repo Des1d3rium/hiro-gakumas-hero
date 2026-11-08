@@ -636,21 +636,63 @@ def test_generated_sleep_joins_deck_after_same_play_draws(monkeypatch):
     assert out == {"deck": [], "grave": ["G", "M"], "unlocated": []}
 
 
-def test_swap_hand_draws_before_discarding_old_hand(monkeypatch):
-    """codex-20261108-3-b 第 1 局 R2 T4：山札空时打 ガタゴトすやすや+（手札をすべて入れ替える）。游戏先把捨札洗进山札抽 3，
-    抽完才丢原手牌；原手牌不在这次洗进去的山札里。以前账本先丢后洗，T5 起整副位置不明。"""
+def _play(data, name, *, once=False):
+    """模拟 _commit 对牌堆的处理：打出的牌离手，非一次性进捨札。"""
+    piles = data["veil_piles"]
+    piles["hand"][piles["hand"].index(name)] = None
+    if not once:
+        piles["grave"][name] = piles["grave"].get(name, 0) + 1
+
+
+def test_swap_discards_whole_hand_before_drawing(monkeypatch):
+    """codex-20261108-3-c 第 1 局 R1 T4：山札 3 张时打 ガタゴトすやすや+（手札をすべて入れ替える）换 4 张。
+    原手牌整手先进捨札，抽完山札 3 张后洗牌，抽到刚丢的 フルスロットル+；它抽 2 张又抽到刚丢的 忍耐力+。
+    1e7ac07 改成「先抽后丢」时这里整副位置不明。"""
     from hiro.produce.veil_exam import track_piles
 
     monkeypatch.setenv("HIRO_VEIL_STRICT_SHUFFLE", "1")
-    grave = ["一心不乱+", "エンターテイナー+", "教えてあげる+", "オーバードライブ+", "アイドルになります+", "巻き返し+"]
-    old = ["演出計画+", "眠気", "ひと呼吸+"]
-    data = {"veil_piles": {**_piles([], grave, old), "turn": 4, "swap": True}}
-    new = ["教えてあげる+", "エンターテイナー+", "アイドルになります+"]
-    outside = Counter(["一心不乱+", "オーバードライブ+", "巻き返し+", *old])
-    out = track_piles(data, 4, [*new, None, None], outside)
-    assert sorted(out["deck"]) == sorted(["一心不乱+", "オーバードライブ+", "巻き返し+"])
-    assert sorted(out["grave"]) == sorted(old) and out["unlocated"] == []
+    grave = ["エンターテイナー+", "オーバードライブ+", "タフネス+", "一心不乱+", "教えてあげる+", "仕切り直し+", "頂点へ+"]
+    old = ["フルスロットル+", "巻き返し+", "忍耐力+", "達成感+"]
+    data = {"veil_piles": {**_piles(["アイドルになります+", "トレーニングの成果+", "第一印象+"], grave, old), "turn": 4, "swap": True}}
+    new = ["トレーニングの成果+", "第一印象+", "アイドルになります+", "フルスロットル+"]
+    rest = Counter([*grave, "巻き返し+", "忍耐力+", "達成感+"])
+    out = track_piles(data, 4, [*new, None], rest)
+    assert Counter(out["deck"]) == rest and out["grave"] == [] and out["unlocated"] == []
     assert "swap" not in data["veil_piles"]
+    _play(data, "フルスロットル+", once=True)
+    data["veil_piles"]["born"] = {"眠気": 1}
+    hand = ["トレーニングの成果+", "第一印象+", "アイドルになります+", "忍耐力+", "仕切り直し+"]
+    out = track_piles(data, 4, hand, rest - Counter(["忍耐力+", "仕切り直し+"]) + Counter(["眠気"]))
+    assert out["unlocated"] == []
+
+
+def test_two_swaps_then_shuffle_next_turn(monkeypatch):
+    """codex-20261108-3-b 第 1 局 R2 T4：先打 仕切り直し+（也是换手牌，再抽 2），山札 2 张不够、洗牌；再打 ガタゴト 换 3 张。
+    T5 抽 5：山札剩 2 张抽完、洗牌抽到 エンターテイナー+ 等。两次都按「先丢整手、再抽」记，T5 没有位置不明。"""
+    from hiro.produce.veil_exam import track_piles
+
+    monkeypatch.setenv("HIRO_VEIL_STRICT_SHUFFLE", "1")
+    old = ["ひと呼吸+", "眠気", "アイドルになります+", "ガタゴトすやすや+"]
+    data = {"veil_piles": {**_piles(["巻き返し+", "演出計画+"], ["エンターテイナー+", "オーバードライブ+", "一心不乱+", "教えてあげる+"], old),
+                           "turn": 4, "swap": True}}
+    hand = ["演出計画+", "巻き返し+", "眠気", "ガタゴトすやすや+", "ひと呼吸+"]
+    out = track_piles(data, 4, hand, Counter(["エンターテイナー+", "オーバードライブ+", "一心不乱+", "教えてあげる+", "アイドルになります+"]))
+    assert out["unlocated"] == [] and out["grave"] == []
+    _play(data, "巻き返し+")
+    out = track_piles(data, 4, [h if h != "巻き返し+" else None for h in hand],
+                      Counter(["エンターテイナー+", "オーバードライブ+", "一心不乱+", "教えてあげる+", "アイドルになります+", "巻き返し+"]))
+    _play(data, "ガタゴトすやすや+", once=True)
+    data["veil_piles"]["swap"] = True
+    new = ["教えてあげる+", "エンターテイナー+", "アイドルになります+", None, None]
+    rest = Counter(["オーバードライブ+", "一心不乱+", "巻き返し+", "演出計画+", "眠気", "ひと呼吸+"])
+    out = track_piles(data, 4, new, rest)
+    assert Counter(out["deck"]) == Counter(["オーバードライブ+", "一心不乱+"]) and out["unlocated"] == []
+    _play(data, "アイドルになります+", once=True)
+    _play(data, "エンターテイナー+")
+    _play(data, "教えてあげる+")
+    t5 = ["一心不乱+", "オーバードライブ+", "エンターテイナー+", "巻き返し+", "眠気"]
+    out = track_piles(data, 5, t5, Counter(["演出計画+", "ひと呼吸+", "教えてあげる+"]))
+    assert out["unlocated"] == []
 
 
 def test_fp_effect_drops_condition_broken_by_own_stance_change():

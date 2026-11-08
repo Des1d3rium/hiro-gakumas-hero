@@ -389,16 +389,18 @@ def track_piles(data, turn, slots, outside):
         born = Counter(previous.get("born") or {})
         old_hand = Counter(c for c in previous["hand"] if c)
         hand = Counter(c for c in slots if c)
-        # 换手牌（ガタゴトすやすや+「手札をすべて入れ替える」）：游戏先抽新手牌（山札不够就先洗捨札），抽完才把原手牌丢进捨札，
-        # 原手牌不会被这次洗牌洗进山札（codex-20261108-3-b 第 1 局 R2 T4：山札空时打出，账本先丢后洗，T5 起位置不明）
-        held = Counter()
+        # 换手牌（ガタゴトすやすや+、仕切り直し+「手札をすべて入れ替える」）：原手牌整手先进捨札，再抽同样张数（仕切り直し+ 再多抽 2），
+        # 山札不够照常洗牌，刚丢的原手牌也会被洗进去。不能按名字差算：新手牌里和原手牌同名的那张也是新抽的。
+        # codex-20261108-3-c 第 1 局 R1 T4：山札 3 张时 ガタゴト 换 4 张，洗牌抽到刚丢的 フルスロットル+、之后又抽到 忍耐力+。
+        # （1e7ac07 曾按 3-b 第 1 局 R2 改成「先抽后丢」，那是因为 T4 早先打的 仕切り直し+ 没被当成换手牌、账本已偏，结论错了）
         if turn != previous["turn"]:
             grave.update(old_hand)
             drawn = hand
             deck += born
             born = Counter()
         elif previous.get("swap"):
-            held, drawn = old_hand, hand
+            grave.update(old_hand)
+            drawn = hand
         else:
             grave.update(old_hand - hand)
             drawn = hand - old_hand
@@ -407,7 +409,6 @@ def track_piles(data, turn, slots, outside):
         if drawn - deck and not unknown and deck.total() < drawn.total() and not (strict_shuffle() and deck - drawn):
             deck.update(grave)
             grave.clear()
-        grave.update(held)
         if drawn - deck or deck - drawn + born + grave + unknown != outside:
             deck.clear()
             grave.clear()
@@ -1434,7 +1435,7 @@ class VeilBrain(BattleBrain):
             if not lost:
                 piles["grave"][name] = piles["grave"].get(name, 0) + 1
             if "手札をすべて入れ替える" in norm(card.text or ""):
-                piles["swap"] = True  # 下一次记账：先抽新手牌，原手牌抽完再进捨札（track_piles）
+                piles["swap"] = True  # 下一次记账：原手牌整手进捨札，新手牌全部算新抽的（track_piles）
         if norm(card.name) in SLEEP_GENERATORS:
             deck["眠気"] = deck.get("眠気", 0) + 1
             if piles is not None:
