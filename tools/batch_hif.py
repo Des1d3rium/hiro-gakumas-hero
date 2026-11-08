@@ -1261,6 +1261,12 @@ def change(state, args, *, persist=None):
         # 开考前饮料栏快照（每轮第一次 exam 时记）：再挑戦时游戏把饮料栏恢复到开考前，账本也恢复（1-f 代理手动改的）
         snaps = active.setdefault("exam_start_drinks", {})
         if ledger is not None and str(args.round) not in snaps:
+            # 每轮开考前读一次实机饮料栏，以画面为准写账本（使用者 2026-11-07：饮料识别可靠，考前读数说了算；
+            # 中途靠获得演出逐条记的账只作参考。验证局 1-i：公開レッスン 白送的ブーストエキス 没演出可认，账本少一瓶）。
+            # 续跑同一轮不再读：考试中途喝掉的由考试记忆管
+            if synced := exam_drink_sync(ledger, args.round):
+                persist()
+                print(json.dumps({"action": "drink_sync", "round": args.round, "diff": synced}, ensure_ascii=False), file=sys.stderr)
             snaps[str(args.round)] = list(ledger["drinks"])
             persist()
         try:
@@ -1304,6 +1310,8 @@ def change(state, args, *, persist=None):
             if outcome["page"] != "home":
                 return outcome
         record = {"run": args.run, "result": args.result}
+        if active.get("ledger") is not None:
+            record["ledger"] = active["ledger"]  # 本局账本（含逐条日志）随结算记录存档，复盘用（验证局 1-i 结算后账本丢了）
         if outcome and outcome.get("memories"):
             record["memories"] = outcome["memories"]  # 结算里每份回忆的评估（交接提示词优先级），最后一份是保存的
         state["completed"].append(record)
@@ -1325,6 +1333,24 @@ ACTION_HOLD_S = float(batch_rules.get("watch.action_hold_s", 10.0))  # N2：行�
 CHOICE_HOLDS = ("差し入れ 选饮料", "领取选择", "选择页", "饮料栏操作", "相談 / 商店", "轮间客制化")
 CHOICE_SKIP_S = 20.0  # 选择页 / 商店处理完这么久内的饮料获得演出是那一次的（已由代理 / prep 记账），不重复记
 CHOICE = {"at": -1e9}
+
+
+def exam_drink_sync(ledger, round_no, read=None) -> list[str]:
+    """考试出牌页读饮料栏 → batch_ledger.sync_drinks（读清的格以画面为准，读不清的保留账本）。返回改动说明。"""
+    import batch_ledger as L
+
+    if read is None:
+        import batch_shop
+        from hiro.device import connect
+
+        device = connect("maatools")
+        try:
+            observed = batch_shop.read_bar(device)
+        finally:
+            device.stop()
+    else:
+        observed = read()
+    return L.sync_drinks(ledger, observed, why=f"R{round_no} 开考前读饮料栏")
 
 
 def deck_sync(device, ledger, *, why: str) -> dict:

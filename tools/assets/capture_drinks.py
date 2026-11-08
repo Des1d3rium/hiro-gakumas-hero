@@ -1,4 +1,4 @@
-"""饮料栏统一模板（hiro.vision.items，开关 HIRO_DRINK_INSITU=1）：补原画模板认不出的饮料。
+"""饮料栏统一模板（hiro.vision.items，默认开，HIRO_DRINK_INSITU=0 关）：补原画模板认不出的饮料。
 
 原画图库（assets/pack/icons/drink、KAA 公开数据）是 512px 干净原画缩到 56px；考试里饮料栏的图标模糊、带彩虹圈，
 正确答案也只有 0.46–0.61 分。统一模板 = 原画图库里每种饮料按 items.RENDER 渲染成饮料栏外观（以后遇到新饮料不用先采样），
@@ -162,7 +162,18 @@ def build(args) -> int:
 
 def check(args) -> int:
     """原画识别（开关关）与补认后（开关开）的结果对比。补认只改 unknown 格，所以只统计 unknown 的去向。"""
-    os.environ.pop("HIRO_DRINK_INSITU", None)
+    saved = os.environ.get("HIRO_DRINK_INSITU")
+    os.environ["HIRO_DRINK_INSITU"] = "0"  # 先按原画认（补认现在默认开）；_resolve_insitu 另外显式调用
+    try:
+        return _check(args)
+    finally:
+        if saved is None:
+            os.environ.pop("HIRO_DRINK_INSITU", None)
+        else:
+            os.environ["HIRO_DRINK_INSITU"] = saved
+
+
+def _check(args) -> int:
     if args.unseen:
         return unseen(args)
     groups = collect(args.paths, min_margin=args.min_margin)[0] if args.holdout else None

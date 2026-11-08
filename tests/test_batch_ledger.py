@@ -233,6 +233,7 @@ def test_exam_sync_with_optional_explicit_deck(monkeypatch, tmp_path, with_ledge
                 "abilities_source": "screen", "abilities": [ability]}
 
     monkeypatch.setattr(veil_exam, "run_round", run_round)
+    monkeypatch.setattr(batch, "exam_drink_sync", lambda ledger, round_no: [])  # 画面与账本一致
     out = batch.change(state, args, persist=lambda: saved.write_text(json.dumps(state)))
     assert out["ok"]
     if with_ledger:
@@ -242,3 +243,69 @@ def test_exam_sync_with_optional_explicit_deck(monkeypatch, tmp_path, with_ledge
         assert any("再挑戦" in (log.get("why") or "") for log in persisted["log"]) == bool(retry)
     else:
         assert "ledger_drinks" not in out and not saved.exists()
+
+
+def _exam_state(tmp_path, monkeypatch, drinks):
+    from types import SimpleNamespace
+
+    import batch_hif as batch
+
+    monkeypatch.setattr(L, "MEMORY_DIR", tmp_path / "memories")
+    L.save_memory(MEMORY["memory"], MEMORY, batch.VEIL_IDOL)
+    ledger = L.new_ledger(MEMORY, drinks)
+    state = {"active": {"run": 1, "phase": "playing", "ledger": ledger}, "preflight": {"idol": batch.VEIL_IDOL}}
+    return state, SimpleNamespace(command="exam", batch="synthetic", run=1, round=1, deck=None)
+
+
+def _slots(*names):
+    return [{"slot": i, "state": "drink" if n else "empty", "name": n} for i, n in enumerate(names)]
+
+
+def test_exam_reads_drink_bar_before_first_attempt(monkeypatch, tmp_path):
+    """验证局 1-i：公開レッスン 白送的ブーストエキス 没记上。每轮第一次 exam 先按画面改账本，开考快照和 run_round 都用改后的。"""
+    import batch_hif as batch
+    from hiro.produce import veil_exam
+
+    state, args = _exam_state(tmp_path, monkeypatch, ["ブーストエキス", "初星ホエイプロテイン"])
+    screen = _slots("ブーストエキス", "ブーストエキス", "初星ホエイプロテイン", None)
+    reads, seen, real = [], {}, batch.exam_drink_sync
+
+    def sync(ledger, round_no):
+        reads.append(round_no)
+        return real(ledger, round_no, read=lambda: screen)
+
+    def run_round(round_no, selected, trace, **kw):
+        seen["drinks"] = list(kw["drinks"])
+        return {"ok": True, "retry": None, "drinks": None}
+
+    monkeypatch.setattr(batch, "exam_drink_sync", sync)
+    monkeypatch.setattr(veil_exam, "run_round", run_round)
+    batch.change(state, args, persist=lambda: None)
+    want = ["ブーストエキス", "ブーストエキス", "初星ホエイプロテイン", None]
+    assert seen["drinks"] == want == state["active"]["exam_start_drinks"]["1"]
+    assert "R1 开考前读饮料栏" in state["active"]["ledger"]["log"][-1]["why"]
+    batch.change(state, args, persist=lambda: None)  # 同一轮续跑：不再读（中途喝掉的由考试记忆管）
+    assert reads == [1]
+
+
+def test_exam_drink_sync_keeps_ledger_for_unreadable_slot():
+    led = {"drinks": ["ブーストエキス", "初星ホエイプロテイン", None, None], "log": []}
+    screen = _slots("ブーストエキス", None, None, None)
+    screen[1]["state"] = "unknown"
+    import batch_hif as batch
+
+    batch.exam_drink_sync(led, 2, read=lambda: screen)
+    assert led["drinks"] == ["ブーストエキス", "初星ホエイプロテイン", None, None]
+
+
+def test_complete_keeps_ledger_in_record(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    import batch_hif as batch
+
+    state, _ = _exam_state(tmp_path, monkeypatch, ["ブーストエキス"])
+    state["total"], state["completed"] = 1, []
+    args = SimpleNamespace(command="complete", batch="synthetic", run=1, result="R1 1 第1")
+    batch.change(state, args, persist=lambda: None)
+    rec = state["completed"][-1]
+    assert rec["ledger"]["drinks"][0] == "ブーストエキス" and rec["ledger"]["log"]

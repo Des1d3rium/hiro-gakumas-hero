@@ -122,9 +122,9 @@ def test_pdrink_max_two_incoming():
      # 本地 trace（tools/fixtures/build_local.py）：轮间页 4 格全空
      ("trace/interval-shop-empty-bar.jpg", [None, None, None, None], 1213),
      # 本地 trace 考试页：第 3 格是 初星ホエイプロテイン（考试记忆 veil_drinks 记着；当时执行层报「局面与画面对不上：drink:2」）
-     # 原画模板下判成 unknown；分支 claude/drink-insitu-templates 的实机模板（HIRO_DRINK_INSITU=1）补认，见下面 test_drink_bar_insitu
+     # 原画模板下判成 unknown；统一模板（默认开，HIRO_DRINK_INSITU=0 关）补认，见下面 test_drink_bar_insitu
      pytest.param("trace/exam-strong1.jpg", ["ブーストエキス", "センブリソーダ", "初星ホエイプロテイン", "センブリソーダ"], 1200,
-                  marks=pytest.mark.xfail(os.environ.get("HIRO_DRINK_INSITU") != "1", strict=True,
+                  marks=pytest.mark.xfail(os.environ.get("HIRO_DRINK_INSITU") == "0", strict=True,
                                           reason="原画模板下 初星ホエイプロテイン 匹配分 0.46、判成 unknown")),
      ],
 )  # fmt: skip

@@ -68,14 +68,14 @@ def insitu(monkeypatch):
 
 
 def test_switch_off_keeps_original_unknown(insitu, monkeypatch):
-    monkeypatch.delenv("HIRO_DRINK_INSITU", raising=False)
+    monkeypatch.setenv("HIRO_DRINK_INSITU", "0")
     slots = I._read_drink_slots(frame([A, B, None, A]))
     assert [s["state"] for s in slots] == ["unknown", "unknown", "empty", "unknown"]
     assert all("method" not in s for s in slots)
 
 
 def test_switch_on_resolves_unknown_with_insitu_templates(insitu, monkeypatch):
-    monkeypatch.setenv("HIRO_DRINK_INSITU", "1")
+    monkeypatch.delenv("HIRO_DRINK_INSITU", raising=False)  # 默认开（使用者 2026-11-07）
     slots = I._read_drink_slots(frame([A, B, None, A]))
     assert [s["state"] for s in slots] == ["drink", "drink", "empty", "drink"]
     assert [s["name"] for s in slots] == ["初星ホエイプロテイン", "ブーストエキス", None, "初星ホエイプロテイン"]
