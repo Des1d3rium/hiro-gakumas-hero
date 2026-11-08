@@ -1,4 +1,4 @@
-"""轮间货架没有复制 / 爆发饮料时先刷新（开关 HIRO_INTERVAL_REFRESH，默认关）。字段取自 Windows 第七局 seq173。"""
+"""轮间货架没有复制 / 爆发饮料时先刷新（开关 HIRO_INTERVAL_REFRESH，默认开，=0 关）。字段取自 Windows 第七局 seq173。"""
 
 import copy
 
@@ -63,3 +63,18 @@ def test_on_no_refresh(monkeypatch, patch):
     f = copy.deepcopy(WIN7)
     patch(f)
     assert _decide(f)[1].action.kind is not ActionKind.REROLL
+
+
+
+@pytest.mark.parametrize("env,expect", [(None, "True"), ("0", "False"), ("1", "True")])
+def test_default_on(env, expect):
+    import os
+    import subprocess
+    import sys
+
+    e = {k: v for k, v in os.environ.items() if k != "HIRO_INTERVAL_REFRESH"}
+    if env is not None:
+        e["HIRO_INTERVAL_REFRESH"] = env
+    out = subprocess.run([sys.executable, "-c", "from hiro.brain import deciders; print(deciders.INTERVAL_REFRESH)"],
+                         env=e, capture_output=True, text=True, check=True).stdout.strip()
+    assert out.splitlines()[-1] == expect

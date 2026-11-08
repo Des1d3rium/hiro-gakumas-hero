@@ -1816,8 +1816,9 @@ SELECTION_LEAN_PICK = False  # 选拔里必拿已齐、候选无核心卡时按�
 # 结果换进来的往往正是下次最先换掉的那类（Win2：换进「止められない想い」价值 2，下一次换卡就把它换掉，牌组里 3 张元気な挨拶 没动）。
 # 开：换入挑 cull_key 最大的（最晚才会被删），同档再比价值。行为变化，默认关；HIRO_CHANGE_PICK_BY_CULL=1 打开
 CHANGE_PICK_BY_CULL = __import__("os").environ.get("HIRO_CHANGE_PICK_BY_CULL") == "1"
-# 轮间货架没有复制 / 爆发饮料时先刷新（协调 2026-11-08，Windows 第七局剩 380P）。默认关
-INTERVAL_REFRESH = __import__("os").environ.get("HIRO_INTERVAL_REFRESH") == "1"
+# 轮间货架没有复制 / 爆发饮料时先刷新（协调 2026-11-08，Windows 第七 / 九 / 十 / 十二局剩 400P 以上）。
+# 用户 2026-11-08 定为默认开（主仓库 11-02 已有同样的刷新，靠模拟器估值；这里是社区默认的规则版）；HIRO_INTERVAL_REFRESH=0 关
+INTERVAL_REFRESH = __import__("os").environ.get("HIRO_INTERVAL_REFRESH", "1") != "0"
 INTERVAL_REFRESH_MAX = 3
 INTERVAL_DRINK_RESERVE = 200  # 刷完至少还够买两瓶 100P 饮料
 CHANGE_JUNK_VALUE = 1.0  # card_value ≤ 它算「废牌」（冲突 0、基础卡 0.5、好印象系 1）：授業セレクトチェンジ 只在有废牌时才选
