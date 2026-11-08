@@ -561,3 +561,78 @@ def test_photo_save_error_cancels_once_in_settle():
 def test_photo_error_with_danger_words_stays_protected():
     texts = PHOTO_ERROR + ["プロデュースデータを破棄"]
     assert not B.photo_save_error(texts)
+
+
+# ---------------------------------------------------------------- debug：本战主动再挑戦攒 trace（使用者 2026-11-07）
+RESULT_R1 = [_b("ラウンド1結果", 117, 139), _b("現在順位", 71, 186), _b("本日あと1回無料", 100, 1088), _b("再挑戦", 126, 1133),
+             _b("→ 次へ", 335, 1134)]
+RETRY_DIALOG = [_b("再挑戦確認", 140, 420), _b("再挑戦チケット", 300, 600), _b("所持 442 → 441", 360, 650),
+                _b("キャンセル", 200, 860), _b("再挑戦する", 520, 860)]
+
+
+@pytest.fixture
+def debug_retry(monkeypatch):
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(B.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setitem(B.DEBUG_RETRY, "plan", {"1": 2, "2": 1})
+    monkeypatch.setitem(B.DEBUG_RETRY, "used", {})
+    monkeypatch.setitem(B.DEBUG_RETRY, "pending", None)
+    return clock
+
+
+def test_parse_debug_retries():
+    assert B.parse_debug_retries("2,1") == {"1": 2, "2": 1}
+    assert B.parse_debug_retries("off") is None and B.parse_debug_retries("0,0") is None
+    for bad in ("2", "a,1", "4,0"):
+        with pytest.raises(ValueError):
+            B.parse_debug_retries(bad)
+
+
+def test_debug_retry_taps_retry_then_confirm(debug_retry):
+    from hiro.produce import hif_buttons as BTN
+
+    assert B.debug_retry_step(RESULT_R1, dialog=False) == ("debug_retry", BTN.RESULT_RETRY)
+    assert B.debug_retry_step(RESULT_R1, dialog=False) == "wait"  # 确认框还没出来：不点「次へ」
+    assert B.debug_retry_step(RETRY_DIALOG, dialog=True) == ("debug_retry_confirm", (520, 860))
+    assert B.debug_retry_step(RETRY_DIALOG, dialog=True) == "wait"  # 刚点过
+    debug_retry["t"] += 3
+    assert B.debug_retry_step(RETRY_DIALOG, dialog=True) == ("debug_retry_retap", (520, 860))  # 还在：再点，不计数
+
+
+def test_debug_retry_respects_plan_and_round(debug_retry):
+    B.DEBUG_RETRY["used"] = {"1": 2}
+    assert B.debug_retry_step(RESULT_R1, dialog=False) is None  # R1 用满：照常「次へ」
+    r2 = [_b("ラウンド2結果", 117, 139)] + RESULT_R1[1:]
+    assert B.debug_retry_step(r2, dialog=False)[0] == "debug_retry"
+    B.DEBUG_RETRY["plan"] = None
+    B.DEBUG_RETRY["pending"] = None
+    assert B.debug_retry_step(RESULT_R1, dialog=False) is None  # 没开 debug：不管
+
+
+def test_debug_retry_never_spends_jewels_or_touches_defeat_dialog(debug_retry):
+    assert B.debug_retry_step(RETRY_DIALOG, dialog=True) is None  # 不是我们点出来的框
+    B.debug_retry_step(RESULT_R1, dialog=False)
+    with pytest.raises(B.HoldPage, match="ジュエル"):
+        B.debug_retry_step(RETRY_DIALOG + [_b("ジュエル 30", 360, 700)], dialog=True)
+    B.debug_retry_step(RESULT_R1, dialog=False)
+    defeat = [_b("再挑戦確認", 140, 860), _b("プロデュース終了", 230, 1160), _b("再挑戦", 530, 1160)]
+    assert B.debug_retry_step(defeat, dialog=True) is None
+    no_button = [b for b in RESULT_R1 if b[0] != "再挑戦"]
+    B.DEBUG_RETRY["pending"] = None
+    assert B.debug_retry_step(no_button, dialog=False) is None  # 没有再挑戦按钮：照常「次へ」
+
+
+def test_debug_retry_pending_expires(debug_retry):
+    B.debug_retry_step(RESULT_R1, dialog=False)
+    debug_retry["t"] += B.DEBUG_RETRY_WAIT_S + 1
+    assert B.debug_retry_step(RESULT_R1, dialog=False)[0] == "debug_retry"  # 确认框一直没出：重新点（没计数）
+
+
+def test_debug_retries_command_sets_and_clears_plan():
+    from types import SimpleNamespace as NS
+
+    state = {"total": 1, "preflight": {"idol": B.VEIL_IDOL}, "active": {"run": 1, "debug_retries_used": {"1": 1}}, "completed": []}
+    out = B.change(state, NS(command="debug-retries", plan="2,1"))
+    assert state["debug_retries"] == {"1": 2, "2": 1} and out["used"] == {"1": 1}
+    B.change(state, NS(command="debug-retries", plan="off"))
+    assert "debug_retries" not in state

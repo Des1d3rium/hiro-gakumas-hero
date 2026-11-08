@@ -260,6 +260,79 @@ def result_next(boxes, dialog: bool):
     return "wait" if now - RANK_SEEN["at"] < RANK_WAIT_S else None
 
 
+# ---------------------------------------------------------------- debug：本战主动再挑戦攒 trace（使用者 2026-11-07）
+# 批次设了 debug_retries（如 R1 2 次、R2 1 次）时，晋级的结果页也按计划点「再挑戦」，一局打出 3 次 R1、2 次 R2 的 trace，
+# 快速建可信 trace 库。只用免费 / 再挑戦チケット：确认框里有ジュエル、或是敗退的「プロデュース終了」框都不点。
+# 每轮最多 3 次（同 AGENTS.md 再挑戦上限）。计数存在 active.debug_retries_used，watch 重启不重来。
+DEBUG_RETRY_MAX = 3
+DEBUG_RETRY: dict = {"plan": None, "used": {}, "pending": None}  # pending：{"round", "at", "confirmed"}；tick 每步从批次状态填 plan / used
+DEBUG_RETRY_WAIT_S = 15.0  # 点了「再挑戦」后这么久内等确认框
+DEBUG_RETRY_RETAP_S = 2.0  # 点了确认框还在：隔这么久再点（不重复计数）
+RETRY_CONFIRM_WORDS = ("再挑戦する", "決定", "はい", "OK")
+
+
+def parse_debug_retries(text: str) -> dict | None:
+    """「2,1」→ {"1": 2, "2": 1}（R1、R2 各主动再挑戦几次）；「off」/「0,0」→ None。"""
+    if text.strip().lower() in ("off", "none", ""):
+        return None
+    parts = [p.strip() for p in text.split(",")]
+    if len(parts) != 2 or not all(p.isdigit() for p in parts):
+        raise ValueError("--debug-retries 写成「R1次数,R2次数」，如 2,1；关掉写 off")
+    plan = {"1": int(parts[0]), "2": int(parts[1])}
+    if any(n > DEBUG_RETRY_MAX for n in plan.values()):
+        raise ValueError(f"每轮最多再挑戦 {DEBUG_RETRY_MAX} 次")
+    return plan if any(plan.values()) else None
+
+
+def debug_retry_step(boxes, dialog: bool):
+    """按 debug 计划主动再挑戦：结果页点「再挑戦」→ ("debug_retry", tap)；随后的确认框核对后点确认 → ("debug_retry_confirm", tap)；
+    等确认框 / 等确认框关掉 → "wait"；不归这里管 → None。要花ジュエル时抛 HoldPage。"""
+    from hiro.produce import hif_buttons as BTN
+
+    plan = DEBUG_RETRY["plan"]
+    if not plan:
+        return None
+    labels = ["".join(unicodedata.normalize("NFKC", t).split()) for t, _, _ in boxes]
+    flat = "".join(labels)
+    pend, now = DEBUG_RETRY["pending"], time.monotonic()
+    if pend is not None and now - pend["at"] > DEBUG_RETRY_WAIT_S:
+        DEBUG_RETRY["pending"] = pend = None
+    if dialog:
+        if pend is None or "プロデュース終了" in flat:
+            return None  # 不是我们点出来的框（敗退的「再挑戦確認」照旧停下交给代理）
+        if "ジュエル" in flat:
+            DEBUG_RETRY["pending"] = None
+            raise HoldPage("debug 再挑戦：确认框要消耗ジュエル，不点")
+        hit = next((((b[0] + b[2]) // 2, (b[1] + b[3]) // 2) for t, (_, _, b) in zip(labels, boxes)
+                    if t in RETRY_CONFIRM_WORDS and (b[1] + b[3]) / 2 > 600 and (b[0] + b[2]) / 2 > 360), None)
+        if hit is None:
+            return "wait"
+        if pend["confirmed"] is not None:
+            if now - pend["confirmed"] < DEBUG_RETRY_RETAP_S:
+                return "wait"
+            pend["confirmed"] = now
+            return "debug_retry_retap", hit
+        pend["confirmed"] = now
+        return "debug_retry_confirm", hit
+    m = next((re.search(r"ラウンド(\d)結果", t) for t in labels if re.search(r"ラウンド(\d)結果", t)), None)
+    if m is None:
+        return None
+    rnd = m.group(1)
+    if pend is not None:
+        # 点了「再挑戦」、确认框还没出来，或确认后结果页还没退：别再点、也别点「次へ」
+        return "wait" if pend["confirmed"] is None or now - pend["confirmed"] < DEBUG_RETRY_WAIT_S else None
+    if DEBUG_RETRY["used"].get(rnd, 0) >= min(plan.get(rnd, 0), DEBUG_RETRY_MAX):
+        return None
+    if "ジュエル" in flat:
+        raise HoldPage("debug 再挑戦：结果页出现ジュエル，不点")
+    btn = next((b for t, (_, _, b) in zip(labels, boxes)
+                if t.endswith("再挑戦") and 1090 <= (b[1] + b[3]) / 2 <= 1180 and (b[0] + b[2]) / 2 < 300), None)
+    if btn is None:
+        return None  # 没有再挑戦按钮（免费 / 券都没了？）：照常「次へ」
+    DEBUG_RETRY["pending"] = {"round": rnd, "at": now, "confirmed": None}
+    return "debug_retry", BTN.RESULT_RETRY
+
+
 RANK_WAIT_S = 5.0
 RANK_SEEN = {"at": None, "last": 0.0}
 BRIEFING_TAP = (360, 300)  # 考前说明页：点上方空白进入考试（同 batch_prep.BRIEFING_TAP）
@@ -522,6 +595,8 @@ def auto_decide(img, *, ocr, quick, fallback, header):
     # 整帧读一次：选择页、考试、商店、确认框等都停下交给代理。快识别认成动画的页面也读：
     # 商店 / 轮间选中饮料时会被认成 ACQUIRE，轮间菜单会被认成 CUSTOMIZE_RESULT（全局回放）。
     boxes = boxes if boxes is not None else ocr(img)
+    if step := debug_retry_step(boxes, dialog):
+        return None if step == "wait" else step
     if tap := result_next(boxes, dialog):
         return None if tap == "wait" else ("result_next", tap)
     if step := briefing_step(boxes, dialog):
@@ -994,6 +1069,13 @@ def change(state, args, *, persist=None):
     global AUTO_START
     AUTO_START = start_allowed(state)
     cmd = args.command
+    if cmd == "debug-retries":
+        plan = parse_debug_retries(args.plan)
+        if plan:
+            state["debug_retries"] = plan
+        else:
+            state.pop("debug_retries", None)
+        return {"ok": True, "debug_retries": plan, "used": (state.get("active") or {}).get("debug_retries_used")}
     if cmd == "preflight":
         if state["active"] or state["completed"] or state["preflight"]:
             raise ValueError("首检只能在第一局开始前记录一次")
@@ -1530,6 +1612,8 @@ def watch(path, run):
                 return True
             from hiro.device import MaaToolsEmptyFrame
 
+            DEBUG_RETRY["plan"] = state.get("debug_retries")
+            DEBUG_RETRY["used"] = dict(active.get("debug_retries_used") or {})
             try:
                 result = advance() if active.get("phase") == "playing" else None
             except MaaToolsEmptyFrame as e:
@@ -1579,7 +1663,15 @@ def watch(path, run):
                 print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), "action": "resume"}), flush=True)
             if result is not None:
                 kind, tap = result
-                print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), "action": kind, "tap": tap}, ensure_ascii=False), flush=True)
+                extra = {}
+                if kind == "debug_retry_confirm" and DEBUG_RETRY["pending"] is not None:
+                    rnd = DEBUG_RETRY["pending"]["round"]
+                    used = active.setdefault("debug_retries_used", {})
+                    used[rnd] = used.get(rnd, 0) + 1
+                    save(path, state)
+                    extra = {"round": int(rnd), "used": used[rnd], "plan": state["debug_retries"].get(rnd)}
+                print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), "action": kind, "tap": tap, **extra},
+                                 ensure_ascii=False), flush=True)
             elif not last_idle:
                 print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), "action": "waiting"}), flush=True)
             last_idle = result is None
@@ -1603,7 +1695,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--batch", required=True, help="当前对话批次 ID")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("init").add_argument("total", type=int)
+    p = sub.add_parser("init")
+    p.add_argument("total", type=int)
+    p.add_argument("--debug-retries", help="debug：本战每局主动再挑戦几次「R1,R2」（如 2,1 = 打 3 次 R1、2 次 R2，攒 trace）")
+    sub.add_parser("debug-retries", help="debug：改本批次的主动再挑戦计划「R1,R2」，off 关掉").add_argument("plan")
     sub.add_parser("status")
     p = sub.add_parser("preflight", help="实际核对实时画面、AP、跳过选项、偶像和回忆后才记录")
     p.add_argument("--ap", required=True, type=int)
@@ -1712,6 +1807,8 @@ def main():
                 if args.total < 1 or path.exists():
                     raise ValueError("总次数必须为正，且批次 ID 尚未使用")
                 state = {"total": args.total, "preflight": None, "active": None, "completed": []}
+                if args.debug_retries and (plan := parse_debug_retries(args.debug_retries)):
+                    state["debug_retries"] = plan
                 save(path, state)
             else:
                 state = json.loads(path.read_text(encoding="utf-8"))
@@ -1726,6 +1823,7 @@ def main():
             "file": str(path), "total": state["total"], "completed": len(completed),
             "preflight": state["preflight"], "active": state["active"],
             "last_result": completed[-1] if completed else None,
+            **({"debug_retries": state["debug_retries"]} if state.get("debug_retries") else {}),
         }
         print(json.dumps(summary, ensure_ascii=False))
         return 0
