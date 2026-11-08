@@ -218,7 +218,7 @@ def test_exam_sync_with_optional_explicit_deck(monkeypatch, tmp_path, with_ledge
     active = {"run": 1, "phase": "playing", "ledger": ledger}
     if retry:
         active["exam_start_drinks"] = {"1": list(ledger["drinks"])}
-        L.after_exam(ledger, [])
+        L.after_exam(ledger, [], why="上一次考试喝光（合成）")
     state = {"active": active, "preflight": {"idol": batch.VEIL_IDOL}}
     deck = "synthetic.json" if explicit else None
     args = SimpleNamespace(command="exam", batch="synthetic", run=1, round=1, deck=deck)
