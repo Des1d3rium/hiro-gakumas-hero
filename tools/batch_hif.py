@@ -54,9 +54,10 @@ HOLD_PATTERNS = (
     (r"受け取(?:る|らない)$", "领取选择"),
     (r"Pドリンク詳細|Pドリンク所持上限|捨てる", "饮料栏操作"),
     (r"キャンセル|はい$|いいえ$|決定$", "确认框"),
-    (r"獲得可能スキルカード|再生成", "结算回忆"),
+    (r"獲得可能スキルカード", "结算回忆"),
+    (r"再生成", "结算回忆"),  # 只在同屏有「次へ / メモリー」时算（H.I.F 首页左侧栏图标标签也会被读成「再生成」，见 hold_reason）
     (r"^MEMORY$", "结算回忆生成"),  # LIVE 后「MEMORY」生成页只有 MEMORY / 生成 两个字（实机第 2 局 watch 在这里一直点角落）
-    (r"開始確認|アイドル選択|ショップ|ミッション|ジュエル", "首页 / 开局"),
+    (r"開始確認|アイドル選択|ショップ|ミッション|ジュエル|イベントモード|選抜試験", "首页 / 开局"),  # 后两个：H.I.F 首页（模式开关、选拔入口）
     (r"本戦開始", "考试前"),
 )
 HOLD_TEXTS = tuple(p for p, _ in HOLD_PATTERNS[:3])  # 兼容旧名
@@ -283,7 +284,10 @@ def hold_reason(texts):
     """OCR 文本里有必须由代理处理的页面特征时返回「理由：命中文字」，否则 None。"""
     labels = ["".join(unicodedata.normalize("NFKC", t).split()) for t in texts]
     labels.append("".join(labels))  # 标题被 OCR 拆成两段时也能命中
+    memory_page = any("次へ" in t or t == "メモリー" for t in labels[:-1])  # 首页说明文字里也有「…メモリーが獲得できます」
     for pattern, reason in HOLD_PATTERNS:
+        if pattern == r"再生成" and not memory_page:
+            continue
         for label in labels:
             if m := re.search(pattern, label):
                 return f"{reason}：{m.group(0)}"

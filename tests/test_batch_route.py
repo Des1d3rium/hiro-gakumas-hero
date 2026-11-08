@@ -508,8 +508,13 @@ def test_walkthrough_frames_flow_page(name, action, kind, tap):
     assert got[0] == kind and (got[1] is None if tap is None else abs(got[1][0] - tap[0]) <= 15 and abs(got[1][1] - tap[1]) <= 15), got
 
 
+def test_regenerate_needs_memory_page_context():
+    assert B.hold_reason(["再生成"]) is None
+    assert B.hold_reason(["メモリー", "再生成"]).startswith("结算回忆")
+    assert B.hold_reason(["獲得可能スキルカード"]).startswith("结算回忆")
+
+
 @pytest.mark.fixtures
-@pytest.mark.xfail(strict=True, reason="H.I.F 首页的停点理由写成「结算回忆：再生成」（HOLD_PATTERNS 误命中）；停下本身是对的，理由应是首页 / 开局")
 def test_hif_top_hold_reason():
     import cv2
 
