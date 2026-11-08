@@ -20,12 +20,17 @@ from collections import Counter
 from pathlib import Path
 
 
+BASIC_SLOT = "基本?"  # 与 hiro.produce.veil_exam.BASIC_SLOT 一致（本脚本不导入运行时代码）
+
+
 def _contexts(trace: Path):
     for line in (trace / "steps.jsonl").open(encoding="utf-8"):
         if not line.strip():
             continue
         s = json.loads(line)
-        note = next((n for n in s.get("notes") or [] if n.startswith("context ")), None)
+        # 一步里可能有两条 context：决策帧过时（点击前画面变了）时第一次决策不执行、换新帧重新决策，
+        # 执行的是最后一次（codex-20261108-3 第 1 局 R1 attempt2 T6：取了过时那条，把上回合的手牌当成这一步）
+        note = next((n for n in reversed(s.get("notes") or []) if n.startswith("context ")), None)
         if note and ((s.get("decision") or {}).get("decider") == "veil"):
             yield s["seq"], json.loads(note[8:]), s.get("execution") or {}
 
@@ -81,6 +86,12 @@ def check(trace: Path) -> dict:
                     grave = Counter(prev[1].get("grave")) + prev[2]  # 上回合末手牌回合结束进弃牌堆
                     if prev[4] and (Counter(ctx.get("excluded")) - prev[5])[prev[4]] == 0:
                         grave[prev[4]] += 1  # 打出后没除外 → 进弃牌堆
+                    # H.I.F応援棒 生成的「基本」牌开考时记成占位「基本?」（veil_exam.BASIC_SLOT），抽到才知道名字
+                    for name, n in (drawn - pool).items():
+                        take = min(n, pool[BASIC_SLOT]) if "基本" in name else 0
+                        if take:
+                            pool[BASIC_SLOT] -= take
+                            pool[name] += take
                     if drawn - pool:
                         # 洗牌（使用者 2026-11-07）：抽牌数大于牌堆剩余时，先把牌堆全部抽完，再把弃牌堆洗进牌堆，剩下的按概率抽。
                         # 所以牌堆里的牌必须全在新手牌里，多出来的只能来自弃牌堆

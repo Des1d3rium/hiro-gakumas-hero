@@ -844,6 +844,51 @@ def mark_uncertain(data, memory, why) -> None:
     data.setdefault("veil_uncertain_why", []).append({"turn": memory.turn, "why": why})
 
 
+# H.I.F 本战 R2 的 P 道具「H.I.F応援棒」（主数据 pitem_03-3-270 / 271）：試験開始時、山札が 22 枚になるように、
+# 名字带「基本」的随机技能卡生成到山札的随机位置（codex-20261108-3 第 1 局 R2：21 张牌组多出一张 魅せ方の基本，
+# 账本不认识，T3 被 全身全霊+ 抽到后整副记成位置不明，trace 不可信）。名字开考前不知道，先记成占位「基本?」。
+HIF_FILL_TO = 22
+BASIC_SLOT = "基本?"
+
+
+def hif_fill():
+    """HIRO_VEIL_HIF_FILL=1：本战 R2 开考时按 H.I.F応援棒 把牌组账本补到 22 张（占位「基本?」，抽到时改成真名）。默认关。"""
+    return os.environ.get("HIRO_VEIL_HIF_FILL") == "1"
+
+
+def fill_count(round_no, deck) -> int:
+    """这一轮开考时 H.I.F応援棒 生成几张「基本」牌：只有 R2，且开关打开。"""
+    return max(0, HIF_FILL_TO - sum(deck.values())) if round_no == 2 and hif_fill() else 0
+
+
+def resolve_basic(data, hand) -> dict:
+    """手里出现账本外、名字带「基本」的牌，而账本还有占位「基本?」：就是应援棒生成的那张，占位改成真名（牌堆位置跟着改）。
+    返回 {真名: 张数}；没有可改的返回空。"""
+    deck = data["veil_deck"]
+    resolved = {}
+    for name, count in (hand - Counter({k: v for k, v in deck.items() if v > 0})).items():
+        if "基本" not in name:
+            continue
+        n = min(count, deck.get(BASIC_SLOT, 0))
+        if n <= 0:
+            continue
+        deck[BASIC_SLOT] -= n
+        deck[name] = deck.get(name, 0) + n
+        piles = data.get("veil_piles")
+        if piles is not None:
+            left = n
+            for where in ("deck", "grave", "unlocated"):
+                take = min(left, piles[where].get(BASIC_SLOT, 0))
+                if take:
+                    piles[where][BASIC_SLOT] -= take
+                    piles[where][name] = piles[where].get(name, 0) + take
+                    left -= take
+        resolved[name] = n
+    if resolved:
+        data.setdefault("veil_fill_log", []).append({"cards": resolved})
+    return resolved
+
+
 def adopt_added_cards(data, memory, state, hand, deck):
     """手里出现牌组账本外的牌（事件 / P 道具 / 效果加进来的）：都是一次性牌（打出即除外）时收进账本——它此刻就在手里，
     数量确定；打出后照常从账本扣掉，牌组其余部分不受影响。有常驻牌（会回到捨札、循环里一直在）时不收，维持原来的暂停。"""
@@ -991,8 +1036,9 @@ def tap_probe(frame, card) -> str | None:
 
 
 class VeilScreen(ScreenExamStateSource):
-    def __init__(self, deck, once, ledger_drinks=None, abilities=None, customs=None, variants=None, probe=None):
+    def __init__(self, deck, once, ledger_drinks=None, abilities=None, customs=None, variants=None, probe=None, fill=0):
         super().__init__()
+        self.fill = fill  # 开考时 H.I.F応援棒 生成的「基本」牌张数（fill_count）
         # 分版本记账（HIRO_VEIL_SIGNATURE=1 且账本里有同名不同版本）：deck / once 的键是记账键（见 instance_keys）
         self.variants = variants or None
         self.keys_by_name = defaultdict(list)
@@ -1056,6 +1102,13 @@ class VeilScreen(ScreenExamStateSource):
         data = memory.strategy_data
         piles = state.piles or {}
         initial, deck = Counter(data.get("veil_initial") or {}), Counter(data.get("veil_deck") or {})
+        if data.get("veil_fill"):
+            # 应援棒生成的「基本」牌算开场牌组：占位已改成真名的按真名算，打出离开的一次性「基本」牌也进 excluded
+            initial[BASIC_SLOT] += data["veil_fill"]
+            for entry in data.get("veil_fill_log") or []:
+                for name, n in entry["cards"].items():
+                    initial[BASIC_SLOT] -= n
+                    initial[name] += n
         return {
             "hand": [[c.slot, norm(c.name), c.card_id, c.upgrade, c.available, bool(c.tags.once)] for c in state.hand],
             "drinks": [d.name for d in state.drinks],
@@ -1171,6 +1224,9 @@ class VeilScreen(ScreenExamStateSource):
             if memory.this_turn or memory.history or memory.used_once:
                 raise ResumeBlocked("无法从旧考试记忆建立 VEIL 牌库，请核对后交回代理")
             data["veil_deck"] = dict(self.deck)
+            if self.fill:
+                data["veil_deck"][BASIC_SLOT] = self.fill
+                data["veil_fill"] = self.fill
             data["veil_initial"] = dict(self.deck)
             data["veil_initial_once"] = sorted(self.once)
         if self.deck != data.get("veil_initial") or sorted(self.once) != data.get("veil_initial_once"):
@@ -1200,6 +1256,8 @@ class VeilScreen(ScreenExamStateSource):
             data.setdefault("veil_swap_log", []).append({"turn": memory.turn, "op": "等不到换手", "hand": sorted(names.elements())})
             data.pop("veil_swap_wait", None)
         self.swap_retries = 0
+        if data.get("veil_deck", {}).get(BASIC_SLOT) and hand - deck and resolve_basic(data, hand):
+            deck = Counter(data["veil_deck"])
         if adopt_added() and hand - deck:
             deck = adopt_added_cards(data, memory, state, hand, deck)
         problem = read_position(state, memory, hand, lambda: flower_count(frame.img), calibrate=self.calibrate)
@@ -1499,7 +1557,7 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
         rec = Recorder(trace.dir / "battle")
         if retry and retry_drinks is not None:
             drinks = retry_drinks  # 再挑戦：游戏把饮料栏恢复到这一轮开考前，账本也用开考前的快照
-        source = VeilScreen(deck, once, drinks, abilities, customs=customs, variants=variants)
+        source = VeilScreen(deck, once, drinks, abilities, customs=customs, variants=variants, fill=fill_count(round_no, deck))
         try:
             run_exam(VeilBrain(None, None), exam, rec, ended, session=session, source=source,
                      advisor=VeilAdvisor(), round_no=round_no, strict=True)

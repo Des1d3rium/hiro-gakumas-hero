@@ -136,3 +136,29 @@ def test_trust_last_play_of_turn_left_hand(tmp_path):
     first["execution"]["ok"] = False  # 没打出去：眠気还在手里，山札的眠気确实没抽到
     (d / "steps.jsonl").write_text("\n".join([json.dumps(first), lines[1]]) + "\n")
     assert not trace_trust.check(d)["trusted"]
+
+
+def test_trust_uses_last_context_of_step(tmp_path):
+    # codex-20261108-3 第 1 局 R1 attempt2：决策帧过时 → 第一次决策（上回合的局面）不执行、换新帧重新决策，
+    # 一步里记了两条 context；按执行的最后一条核对，不把上回合手牌当成这一步
+    t1 = _ctx(1, ["A"], ["B", "C"])
+    stale = _ctx(1, ["A"], ["B", "C"])
+    fresh = _ctx(2, ["B", "C"], [], ["A"])
+    d = _trace(tmp_path, [t1, fresh])
+    lines = (d / "steps.jsonl").read_text().splitlines()
+    second = json.loads(lines[1])
+    second["notes"] = ["context " + json.dumps(stale), "recover:page_misjudged: 决策帧过时", "context " + json.dumps(fresh)]
+    second["execution"] = {"action": {"kind": "PlayCard", "args": {"slot": 0}}, "ok": True}
+    (d / "steps.jsonl").write_text("\n".join([lines[0], json.dumps(second)]) + "\n")
+    r = trace_trust.check(d)
+    assert r["trusted"], r["problems"]
+
+
+def test_trust_hif_fill_placeholder_drawn(tmp_path):
+    # H.I.F応援棒：开考时牌堆补的「基本」牌记成占位「基本?」，新回合抽到 魅せ方の基本 = 那张占位
+    t1 = _ctx(1, ["A"], ["B", trace_trust.BASIC_SLOT])
+    t2 = _ctx(2, ["B", "魅せ方の基本"], [], ["A"])
+    assert trace_trust.check(_trace(tmp_path, [t1, t2]))["trusted"]
+    t2 = _ctx(2, ["B", "アピールの基本"], [], ["A"])
+    t1 = _ctx(1, ["A"], ["B", "C"])  # 没有占位：抽到账本外的「基本」牌照样不可信
+    assert not trace_trust.check(_trace(tmp_path, [t1, t2]))["trusted"]

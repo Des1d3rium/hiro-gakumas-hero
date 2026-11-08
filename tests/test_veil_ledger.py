@@ -571,3 +571,45 @@ def test_strict_shuffle_rejects_undrawn_deck(monkeypatch):
     monkeypatch.setenv("HIRO_VEIL_STRICT_SHUFFLE", "1")
     data = {"veil_piles": _piles(["B", "D"], ["A"], ["C"])}
     assert track_piles(data, 2, hand, Counter({"B": 1})) == {"deck": [], "grave": [], "unlocated": ["B"]}
+
+
+def test_hif_fill_count_only_r2_with_switch(monkeypatch):
+    """H.I.F応援棒：本战 R2 开考时牌堆补到 22 张；R1 不补；开关关时不补。"""
+    from hiro.produce.veil_exam import fill_count
+
+    deck = {f"c{i}": 1 for i in range(21)}
+    monkeypatch.delenv("HIRO_VEIL_HIF_FILL", raising=False)
+    assert fill_count(2, deck) == 0
+    monkeypatch.setenv("HIRO_VEIL_HIF_FILL", "1")
+    assert fill_count(2, deck) == 1 and fill_count(1, deck) == 0
+    assert fill_count(2, {**deck, "x": 1, "y": 1}) == 0
+
+
+def test_hif_fill_placeholder_resolves_when_drawn(monkeypatch):
+    """codex-20261108-3 第 1 局 R2：21 张牌组多出应援棒生成的 魅せ方の基本，T3 抽到后整副记成位置不明。
+    占位「基本?」在牌堆里，抽到 魅せ方の基本 时改成真名，牌堆账照常接上。"""
+    from hiro.produce.veil_exam import BASIC_SLOT, resolve_basic, track_piles
+
+    monkeypatch.setenv("HIRO_VEIL_STRICT_SHUFFLE", "1")
+    data = {"veil_deck": {"A": 1, "B": 1, BASIC_SLOT: 1}}
+    track_piles(data, 1, ["A", None, None, None, None], Counter({"B": 1, BASIC_SLOT: 1}))
+    hand = Counter({"B": 1, "魅せ方の基本": 1})
+    assert resolve_basic(data, hand) == {"魅せ方の基本": 1}
+    assert data["veil_deck"] == {"A": 1, "B": 1, BASIC_SLOT: 0, "魅せ方の基本": 1}
+    deck = Counter({k: v for k, v in data["veil_deck"].items() if v > 0})
+    out = track_piles(data, 2, ["B", "魅せ方の基本", None, None, None], deck - hand)
+    assert out == {"deck": [], "grave": ["A"], "unlocated": []}
+    assert resolve_basic(data, Counter({"アピールの基本": 1})) == {}  # 占位用完了：不再改名
+
+
+def test_hif_fill_excluded_counts_resolved_basic():
+    """打出离开的一次性「基本」牌（应援棒生成）进 trace 的 excluded，占位没抽到时不算离开。"""
+    from hiro.produce.veil_exam import BASIC_SLOT, VeilScreen
+
+    state = BattleState("r2", 1, 5, 40, 44, 0, [])
+    mem = ExamMemory("r2", turn=3)
+    mem.strategy_data.update(veil_initial={"A": 1}, veil_deck={"A": 1, BASIC_SLOT: 0, "魅せ方の基本": 0}, veil_fill=1,
+                             veil_fill_log=[{"cards": {"魅せ方の基本": 1}}])
+    assert VeilScreen({}, set()).trace_context(state, mem)["excluded"] == {"魅せ方の基本": 1}
+    mem.strategy_data.update(veil_deck={"A": 1, BASIC_SLOT: 1}, veil_fill_log=[])
+    assert VeilScreen({}, set()).trace_context(state, mem)["excluded"] is None
