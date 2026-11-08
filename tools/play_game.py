@@ -87,13 +87,22 @@ def run_cmd(mode: str, trace: str, common: list[str], extra: list[str]) -> list[
     return cmd
 
 
+def child_env() -> dict:
+    """子进程环境：PYTHONPATH 把仓库 src 放最前，保留调用方原有的路径（插件，如 HIRO_EXAM_ADVISOR 指的模块）。
+    以前直接覆盖成 src，GKMS 第四局本战考试导入 hiro_gkms_advisor 失败、连崩 5 次退出。"""
+    import os
+
+    old = os.environ.get("PYTHONPATH", "")
+    return {**os.environ, "PYTHONPATH": os.pathsep.join([str(ROOT / "src"), *([old] if old else [])])}
+
+
 def run(mode: str, trace: str, common: list[str], extra: list[str]) -> int:
     log = ROOT / "reports/live" / f"{trace}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     t0 = time.monotonic()
     with open(log, "w") as f:
         code = subprocess.call(run_cmd(mode, trace, common, extra), cwd=ROOT, stdout=f, stderr=subprocess.STDOUT,
-                               env={**__import__("os").environ, "PYTHONPATH": str(ROOT / "src")})  # fmt: skip
+                               env=child_env())  # fmt: skip
     with open(log, "a") as f:
         f.write(f"EXIT {code}\n")
     print(f"{mode} {trace} exit={code} {(time.monotonic() - t0) / 60:.1f} min（日志 {log}）", flush=True)
@@ -108,7 +117,7 @@ def _probe(kind: str) -> dict:
 
     try:
         out = subprocess.run([PY, str(Path(__file__).resolve()), "--probe", kind], cwd=ROOT, capture_output=True, text=True,
-                             encoding="utf-8", errors="replace", timeout=180, env={**os.environ, "PYTHONPATH": str(ROOT / "src")})  # fmt: skip
+                             encoding="utf-8", errors="replace", timeout=180, env=child_env())  # fmt: skip
     except subprocess.TimeoutExpired:
         return {"error": "读屏子进程超时"}
     line = next((ln for ln in reversed(out.stdout.splitlines()) if ln.startswith("{")), None)
@@ -157,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     import os
 
     subprocess.call([PY, "-c", "from hiro.loop import pause_flag; pause_flag.wait_until_recording()"], cwd=ROOT,
-                    env={**os.environ, "PYTHONPATH": str(ROOT / "src")})  # fmt: skip
+                    env=child_env())  # fmt: skip
     if not args.no_settings_check:
         # 开局前检查设置（重新登录后会被重置；只报警，不改，不阻断）。只打本战也要查（第二十三局）
         r = _probe("settings")
