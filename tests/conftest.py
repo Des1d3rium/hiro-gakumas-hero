@@ -19,7 +19,12 @@ import pytest
 TESTS = Path(__file__).parent
 FIXTURES = TESTS / "fixtures"
 if not FIXTURES.exists() and os.environ.get("HIRO_FIXTURES") and Path(os.environ["HIRO_FIXTURES"]).is_dir():
-    FIXTURES.symlink_to(Path(os.environ["HIRO_FIXTURES"]).resolve(), target_is_directory=True)
+    try:
+        FIXTURES.symlink_to(Path(os.environ["HIRO_FIXTURES"]).resolve(), target_is_directory=True)
+    except OSError:  # Windows 建符号链接要管理员 / 开发者模式（WinError 1314）：改建目录联接（junction），不需要权限
+        import _winapi  # noqa: PLC0415  只有 Windows 有
+
+        _winapi.CreateJunction(str(Path(os.environ["HIRO_FIXTURES"]).resolve()), str(FIXTURES))
 HAVE_FIXTURES = FIXTURES.is_dir() and any(FIXTURES.iterdir())  # 空目录 / 断链都算没有样例
 
 if os.environ.get("HIRO_KAA_GAME_DATA"):

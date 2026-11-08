@@ -30,6 +30,7 @@ def test_star_factor_continuous():
     assert iv.star_factor(800) == 2.0 and iv.star_factor(780) < 2.0 < iv.star_factor(880) <= 3.0
 
 
+@pytest.mark.sim_master  # 真跑模拟：要主数据（fetch_master.py）
 def test_play_is_deterministic_and_coupled():
     a = iv.play(SETUP, 1, "expert", worlds=2, depth=1)
     assert a == iv.play(SETUP, 1, "expert", worlds=2, depth=1)  # 不设时间预算：可复现，方案之间才能配对
@@ -43,6 +44,7 @@ def test_play_is_deterministic_and_coupled():
     assert seq == core(base)
 
 
+@pytest.mark.sim_master  # 真跑模拟：要主数据（fetch_master.py）
 def test_search_returns_auditable_table():
     opts = [o for o in iv.options(SHELF, SETUP, 575) if o.key in ("hp19", "drink7")]
     r = iv.search(SETUP, opts, 575, seeds=range(2), workers=1, worlds=2, depth=1)
