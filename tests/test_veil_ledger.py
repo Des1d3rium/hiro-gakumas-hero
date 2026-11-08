@@ -613,3 +613,24 @@ def test_hif_fill_excluded_counts_resolved_basic():
     assert VeilScreen({}, set()).trace_context(state, mem)["excluded"] == {"魅せ方の基本": 1}
     mem.strategy_data.update(veil_deck={"A": 1, BASIC_SLOT: 1}, veil_fill_log=[])
     assert VeilScreen({}, set()).trace_context(state, mem)["excluded"] is None
+
+
+def test_generated_sleep_joins_deck_after_same_play_draws(monkeypatch):
+    """codex-20261108-3 第 3 局 R1 T4：フルスロットル+ 先抽 3 张、再把眠気生成进山札。山札只剩 2 张，洗牌后抽到 ティーパーティ+。
+    眠気先并进山札时严格洗牌判「山札没抽完」，整副位置不明；改成抽完再并进来。"""
+    from hiro.produce.veil_exam import track_piles
+
+    monkeypatch.setenv("HIRO_VEIL_STRICT_SHUFFLE", "1")
+    piles = _piles(["E", "T"], ["G", "P"], ["M", None, "Z"])
+    piles["born"] = {"眠気": 1}
+    data = {"veil_piles": piles}
+    hand = ["M", "Z", "T", "E", "P"]
+    out = track_piles(data, 1, hand, Counter({"G": 1, "眠気": 1}))
+    assert out == {"deck": ["G", "眠気"], "grave": [], "unlocated": []}
+    assert "born" not in data["veil_piles"]
+    # 跨回合：生成的眠気早已在山札里，可以被新回合抽到
+    piles = _piles(["E"], ["G"], ["M"])
+    piles["born"] = {"眠気": 1}
+    data = {"veil_piles": piles}
+    out = track_piles(data, 2, ["E", "眠気", None, None, None], Counter({"G": 1, "M": 1}))
+    assert out == {"deck": [], "grave": ["G", "M"], "unlocated": []}

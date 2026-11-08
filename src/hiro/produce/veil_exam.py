@@ -382,11 +382,18 @@ def track_piles(data, turn, slots, outside):
         (deck if turn == 1 and not data.get("veil_legacy_piles") else unknown).update(outside)
     else:
         deck, grave, unknown = (Counter(previous[k]) for k in ("deck", "grave", "unlocated"))
+        # 上一手生成的眠気（_commit 记在 born）：牌的效果是先抽牌、再把眠気生成进山札（フルスロットル+ 等，主数据文字顺序），
+        # 同一回合这一帧的抽牌不会抽到它，抽完（含洗牌）再并进山札；跨回合时它早已在山札里
+        # （codex-20261108-3 第 3 局 R1 T4：フルスロットル+ 抽 3 张时山札只剩 2 张，洗牌后抽到 ティーパーティ+，
+        # 先并进去的眠気让严格洗牌判成「山札没抽完」，整副位置不明）
+        born = Counter(previous.get("born") or {})
         old_hand = Counter(c for c in previous["hand"] if c)
         hand = Counter(c for c in slots if c)
         if turn != previous["turn"]:
             grave.update(old_hand)
             drawn = hand
+            deck += born
+            born = Counter()
         else:
             grave.update(old_hand - hand)
             drawn = hand - old_hand
@@ -395,12 +402,12 @@ def track_piles(data, turn, slots, outside):
         if drawn - deck and not unknown and deck.total() < drawn.total() and not (strict_shuffle() and deck - drawn):
             deck.update(grave)
             grave.clear()
-        if drawn - deck or deck - drawn + grave + unknown != outside:
+        if drawn - deck or deck - drawn + born + grave + unknown != outside:
             deck.clear()
             grave.clear()
             unknown = outside.copy()
         else:
-            deck -= drawn
+            deck = deck - drawn + born
     data["veil_piles"] = {"turn": turn, "hand": slots, "deck": dict(deck), "grave": dict(grave), "unlocated": dict(unknown)}
     return {"deck": list(deck.elements()), "grave": list(grave.elements()), "unlocated": list(unknown.elements())}
 
@@ -559,7 +566,9 @@ def apply_ability(data, memory, played):
         if deck.get("眠気", 0) > 0:
             deck["眠気"] -= 1
             piles = data.get("veil_piles")
-            if piles is not None:
+            if piles is not None and piles.get("born", {}).get("眠気", 0) > 0 and not piles["grave"].get("眠気"):
+                piles["born"]["眠気"] -= 1  # 刚生成、还没并进山札的那张也在山札里：捨札没有眠気时删的就是山札的
+            elif piles is not None:
                 where = [k for k in ("deck", "grave") if piles[k].get("眠気", 0) > 0]
                 if len(where) == 1:
                     piles[where[0]]["眠気"] -= 1
@@ -1404,7 +1413,8 @@ class VeilBrain(BattleBrain):
         if norm(card.name) in SLEEP_GENERATORS:
             deck["眠気"] = deck.get("眠気", 0) + 1
             if piles is not None:
-                piles["deck"]["眠気"] = piles["deck"].get("眠気", 0) + 1
+                piles.setdefault("born", {})
+                piles["born"]["眠気"] = piles["born"].get("眠気", 0) + 1  # 抽完这一手的牌再并进山札（track_piles）
         elif card.tags.makes_sleep or "生成" in card.text or "変換" in card.text:
             mark_uncertain(data, memory, f"打出会生成 / 变换牌的牌，牌组账本跟不上：{name}")
         # 回忆能力在牌的效果之后结算（「〜使用後」）：再动 / 抽牌 / 删眠気，每项按次数触发后取否
