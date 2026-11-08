@@ -9,6 +9,7 @@ import sys
 import time
 from collections import Counter, defaultdict
 from dataclasses import replace
+from functools import lru_cache
 from pathlib import Path
 
 from hiro.brain.battle import BattleBrain
@@ -134,20 +135,81 @@ def read_customs(source) -> list[dict]:
     return [c for c in data.get("custom") or [] if isinstance(c, dict) and c.get("card") and c.get("item")]
 
 
-def apply_customs(hand, customs):
-    """手牌里客制化过的牌：按账本把客制化效果补进牌面文字（同名按去「+」比；已含该文字的不重复加）。"""
+def custom_master():
+    """HIRO_VEIL_CUSTOM_MASTER=1：客制化效果按主数据查（ProduceCardCustomize 的菜单名 → 「追加」类成长效果引用的考试效果文字），
+    覆盖所有「○○追加」项，例如 インフルエンサー+「温存追加」=「次のターン、温存に変更」（原来只认「強気追加」，
+    预约温存没进账本）。查不到时退回 CUSTOM_TEXT。默认关，回放验证后再开。"""
+    return os.environ.get("HIRO_VEIL_CUSTOM_MASTER") == "1"
+
+
+@lru_cache(maxsize=None)
+def master_custom_texts(card_name: str) -> dict[str, tuple[str, ...]]:
+    """主数据里这张卡（按卡名，带「+」）的客制化：{菜单名: 追加的效果文字}。只收「EffectAdd」（加一段效果）且只有一级的项；
+    数值增减（パラメータ値増加、コスト減少…）不改文字，不收。没有主数据 / 查不到返回 {}。"""
+    import sqlite3
+
+    from hiro.brain.cards import description_text
+    from hiro.state.catalog import CatalogUnavailable, catalog
+
+    try:
+        db = catalog().db
+        row = db.execute("SELECT produceCardCustomizeIds FROM ProduceCard WHERE name = ? LIMIT 1", (card_name,)).fetchone()
+        out = {}
+        for cid in json.loads((row[0] if row else None) or "[]"):
+            levels = db.execute("SELECT description, produceCardGrowEffectIds FROM ProduceCardCustomize WHERE id = ?",
+                                (cid,)).fetchall()
+            if len(levels) != 1 or not levels[0][0]:
+                continue
+            texts = []
+            for gid in json.loads(levels[0][1] or "[]"):
+                grow = db.execute("SELECT effectType, playProduceExamEffectId, targetPlayProduceExamEffectIds "
+                                  "FROM ProduceCardGrowEffect WHERE id = ?", (gid,)).fetchone()
+                if grow is None or grow[0] != "ProduceCardGrowEffectType_EffectAdd":
+                    texts = []
+                    break
+                for eid in [grow[1], *json.loads(grow[2] or "[]")]:
+                    effect = db.execute("SELECT produceDescriptions FROM ProduceExamEffect WHERE id = ?", (eid,)).fetchone() if eid else None
+                    if effect is not None and (text := norm(description_text(effect[0]))):
+                        texts.append(text)
+            if texts:
+                out[norm(levels[0][0])] = tuple(texts)
+        return out
+    except (CatalogUnavailable, sqlite3.Error, ValueError, TypeError):
+        return {}
+
+
+def custom_texts(card_name, item, lookup=None):
+    """一条客制化记录 → 要补进牌面的文字列表。开关开着时先按主数据（菜单名是 OCR 读的，可能带别的字：取它包含的最长菜单名），
+    查不到再按 CUSTOM_TEXT 关键词。"""
+    if custom_master():
+        found = (lookup or master_custom_texts)(norm(card_name))
+        hits = [k for k in found if k in item]
+        if hits:
+            return list(found[max(hits, key=len)])
+    text = next((v for k, v in CUSTOM_TEXT.items() if k in item), "強気に変更" if "強気" in item else None)
+    return [text] if text else []
+
+
+def apply_customs(hand, customs, lookup=None):
+    """手牌里客制化过的牌：按账本把客制化效果补进牌面文字（同名按去「+」比；已含该文字的不重复加）。
+    立即结算的文字加在原文前；「次のターン / ターン開始 / 以降」这类延后的加在原文后
+    （destination / fp_effect 只看第一个「次のターン」之前的部分，加在前面会把原文的立即效果挤到延后段里）。"""
+    from hiro.brain.veil import _DELAYED
+
     extra = defaultdict(list)
     for c in customs:
         item = norm(c["item"])  # 记的是菜单 OCR 名，可能带别的字：按关键词认
-        text = next((v for k, v in CUSTOM_TEXT.items() if k in item), "強気に変更" if "強気" in item else None)
-        if text:
-            extra[norm(c["card"]).rstrip("+")].append(text)
-    if not extra:
+        extra[norm(c["card"]).rstrip("+")].extend(custom_texts(c["card"], item, lookup))
+    if not any(extra.values()):
         return hand
     out = []
     for card in hand:
-        add = [t for t in extra.get(norm(card.name).rstrip("+"), []) if t not in norm(card.text or "")]
-        out.append(replace(card, text="".join(add) + (card.text or "")) if add else card)
+        add = [t for t in dict.fromkeys(extra.get(norm(card.name).rstrip("+"), [])) if t not in norm(card.text or "")]
+        if add:
+            before = "".join(t for t in add if not _DELAYED.search(t))
+            after = "".join(t for t in add if _DELAYED.search(t))
+            card = replace(card, text=before + (card.text or "") + after)
+        out.append(card)
     return out
 
 

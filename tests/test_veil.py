@@ -1153,3 +1153,48 @@ def test_round_attempt_starts_once_from_finished_checkpoint(tmp_path):
     save_exam_memory(attempt, new)
     assert round_attempt(directory, "r2", first_turn=True) == (attempt, 1, (new, attempt))
     assert directory.is_dir() and previous.is_dir()
+
+
+def test_custom_master_flag_off_keeps_keyword_table(monkeypatch):
+    from hiro.produce.veil_exam import apply_customs
+
+    monkeypatch.delenv("HIRO_VEIL_CUSTOM_MASTER", raising=False)
+    inf = card(0, "インフルエンサー+", "メンタルスキルカードの元気値増加+6")
+    lookup = lambda name: {"温存追加": ("次のターン、温存に変更",)}  # noqa: E731  开关关着时不该查
+    out, = apply_customs([inf], [{"card": "インフルエンサー+", "item": "温存追加"}], lookup=lookup)
+    assert out == inf
+    out, = apply_customs([inf], [{"card": "インフルエンサー+", "item": "強気追加"}], lookup=lookup)
+    assert out.text == "強気に変更" + inf.text
+
+
+def test_custom_master_adds_delayed_stance_after_text(monkeypatch):
+    """合成主数据：「温存追加」= 次のターン、温存に変更（加在原文后，不挤掉立即的強気）；OCR 菜单名带杂字也认得出。"""
+    from hiro.brain.veil import destination, next_stance
+    from hiro.produce.veil_exam import apply_customs
+
+    monkeypatch.setenv("HIRO_VEIL_CUSTOM_MASTER", "1")
+    table = {"インフルエンサー+": {"強気追加": ("強気に変更",), "温存追加": ("次のターン、温存に変更",)}}
+    lookup = lambda name: table.get(name, {})  # noqa: E731
+    inf = card(0, "インフルエンサー+", "メンタルスキルカードの元気値増加+6スキルカード使用数追加+1")
+    customs = [{"card": "インフルエンサー+", "item": "温存追加 70P"}, {"card": "インフルエンサー+", "item": "強気追加"}]
+    out, = apply_customs([inf], customs, lookup=lookup)
+    assert out.text == "強気に変更" + inf.text + "次のターン、温存に変更"
+    assert destination(out) == "強気" and next_stance(out) == "温存"
+    assert apply_customs([out], customs, lookup=lookup) == [out]  # 不重复加
+    # 主数据查不到这张卡：退回关键词表
+    other = card(1, "未知カード+", "パラメータ+3")
+    got, = apply_customs([other], [{"card": "未知カード+", "item": "強気追加"}], lookup=lookup)
+    assert got.text == "強気に変更パラメータ+3"
+
+
+def test_custom_master_reads_real_master_data(monkeypatch):
+    """真实主数据（有 game.db 时）：インフルエンサー+ 的「強気追加 / 温存追加」、全身全霊+ 的「元気追加」；数值类不收。"""
+    from hiro.produce.veil_exam import master_custom_texts
+
+    master_custom_texts.cache_clear()
+    got = master_custom_texts("インフルエンサー+")
+    if not got:
+        pytest.skip("没有主数据")
+    assert got == {"強気追加": ("強気に変更",), "温存追加": ("次のターン、温存に変更",)}
+    assert master_custom_texts("全身全霊+") == {"元気追加": ("元気+9",)}
+    assert master_custom_texts("全身全霊") == {}
