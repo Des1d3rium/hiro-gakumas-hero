@@ -9,7 +9,8 @@ P 道具是半透明叠在场景上的，身后的气球等大块背景会把直
 """
 
 import json
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
@@ -41,34 +42,45 @@ class IconLibrary:
     counts: np.ndarray  # N，遮罩像素数
     size: int
     names: dict[str, str]
+    sources: dict[str, str] = field(default_factory=dict)  # 实机模板库：资源名 → "real"（实机中位图）/ "render"（原画渲染）
 
     @classmethod
     def load(cls, folder: Path, size: int) -> "IconLibrary":
+        art, names = load_art(folder)
         keys, rows, masks = [], [], []
-        for png in sorted(folder.glob("*.png")):
-            im = cv2.imread(str(png), cv2.IMREAD_UNCHANGED)
-            if im is None or im.ndim != 3 or im.shape[2] not in (3, 4):
-                continue
-            if im.shape[2] == 3:
-                im = _white_bg_to_alpha(im)  # KAA 公开数据的饮料图：白底 RGB
+        for key, im in art.items():
             im = cv2.resize(im, (size, size), interpolation=cv2.INTER_AREA)
             m = np.repeat((im[:, :, 3] > 128)[:, :, None], 3, axis=2).ravel().astype(np.float32)
             t = _highpass(im[:, :, :3]).ravel()
             t = (t - (t * m).sum() / m.sum()) * m
-            keys.append(png.stem)
+            keys.append(key)
             rows.append(t / (np.linalg.norm(t) + 1e-6))
             masks.append(m)
         if not keys:
             return cls.empty(size)
         masks_arr = np.stack(masks)
-        index = folder / "index.json"  # 资源名 → 名称（可选；KAA 公开数据没有）
-        names = json.loads(index.read_text()) if index.exists() else {}
         return cls(keys, np.stack(rows), masks_arr, masks_arr.sum(axis=1), size, names)
 
     @classmethod
     def empty(cls, size: int) -> "IconLibrary":
         """没有图标素材：匹配一律 0 分（低于各处阈值，读数给 None）。"""
         return cls([], np.zeros((0, 1), np.float32), np.zeros((0, 1), np.float32), np.zeros(0, np.float32), size, {})
+
+    @classmethod
+    def from_insitu(cls, images: dict[str, np.ndarray], size: int, names: dict[str, str] | None = None,
+                    sources: dict[str, str] | None = None) -> "IconLibrary":
+        """资源名 → 实机裁块（BGR）。只比圆形区域，避开格子四角透出来的场景背景。"""
+        if not images:
+            return cls.empty(size)
+        mask = np.repeat(insitu_mask(size)[:, :, None], 3, axis=2).ravel()
+        keys, rows = [], []
+        for key, im in images.items():
+            t = _highpass(cv2.resize(im, (size, size), interpolation=cv2.INTER_AREA)).ravel()
+            t = (t - (t * mask).sum() / mask.sum()) * mask
+            keys.append(key)
+            rows.append(t / (np.linalg.norm(t) + 1e-6))
+        masks = np.repeat(mask[None, :], len(keys), axis=0)
+        return cls(keys, np.stack(rows), masks, masks.sum(axis=1), size, dict(names or {}), dict(sources or {}))
 
     def match(self, patch: MatLike) -> list[tuple[float, str]]:
         """patch 为 size×size 的 BGR；返回前 2 名 (分数, 资源名)。"""
@@ -87,6 +99,18 @@ class IconLibrary:
             top = np.argsort(-col)[:2]  # 自建图库可能只有一两个图标（argpartition(kth=2) 要求至少 3 个）
             out.append([(float(col[i]), self.keys[i]) for i in top] + [(0.0, "")] * (2 - len(top)))
         return out
+
+
+def load_art(folder: Path) -> tuple[dict[str, np.ndarray], dict[str, str]]:
+    """图标目录 → ({资源名: RGBA 原图}, index.json 名称表)。KAA 公开数据的白底 RGB 图转成 RGBA。"""
+    art = {}
+    for png in sorted(folder.glob("*.png")):
+        im = cv2.imread(str(png), cv2.IMREAD_UNCHANGED)
+        if im is None or im.ndim != 3 or im.shape[2] not in (3, 4):
+            continue
+        art[png.stem] = _white_bg_to_alpha(im) if im.shape[2] == 3 else im
+    index = folder / "index.json"  # 资源名 → 名称（可选；KAA 公开数据没有）
+    return art, (json.loads(index.read_text()) if index.exists() else {})
 
 
 def _white_bg_to_alpha(bgr: np.ndarray, tol: int = 12) -> np.ndarray:
@@ -114,6 +138,83 @@ ICON_KIND = {"pdrink": "drink", "pitem": "pitem"}  # 识别层原名 → AssetSo
 def _library(kind: str, size: int) -> IconLibrary:
     folder = assets.icon_dir(ICON_KIND.get(kind, kind))
     return IconLibrary.load(folder, size) if folder is not None else IconLibrary.empty(size)
+
+
+INSITU_KIND = "drink_exam"  # AssetSource.icon_dir 的目录名：<素材目录>/icons/drink_exam/<资源名>.png
+INSITU_MIN = 0.7  # 实机模板：同一种饮料实测 0.85–0.96，空槽 ≤ 0.1（2026-11-07 trace 留一验证）
+INSITU_MARGIN = 0.3  # 领先次佳：实测 ≥ 0.47
+INSITU_RADIUS = 24 / 56  # 圆形比较区域半径（相对格子边长）
+
+
+def insitu_enabled() -> bool:
+    """HIRO_DRINK_INSITU=1：原画模板没把握（unknown）的格，再用统一模板（原画渲染成实机外观，采到过的用实机中位图）
+    认一次（默认关，回放验证后再开）。
+    原画图库是 512px 干净原画缩到 56px，考试里的图标模糊、带彩虹圈，正确答案也只有 0.46–0.61 分，
+    初星ホエイプロテイン 在第 3 格稳定落到 0.455 / 领先 0.194（14 个 trace 共 227 帧认不出）。"""
+    return os.environ.get("HIRO_DRINK_INSITU") == "1"
+
+
+@cache
+def insitu_mask(size: int) -> np.ndarray:
+    yy, xx = np.mgrid[:size, :size]
+    c, r = (size - 1) / 2, INSITU_RADIUS * size
+    return (((yy - c) ** 2 + (xx - c) ** 2) <= r * r).astype(np.float32)
+
+
+# 原画 → 考试饮料栏外观的渲染参数（BGR 底色）。2026-11-07 用 7 种饮料的实机中位图拟合；留一饮料验证：
+# 只靠渲染模板认没采到过的饮料，7 种都 top1 正确，分数 0.79–0.89、领先 ≥ 0.42，错认 0。
+# capture_drinks.py build 会按自己的 trace 重新拟合，写进 drink_exam/render.json 覆盖这里。
+RENDER = {"scale": 1.0, "dx": 0, "dy": 1, "sigma": 0.9, "opacity": 0.9, "bg": [253, 247, 175]}
+RENDER_FILE = "render.json"
+
+
+def render_insitu(art: np.ndarray, size: int = DRINK_SIZE, params: dict | None = None) -> np.ndarray:
+    """RGBA 原画 → 考试饮料栏里的样子（BGR）：缩放后按 alpha 叠在浅色底上，再整体降一点不透明度、高斯模糊。"""
+    p = {**RENDER, **(params or {})}
+    alpha = art[:, :, 3:4].astype(np.float32) / 255
+    n = max(8, int(round(size * p["scale"])))
+    rgb = cv2.resize(art[:, :, :3].astype(np.float32) * alpha, (n, n), interpolation=cv2.INTER_AREA)
+    a = cv2.resize(alpha[:, :, 0], (n, n), interpolation=cv2.INTER_AREA)[:, :, None]
+    canvas, cover = np.zeros((size, size, 3), np.float32), np.zeros((size, size, 1), np.float32)
+    x0, y0 = (size - n) // 2 + int(p["dx"]), (size - n) // 2 + int(p["dy"])
+    xs, ys, xe, ye = max(0, x0), max(0, y0), min(size, x0 + n), min(size, y0 + n)
+    if xe > xs and ye > ys:
+        canvas[ys:ye, xs:xe] = rgb[ys - y0 : ye - y0, xs - x0 : xe - x0]
+        cover[ys:ye, xs:xe] = a[ys - y0 : ye - y0, xs - x0 : xe - x0]
+    straight = np.where(cover > 1e-3, canvas / np.maximum(cover, 1e-3), 0)
+    cover = cover * float(p["opacity"])
+    out = straight * cover + np.array(p["bg"], np.float32)[None, None, :] * (1 - cover)
+    if p["sigma"] > 0:
+        out = cv2.GaussianBlur(out, (0, 0), float(p["sigma"]))
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def read_insitu_dir(folder: Path | None) -> tuple[dict[str, np.ndarray], dict[str, str], dict | None]:
+    """实机模板目录（capture_drinks.py build 的产出）→ ({资源名: BGR 中位图}, 名称表, 渲染参数或 None)。"""
+    if folder is None or not folder.is_dir():
+        return {}, {}, None
+    real = {png.stem: im for png in sorted(folder.glob("*.png")) if (im := cv2.imread(str(png), cv2.IMREAD_COLOR)) is not None}
+    index, render = folder / "index.json", folder / RENDER_FILE
+    return (real, json.loads(index.read_text()) if index.exists() else {},
+            json.loads(render.read_text()) if render.exists() else None)  # fmt: skip
+
+
+def unified_library(art: dict[str, np.ndarray], real: dict[str, np.ndarray], size: int = DRINK_SIZE, *,
+                    params: dict | None = None, names: dict[str, str] | None = None) -> IconLibrary:
+    """统一模板库：原画图库里每种饮料都渲染一张（以后遇到新饮料不用先采样），采到过的饮料用实机中位图覆盖。"""
+    images = {k: render_insitu(a, size, params) for k, a in art.items()}
+    sources = dict.fromkeys(images, "render")
+    images.update(real)
+    sources.update(dict.fromkeys(real, "real"))
+    return IconLibrary.from_insitu(images, size, names, sources)
+
+
+@cache
+def _insitu_library(size: int) -> IconLibrary:
+    art_dir = assets.icon_dir("drink")
+    art, names = load_art(art_dir) if art_dir is not None else ({}, {})
+    real, real_names, params = read_insitu_dir(assets.icon_dir(INSITU_KIND))
+    return unified_library(art, real, size, params=params, names={**names, **real_names})
 
 
 def _crop(img: MatLike, x: int, y: int, size: int) -> MatLike | None:
@@ -169,7 +270,32 @@ def _read_drink_slots(img: MatLike) -> list[dict]:
         elif score < EMPTY_MAX:
             entry.update(state="empty", confidence=round(1 - score, 3))
         out.append(entry)
+    if insitu_enabled():
+        _resolve_insitu(out, crops)
     return out
+
+
+def _resolve_insitu(out: list[dict], crops: list[MatLike | None], lib: IconLibrary | None = None) -> None:
+    """只补原画模板没把握（unknown）的格：实机模板分数 ≥ INSITU_MIN 且领先 ≥ INSITU_MARGIN 才算认出。
+    认出的、空槽不改（实机模板只覆盖采到过的饮料，没采到的饮料照旧按原画认）。"""
+    from kaa.db.drink import Drink
+
+    lib = _insitu_library(DRINK_SIZE) if lib is None else lib
+    if not lib.keys:
+        return
+    todo = [i for i, e in enumerate(out) if e["state"] == "unknown" and crops[i] is not None]
+    for i, top in zip(todo, lib.match_many([crops[i] for i in todo]) if todo else []):
+        (score, asset), (second, _) = top
+        entry = out[i]
+        entry.update(insitu_score=round(score, 3), insitu_margin=round(score - second, 3))
+        if score < INSITU_MIN or score - second < INSITU_MARGIN:
+            continue
+        drink = Drink.from_asset_id(asset)
+        sat = float(cv2.cvtColor(crops[i], cv2.COLOR_BGR2HSV)[:, :, 1].mean())
+        entry.update(state="drink", drink_id=drink.id if drink else None, asset=asset, method="insitu",
+                     insitu_source=lib.sources.get(asset),
+                     name=lib.names.get(asset) or (drink.name if drink else None),
+                     available=sat >= GREY_SAT_MAX, confidence=round(score, 3))  # fmt: skip
 
 
 FULL_BADGE = (240, 1105, 480, 1160)  # 选饮料页「受け取る」下方的红标「Pドリンク所持上限」（饮料满、受け取る变灰）

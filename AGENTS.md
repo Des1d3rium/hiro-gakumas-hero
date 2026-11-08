@@ -120,6 +120,7 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | `HIRO_CONSULT_DRINK_SWAP=0` | 关掉相談栏满换饮料（默认开：货架上的饮料比持有里最差的一瓶好就先丢后买） |
 | `HIRO_RESCUE_LLM=0` | 关掉认不出画面时的 LLM 看图兜底（默认开） |
 | `HIRO_DEBUG_RECOG=1` | 把全部识别互验写进 trace，页面变化都存帧 |
+| `HIRO_DRINK_INSITU=1` | 考试饮料栏原画模板没把握的格，用统一模板（全部饮料按原画渲染成饮料栏外观，采到过的用 `tools/assets/capture_drinks.py` 生成的实机中位图）补认（默认关） |
 
 固定编成时，租借格按 `--main-attr` 挑主属性、等级最高的一张；挑不到就停下（不开局）。
 

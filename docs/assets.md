@@ -28,7 +28,7 @@
 | NPC 分数、名次、突破线、本战名次条 | 可用 | 本来就走 OCR；本战玩家分数三票投票少了字体一票，剩 Vision + ddddocr 两票须一致 |
 | 手牌卡名 / 卡 id | 可用 | KAA 卡面 + 卡名栏 OCR |
 | 手牌预计得分徽章 | 可用 | 没有字体时白描边同色字形串交给 ddddocr，位数与字形数一致才用；58 帧与有字体时一致 |
-| P 饮料（考试 / 培育底栏、选饮料、相談货架） | 可用 | KAA 饮料图；名称按主数据 |
+| P 饮料（考试 / 培育底栏、选饮料、相談货架） | 可用 | KAA 饮料图；名称按主数据。考试饮料栏原画模板偶尔没把握（unknown），开 `HIRO_DRINK_INSITU=1` 用统一模板（原画渲染 + 实机中位图）补认，见下文 |
 | 考试效果栏：数值 | 可用 | |
 | 考试效果栏：效果名（やる気、好印象 等） | 跑一次 capture_icons 后可用 | 默认没有图标时效果名为 None，观测里 motivation / impression 为 None（策略层只能退回保守规则，分数明显掉）。用自己的考试截图跑一次 `tools/assets/capture_icons.py`（见下文）补齐 |
 | 考试效果栏：卡牌效果（エンチャント）名 | 可用 | 用 KAA 卡面 |
@@ -71,6 +71,7 @@ Apple Vision 是 macOS 系统 OCR，识别层本来就只在 macOS 上跑（实�
 ```
 cards/            技能卡卡面（有则优先于 KAA）
 icons/drink/      P 饮料图标（有则优先于 KAA）
+icons/drink_exam/ 考试饮料栏实机中位图 + render.json 渲染参数（capture_drinks 生成；可选，没有时只用原画渲染）
 icons/pitem/      P 道具图标（capture_icons 生成）
 icons/status/     考试效果图标（capture_icons 生成；文件名 img_general_icon_exam-effect_<类型小写>.png，识别只用 alpha）
     *.png         RGBA（透明底）或白底 RGB；文件名 = 资源名
@@ -92,3 +93,29 @@ schedule_hif.json 日程（有则优先于仓库自带）
 - 「没有字体」的读法另有用例（`test_no_font_*`），把字体模板换成空，有没有字体都跑。
 - `test_capture_icons.py` 只用合成图（标 `@pytest.mark.synthetic`，不按「读样例截图」跳过），CI 上也跑。
 - 跑带截图样例的测试：设 `HIRO_FIXTURES`（样例目录）、`HIRO_KAA_GAME_DATA`（KAA 公开数据），不要在仓库目录生成 `resources/`。
+
+## 考试饮料栏统一模板：`tools/assets/capture_drinks.py`
+
+原画饮料图是 512px 干净原画缩到 56px，考试饮料栏的图标模糊、带彩虹圈，正确答案也只有 0.46–0.61 分，个别饮料在个别格稳定落到
+「没把握」（2026-11-07 的 trace：初星ホエイプロテイン 在第 3 格 0.455 / 领先 0.194，14 个 trace 共 227 帧）。
+
+开 `HIRO_DRINK_INSITU=1` 后，原画模板 unknown 的格再用**统一模板**认一次（分数 ≥ 0.7 且领先 ≥ 0.3 才算；认出的格和空槽不改）：
+
+- 原画图库（素材包 / KAA）里的**每种饮料**都在识别时按 `items.RENDER` 渲染成饮料栏外观（缩放、偏移、浅色底、降不透明度、
+  高斯模糊）。以后游戏出新饮料，只要原画图库里有，不用先采样就能认；仓库里不多放任何游戏素材。
+- 采到过的饮料用实机中位图覆盖渲染图；`render.json` 覆盖默认渲染参数。两者都在 `HIRO_USER_ASSETS/icons/drink_exam/`，
+  由下面的工具从自己的 trace 生成（只读 trace，不碰游戏），不进仓库。没有这个目录时只用渲染图，照样能用。
+
+```bash
+python tools/assets/capture_drinks.py build traces/              # 实机中位图 + 重新拟合渲染参数（--dry-run 只报告）
+python tools/assets/capture_drinks.py check traces/ --holdout    # 新旧对比；每个 trace 用其余 trace 的实机图（留一 trace）
+python tools/assets/capture_drinks.py check traces/ --unseen     # 每种采到过的饮料假装没采到，只靠渲染认（留一饮料；--refit 同时重拟参数）
+```
+
+本机验证（2026-11-07，1357 帧考试画面，原画 unknown 252 格）：
+
+| 模板 | 结果 |
+|---|---|
+| 实机中位图 + 渲染（留一 trace） | 252 格全部认出（初星ホエイプロテイン 227、初星スーパーソーダ 25，看图核对正确），剩 0 |
+| 只有渲染图（没有 drink_exam 目录） | 同样 252 格全部认出 |
+| 留一饮料（7 种逐个只靠渲染、参数用其余 6 种重拟） | 全部认出，分数 p10 0.79–0.89、领先 p10 ≥ 0.42，认错 0；7 折拟合出的参数一致 |
