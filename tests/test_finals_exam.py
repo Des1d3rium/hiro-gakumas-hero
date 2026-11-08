@@ -241,3 +241,40 @@ def test_six_digit_badge_without_font(monkeypatch):
     monkeypatch.setattr(hif, "_templates", dict)
     r = read_hif_exam(load(cv2.imread(str(FIX / "badge-6digit-main8-00155.jpg"))), cache=None)
     assert [(c["name"], c["badge_score"]) for c in r["hand"]] == [("ゆめみごこち+", None), ("きらきら紙吹雪+", 45431), ("届いて！+", 106837)]
+
+
+@pytest.mark.parametrize(("name", "score"), [("score-overhang-gkms4-196", 123406), ("score-overhang-gkms4-230", 113066)])
+def test_finals_my_score_overhangs_card(name, score):
+    """第 3 名时 6 位分数的末位伸出玩家卡白框约 5 像素：框只到白框右缘会掉末位（GKMS 第四局 123406 → 12340）。"""
+    from hiro.vision.hif import read_finals_ranking
+
+    f = FIX / f"{name}.jpg"
+    if not f.exists():
+        pytest.skip(f"需要实机截图 {f}")
+    r = read_finals_ranking(cv2.imread(str(f)))
+    # 三票没过半给 None（沿用上一个读数，不给错值）：RapidOCR 读 196 是 [123400, None, 123406]；Vision 两帧都读对
+    assert r["my_rank_index"] == 3 and r["my_score"] in (score, None)
+
+
+def test_finals_my_score_box_covers_overhang(monkeypatch):
+    """三种读法拿到的玩家分数框右缘都要盖住伸出白框的末位（实测到白框右缘 +5），又不碰右边 NPC 卡（白框外 +8 起）。
+    Windows 上 RapidOCR + ddddocr 两票都读成掉末位的 12340，三票多数把错值交给了决策；Mac 离线读不出同样的错，只能查框。"""
+    from hiro.vision import digits, hif
+
+    f = FIX / "score-overhang-gkms4-196.jpg"
+    if not f.exists():
+        pytest.skip(f"需要实机截图 {f}")
+    boxes = []
+    monkeypatch.setattr(hif, "_ocr_int", lambda img, box: boxes.append(("ocr", box)))
+    def font(img, box):
+        boxes.append(("font", box))
+        return None, {}
+
+    monkeypatch.setattr(hif, "read_score", font)
+    monkeypatch.setattr(digits, "read_dddd", lambda img, box: boxes.append(("dddd", box)))
+    hif.read_finals_ranking(cv2.imread(str(f)))
+    mine = boxes[:3]  # 前三次是玩家分数（之后是 NPC 格）
+    right = hif.FINALS_ME_LEFTS[2] + hif.FINALS_ME_W  # 第 3 名白框右缘 483
+    assert {k for k, _ in mine} == {"ocr", "font", "dddd"}
+    for _, (x1, y1, x2, y2) in mine:
+        assert right + 5 <= x2 < right + 8

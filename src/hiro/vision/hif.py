@@ -305,6 +305,7 @@ def is_finals_strip(img: MatLike) -> bool:
 FINALS_CARD_X0 = 223  # 名次条第一张卡左缘
 FINALS_ME_W = 122  # 玩家卡宽（白框）
 FINALS_SCORE_Y = (128, 168)
+FINALS_SCORE_OVERHANG = 6  # 玩家分数框右缘超出白框的像素（见 read_finals_ranking）
 
 
 FINALS_ME_RIGHTS = tuple(FINALS_CARD_X0 + FINALS_NPC_W * k + FINALS_ME_W for k in range(3))  # 第 1 / 2 / 3 名时玩家卡右端：345 / 414 / 483
@@ -394,8 +395,10 @@ def read_finals_ranking(img: MatLike) -> dict:
     left_npcs = max(0, round((px - FINALS_CARD_X0) / FINALS_NPC_W))
     out["my_rank_index"] = left_npcs + 1
     y1, y2 = FINALS_SCORE_Y
-    box = (px + 5, y1, right, y2)  # 左缘紧挨左边 NPC 分数的末位，收 5 像素（否则读成 902660）
-    font, _ = read_score(img, (px + 6, y1, right - 2, y2 - 2))
+    # 左缘紧挨左边 NPC 分数的末位，收 5 像素（否则读成 902660）；右缘放出 FINALS_SCORE_OVERHANG：
+    # 6 位分数的末位会伸出白框 5 像素（GKMS 第四局 123406 → 12340、113066 → 11306），右边 NPC 卡的数字从白框外 8 像素起
+    box = (px + 5, y1, right + FINALS_SCORE_OVERHANG, y2)
+    font, _ = read_score(img, (px + 6, y1, right + FINALS_SCORE_OVERHANG - 1, y2 - 2))
     votes = [_ocr_int(img, box), font, read_dddd(img, box)]
     best, n = vote_truncated(votes)
     out["my_score"] = best if n >= 2 else None
