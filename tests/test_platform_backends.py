@@ -602,3 +602,12 @@ def test_sim_workers_capped_on_windows(monkeypatch):
     monkeypatch.delenv("HIRO_SIM_WORKERS")
     monkeypatch.setattr(sys, "platform", "darwin")
     assert sim_workers(4) == 4
+
+
+def test_score_added_digit_rejected():
+    """考试分数 2890 读成 28900（末尾多一位）：判读错，不采信（Windows 第十五局之后 10 步正确读数都被拦）。正常增长不受影响。"""
+    from hiro.state.invariants import _added_digit
+
+    assert _added_digit(2890, 28900) and _added_digit(2890, 28905) and _added_digit(2890, 12890)
+    assert not _added_digit(2890, 10012) and not _added_digit(597, 2890) and not _added_digit(48913, 109614)
+    assert not _added_digit(50, 500)
