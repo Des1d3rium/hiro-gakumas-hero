@@ -306,8 +306,13 @@ class LandscapeGuard:
         return self._exit()
 
     def failure_cleared(self, img, every: float = 3.0) -> bool:
-        """Verify a recovered frame without triggering any window operations."""
-        if self.last_result not in SWITCH_FAILURES or img is None or is_black(img):
+        """切换失败停下后（locked / failed / nogame），隔 every 秒重新核验一次环境和画面，恢复了就清掉失败标记、返回 True。
+        只读屏幕锁状态、AXFullScreen 和传进来的画面，不做任何窗口操作；没恢复返回 False（调用方照旧停着）。
+        - locked：屏幕已解锁、读得到 AXFullScreen 就清（按 AX 实际状态同步；还黑着时由 tick 按黑屏计时再试一次，
+          那次再失败就是 failed，要使用者手动恢复画面，不会循环切换）；
+        - 进入失败：画面已不黑（使用者手动进了全屏，或 LIVE 已结束回竖屏）；
+        - 退出失败：画面竖屏且不黑，并且 AXFullScreen 读到 False（使用者手动退出了全屏）。"""
+        if self.last_result not in SWITCH_FAILURES:
             return False
         now = time.monotonic()
         if now - getattr(self, "_recheck_at", -1e9) < every:
@@ -315,18 +320,31 @@ class LandscapeGuard:
         self._recheck_at = now
         if screen_locked():
             return False
-        height, width = img.shape[:2]
-        if height == width:
+        pid = _game_pid()
+        if pid is None:
             return False
-        if self.last_op == "exit":
-            pid = _game_pid()
-            if height < width or pid is None or ax_is_fullscreen(pid) is not False:
+        ax = ax_is_fullscreen(pid)
+        if self.last_result == "locked":
+            if ax is None:
                 return False
-        self.fullscreen = width > height
-        self.entered_at = now if self.fullscreen else 0.0
+            fullscreen = ax
+        else:
+            if img is None or is_black(img):
+                return False
+            height, width = img.shape[:2]
+            if height == width:
+                return False
+            if self.last_op == "exit":
+                if height < width or ax is not False:
+                    return False
+                fullscreen = False
+            else:
+                fullscreen = ax if ax is not None else width > height
+        self.fullscreen = fullscreen
+        self.entered_at = 0.0  # 全屏中：tick 的退出条件（黑屏 / 竖屏持续）不再额外等 30s
         self.black_since = self.portrait_since = None
+        logger.warning("LIVE 切换失败（%s %s）后环境已恢复：%s全屏，继续", self.last_op, self.last_result, "仍在" if fullscreen else "不在")
         self.last_result = "manual"
-        logger.warning("LIVE 窗口画面已恢复，继续")
         return True
 
     def _exit(self) -> bool:

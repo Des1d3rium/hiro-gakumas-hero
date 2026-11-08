@@ -104,31 +104,82 @@ def test_fn_shift_f_posts_shift_fn_f_to_game(monkeypatch):
     assert [(p, k) for p, k, _ in sent] == [(42, L.KEY_F)] * 2 and all(f & flags == flags for _, _, f in sent)
 
 
-@pytest.mark.parametrize("operation, failure, recovered", [
-    ("enter", "locked", LIVE), ("enter", "failed", LIVE), ("exit", "failed", PORTRAIT),
+class Env:
+    """模拟窗口环境：屏幕锁、AXFullScreen、切换结果都由测试控制；记下每次窗口操作。"""
+
+    def __init__(self, monkeypatch, *, locked=False, ax=False, result="failed"):
+        self.locked, self.ax, self.result, self.switches = locked, ax, result, []
+        monkeypatch.setattr(L, "_game_pid", lambda: 42)
+        monkeypatch.setattr(L, "_front_app", lambda: None)
+        monkeypatch.setattr(L, "screen_locked", lambda: self.locked)
+        monkeypatch.setattr(L, "ax_is_fullscreen", lambda pid: self.ax)
+        monkeypatch.setattr(L, "switch_fullscreen", self.switch)
+
+    def switch(self, want, **kwargs):
+        self.switches.append(want)
+        return self.result
+
+
+def held(g, img):
+    """batch_hif.live_step 的停点判断：失败标记还在且没核验恢复 → 停。"""
+    return g.last_result in L.SWITCH_FAILURES and not g.failure_cleared(img, every=0)
+
+
+@pytest.mark.parametrize("operation, failure, ax_after, recovered, fullscreen_after", [
+    ("enter", "failed", True, LIVE, True),       # 进入失败 → 使用者手动进了全屏
+    ("enter", "failed", False, PORTRAIT, False),  # 进入失败 → LIVE 已结束、画面回竖屏
+    ("exit", "failed", False, PORTRAIT, False),   # 退出失败 → 使用者手动退出全屏
+    ("exit", "nogame", False, PORTRAIT, False),
 ])
-def test_guard_clears_only_after_window_recovers(monkeypatch, operation, failure, recovered):
+def test_guard_hold_clears_after_manual_recovery(monkeypatch, operation, failure, ax_after, recovered, fullscreen_after):
+    env = Env(monkeypatch, ax=operation == "exit", result=failure)
     g = L.LandscapeGuard()
-    calls = []
-    locked = failure == "locked"
-    fullscreen = operation == "exit"
-    monkeypatch.setattr(L, "_game_pid", lambda: 42)
-    monkeypatch.setattr(L, "_front_app", lambda: None)
-    monkeypatch.setattr(L, "screen_locked", lambda: locked)
-    monkeypatch.setattr(L, "ax_is_fullscreen", lambda pid: fullscreen)
-
-    def fail_switch(want, **kwargs):
-        calls.append(want)
-        return failure
-
-    monkeypatch.setattr(L, "switch_fullscreen", fail_switch)
     assert not (g._enter() if operation == "enter" else g.exit_now())
-    for img in (None, BLACK, BLACK):
-        assert not g.failure_cleared(img, every=0)
-    if locked or fullscreen:
-        assert not g.failure_cleared(recovered, every=0)
-    locked, fullscreen = False, False
-    assert g.failure_cleared(recovered, every=0)
-    assert g.last_result == "manual" and g.fullscreen == (operation == "enter")
+    assert env.switches == [operation == "enter"]
+    # 没恢复：多次核验都还停着，也不做窗口操作
+    for img in (None, BLACK, BLACK, LIVE if operation == "exit" else BLACK):
+        assert held(g, img)
+    env.locked = True
+    assert held(g, recovered)  # 锁着屏时即使画面像恢复了也不放行
+    env.locked, env.ax = False, ax_after
+    assert not held(g, recovered)
+    assert g.last_result == "manual" and g.fullscreen == fullscreen_after
     assert not g.tick(recovered)
-    assert calls == [operation == "enter"]
+    assert env.switches == [operation == "enter"]
+
+
+def test_exit_failure_needs_ax_confirmation(monkeypatch):
+    env = Env(monkeypatch, ax=True)
+    g = L.LandscapeGuard()
+    g.exit_now()
+    assert held(g, PORTRAIT)  # 画面竖屏但 AX 还说全屏 / 读不到：不放行
+    env.ax = None
+    assert held(g, PORTRAIT)
+    env.ax = False
+    assert not held(g, PORTRAIT)
+
+
+@pytest.mark.parametrize("operation", ["enter", "exit"])
+def test_locked_hold_clears_after_unlock_and_retries_once(monkeypatch, operation):
+    env = Env(monkeypatch, locked=True, ax=operation == "exit", result="locked")
+    g = L.LandscapeGuard()
+    assert not (g._enter() if operation == "enter" else g.exit_now())
+    for img in (None, BLACK, LIVE, PORTRAIT):
+        assert held(g, img)  # 还锁着：一直停，不切窗口
+    assert env.switches == [operation == "enter"]
+    env.locked = False
+    assert not held(g, BLACK)  # 解锁就重新核验：按 AX 同步状态，清掉停点
+    assert g.fullscreen == (operation == "exit")
+    # 画面还黑：由 tick 按黑屏计时再试一次；这次失败是 failed，要手动恢复画面，不再循环切换
+    clock = [1000.0]
+    monkeypatch.setattr(L.time, "monotonic", lambda: clock[0])
+    env.result = "failed"
+    g._recheck_at = -1e9
+    assert not g.tick(BLACK)
+    clock[0] += max(g.BLACK_S, g.EXIT_BLACK_S) + 1
+    g.tick(BLACK)  # 再试的这一次（tick 返回的是切换是否成功）
+    assert env.switches == [operation == "enter"] * 2 and g.last_result == "failed"
+    for _ in range(5):
+        clock[0] += 60
+        assert held(g, BLACK)
+    assert env.switches == [operation == "enter"] * 2
