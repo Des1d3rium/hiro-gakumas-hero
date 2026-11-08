@@ -1160,7 +1160,7 @@ def test_custom_master_flag_off_keeps_keyword_table(monkeypatch):
 
     monkeypatch.delenv("HIRO_VEIL_CUSTOM_MASTER", raising=False)
     inf = card(0, "インフルエンサー+", "メンタルスキルカードの元気値増加+6")
-    lookup = lambda name: {"温存追加": ("次のターン、温存に変更",)}  # noqa: E731  开关关着时不该查
+    lookup = lambda name: ((("温存追加", ("次のターン、温存に変更",)),),)  # noqa: E731  开关关着时不该查
     out, = apply_customs([inf], [{"card": "インフルエンサー+", "item": "温存追加"}], lookup=lookup)
     assert out == inf
     out, = apply_customs([inf], [{"card": "インフルエンサー+", "item": "強気追加"}], lookup=lookup)
@@ -1173,8 +1173,8 @@ def test_custom_master_adds_delayed_stance_after_text(monkeypatch):
     from hiro.produce.veil_exam import apply_customs
 
     monkeypatch.setenv("HIRO_VEIL_CUSTOM_MASTER", "1")
-    table = {"インフルエンサー+": {"強気追加": ("強気に変更",), "温存追加": ("次のターン、温存に変更",)}}
-    lookup = lambda name: table.get(name, {})  # noqa: E731
+    table = {"インフルエンサー+": ((("強気追加", ("強気に変更",)),), (("温存追加", ("次のターン、温存に変更",)),))}
+    lookup = lambda name: table.get(name, ())  # noqa: E731
     inf = card(0, "インフルエンサー+", "メンタルスキルカードの元気値増加+6スキルカード使用数追加+1")
     customs = [{"card": "インフルエンサー+", "item": "温存追加 70P"}, {"card": "インフルエンサー+", "item": "強気追加"}]
     out, = apply_customs([inf], customs, lookup=lookup)
@@ -1189,12 +1189,55 @@ def test_custom_master_adds_delayed_stance_after_text(monkeypatch):
 
 def test_custom_master_reads_real_master_data(monkeypatch):
     """真实主数据（有 game.db 时）：インフルエンサー+ 的「強気追加 / 温存追加」、全身全霊+ 的「元気追加」；数值类不收。"""
-    from hiro.produce.veil_exam import master_custom_texts
+    from hiro.produce.veil_exam import master_custom_texts, master_customs
 
-    master_custom_texts.cache_clear()
+    master_customs.cache_clear()
     got = master_custom_texts("インフルエンサー+")
     if not got:
         pytest.skip("没有主数据")
     assert got == {"強気追加": ("強気に変更",), "温存追加": ("次のターン、温存に変更",)}
     assert master_custom_texts("全身全霊+") == {"元気追加": ("元気+9",)}
     assert master_custom_texts("全身全霊") == {}
+
+
+GROW = ((("成長追加", ("すべてのスキルカードのパラメータ値増加+1",)), ("成長+", ("すべてのスキルカードのパラメータ値増加+2",)),
+         ("成長+", ("すべてのスキルカードのパラメータ値増加+5",))),
+        (("制限削除", ()),))
+
+
+@pytest.mark.parametrize("records, expected", [
+    (["成長追加"], "+1"),
+    (["成長追加", "成長+"], "+2"),                       # 覆盖：第 2 级是 +2，不是 1+2
+    (["成長追加", "成長+ 40P", "成長+"], "+5"),
+    (["成長追加", "制限削除", "成長+"], "+2"),             # 中间夹别的项不打断这条链
+    (["成長追加", "成長追加"], "+1"),                     # 同名两张、都做到第 1 级
+    (["成長追加", "成長追加", "成長+"], None),            # 同名两张、不知道升的是哪张：不猜
+    (["成長+"], None),                                   # 没开头就升级：不猜
+    (["成長追加", "成長+", "成長+", "成長+"], None),      # 超过主数据级数
+])
+def test_custom_master_repeatable_levels_overwrite(monkeypatch, records, expected):
+    from hiro.produce.veil_exam import apply_customs
+
+    monkeypatch.setenv("HIRO_VEIL_CUSTOM_MASTER", "1")
+    rebound = card(0, "巻き返し+", "全力値+4")
+    out, = apply_customs([rebound], [{"card": "巻き返し+", "item": r} for r in records], lookup=lambda name: GROW)
+    if expected is None:
+        assert out == rebound
+    else:
+        assert out.text == "すべてのスキルカードのパラメータ値増加" + expected + "全力値+4"
+
+
+def test_custom_master_real_repeatable_levels(monkeypatch):
+    from hiro.produce.veil_exam import master_customs, resolve_customs
+
+    master_customs.cache_clear()
+    items = master_customs("巻き返し+")
+    if not items:
+        pytest.skip("没有主数据")
+    monkeypatch.setenv("HIRO_VEIL_CUSTOM_MASTER", "1")
+    grow = [lv for lv in items if lv[0][0] == "成長追加"]
+    assert [d for d, _ in grow[0]] == ["成長追加", "成長+", "成長+"]
+    records = [{"card": "巻き返し+", "item": i} for i in ("成長追加", "成長+")]
+    assert resolve_customs(records)["巻き返し"] == ["すべてのスキルカードのパラメータ値増加+2"]
+    records = [{"card": "トレーニングの成果+", "item": i} for i in ("成長追加", "成長+")]
+    assert resolve_customs(records)["トレーニングの成果"] == ["手札のパラメータ値増加+8"]

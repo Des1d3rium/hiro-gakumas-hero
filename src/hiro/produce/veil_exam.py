@@ -143,9 +143,11 @@ def custom_master():
 
 
 @lru_cache(maxsize=None)
-def master_custom_texts(card_name: str) -> dict[str, tuple[str, ...]]:
-    """主数据里这张卡（按卡名，带「+」）的客制化：{菜单名: 追加的效果文字}。只收「EffectAdd」（加一段效果）且只有一级的项；
-    数值增减（パラメータ値増加、コスト減少…）不改文字，不收。没有主数据 / 查不到返回 {}。"""
+def master_customs(card_name: str) -> tuple[tuple[tuple[str, tuple[str, ...]], ...], ...]:
+    """主数据里这张卡（按卡名，带「+」）的客制化项，每项按级排：((菜单名, 这一级追加的效果文字), …)。
+    可重复客制化是覆盖：做到第 N 级时牌面是第 N 级的文字（使用者 2026-11-07：巻き返し+ 成長 第 1 级 +1、第 2 级 +2），不累加。
+    只有「EffectAdd」（加一段效果）的级才有文字；数值增减（パラメータ値増加、コスト減少…）不改文字，那一级给空。
+    没有主数据 / 查不到返回 ()。"""
     import sqlite3
 
     from hiro.brain.cards import description_text
@@ -154,40 +156,77 @@ def master_custom_texts(card_name: str) -> dict[str, tuple[str, ...]]:
     try:
         db = catalog().db
         row = db.execute("SELECT produceCardCustomizeIds FROM ProduceCard WHERE name = ? LIMIT 1", (card_name,)).fetchone()
-        out = {}
+        items = []
         for cid in json.loads((row[0] if row else None) or "[]"):
-            levels = db.execute("SELECT description, produceCardGrowEffectIds FROM ProduceCardCustomize WHERE id = ?",
-                                (cid,)).fetchall()
-            if len(levels) != 1 or not levels[0][0]:
-                continue
-            texts = []
-            for gid in json.loads(levels[0][1] or "[]"):
-                grow = db.execute("SELECT effectType, playProduceExamEffectId, targetPlayProduceExamEffectIds "
-                                  "FROM ProduceCardGrowEffect WHERE id = ?", (gid,)).fetchone()
-                if grow is None or grow[0] != "ProduceCardGrowEffectType_EffectAdd":
-                    texts = []
-                    break
-                for eid in [grow[1], *json.loads(grow[2] or "[]")]:
-                    effect = db.execute("SELECT produceDescriptions FROM ProduceExamEffect WHERE id = ?", (eid,)).fetchone() if eid else None
-                    if effect is not None and (text := norm(description_text(effect[0]))):
-                        texts.append(text)
-            if texts:
-                out[norm(levels[0][0])] = tuple(texts)
-        return out
+            levels = []
+            for desc, grow_ids in db.execute("SELECT description, produceCardGrowEffectIds FROM ProduceCardCustomize "
+                                             "WHERE id = ? ORDER BY customizeCount", (cid,)).fetchall():
+                texts = []
+                for gid in json.loads(grow_ids or "[]"):
+                    grow = db.execute("SELECT effectType, playProduceExamEffectId, targetPlayProduceExamEffectIds "
+                                      "FROM ProduceCardGrowEffect WHERE id = ?", (gid,)).fetchone()
+                    if grow is None or grow[0] != "ProduceCardGrowEffectType_EffectAdd":
+                        texts = []
+                        break
+                    for eid in [grow[1], *json.loads(grow[2] or "[]")]:
+                        effect = db.execute("SELECT produceDescriptions FROM ProduceExamEffect WHERE id = ?", (eid,)).fetchone() if eid else None
+                        if effect is not None and (text := norm(description_text(effect[0]))):
+                            texts.append(text)
+                levels.append((norm(desc or ""), tuple(texts)))
+            items.append(tuple(levels))
+        return tuple(items)
     except (CatalogUnavailable, sqlite3.Error, ValueError, TypeError):
-        return {}
+        return ()
 
 
-def custom_texts(card_name, item, lookup=None):
-    """一条客制化记录 → 要补进牌面的文字列表。开关开着时先按主数据（菜单名是 OCR 读的，可能带别的字：取它包含的最长菜单名），
-    查不到再按 CUSTOM_TEXT 关键词。"""
-    if custom_master():
-        found = (lookup or master_custom_texts)(norm(card_name))
-        hits = [k for k in found if k in item]
-        if hits:
-            return list(found[max(hits, key=len)])
+def master_custom_texts(card_name: str) -> dict[str, tuple[str, ...]]:
+    """只有一级、有菜单名和文字的客制化项：{菜单名: 文字}（核对 / 测试用）。"""
+    return {lv[0][0]: lv[0][1] for lv in master_customs(card_name) if len(lv) == 1 and lv[0][0] and lv[0][1]}
+
+
+def keyword_texts(item):
     text = next((v for k, v in CUSTOM_TEXT.items() if k in item), "強気に変更" if "強気" in item else None)
     return [text] if text else []
+
+
+def resolve_customs(customs, lookup=None) -> dict[str, list[str]]:
+    """客制化记录（按时间顺序）→ {去「+」的卡名: 要补进牌面的文字}。
+    开关开着时按主数据：OCR 菜单名取它包含的最长菜单名，认到哪一项哪一级；第 1 级菜单名（「成長追加」）开始一条链，
+    之后的「成長+」把这条链升一级，最终取那一级的文字（覆盖，不累加）。认不准时不猜，这一项不补：
+    同一项不同级的菜单名认成了不同项、链没开头就升级、同名多张做到的级数不同、级数超过主数据。
+    主数据里认不到的记录（或开关关着）按 CUSTOM_TEXT 关键词。"""
+    groups = defaultdict(list)
+    for c in customs:
+        groups[norm(c["card"])].append(norm(c["item"]))  # 记的是菜单 OCR 名，可能带别的字
+    out = defaultdict(list)
+    for name, records in groups.items():
+        base = name.rstrip("+")
+        items = (lookup or master_customs)(name) if custom_master() else ()
+        chains, broken = defaultdict(list), set()
+        for record in records:
+            hits = [(len(desc), k, i) for k, levels in enumerate(items) for i, (desc, _) in enumerate(levels) if desc and desc in record]
+            if not hits:
+                out[base].extend(keyword_texts(record))
+                continue
+            longest = max(h[0] for h in hits)
+            hits = [h for h in hits if h[0] == longest]
+            if len({k for _, k, _ in hits}) != 1:
+                continue  # 不同项同名：不知道是哪一项
+            k = hits[0][1]
+            level_hits = {i for _, _, i in hits}
+            if level_hits == {0}:
+                chains[k].append(1)  # 第 1 级的菜单名：新的一条链（同名另一张，或这一张第一次做）
+            elif 0 in level_hits:
+                broken.add(k)  # 第 1 级和后面的级同名：分不清是新做还是升级
+            elif len(chains[k]) == 1:
+                chains[k][0] += 1
+            else:
+                broken.add(k)  # 升级菜单名但还没开头 / 同名多张不知道升的是哪张
+        for k, chain in chains.items():
+            if k in broken or len(set(chain)) != 1 or chain[0] > len(items[k]):
+                continue
+            out[base].extend(items[k][chain[0] - 1][1])
+    return out
 
 
 def apply_customs(hand, customs, lookup=None):
@@ -196,10 +235,7 @@ def apply_customs(hand, customs, lookup=None):
     （destination / fp_effect 只看第一个「次のターン」之前的部分，加在前面会把原文的立即效果挤到延后段里）。"""
     from hiro.brain.veil import _DELAYED
 
-    extra = defaultdict(list)
-    for c in customs:
-        item = norm(c["item"])  # 记的是菜单 OCR 名，可能带别的字：按关键词认
-        extra[norm(c["card"]).rstrip("+")].extend(custom_texts(c["card"], item, lookup))
+    extra = resolve_customs(customs, lookup)
     if not any(extra.values()):
         return hand
     out = []
