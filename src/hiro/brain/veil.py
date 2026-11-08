@@ -23,11 +23,18 @@ LIMITS = {"r1": 700_000, "r2": 1_400_000}
 HAND_MAX = 5  # 手牌上限：抽牌超出的作废
 
 
+# 默认开的策略开关（使用者 2026-11-07，22 个 trace 回放后定）：设 VEIL_<name>=0 关掉。其余默认关，=1 打开
+DEFAULT_ON = frozenset({"HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP"})
+
+
 def _flag(name: str) -> bool:
-    """VEIL 出牌策略开关（都默认关）：环境变量 VEIL_<name>=1 打开。旧名 HIRO_VEIL_<name> 仍认，两个都设时以新名为准
-    （使用者 2026-11-07：策略开关去掉 HIRO_ 前缀）。"""
+    """VEIL 出牌策略开关：环境变量 VEIL_<name>=1 打开、=0 关掉，没设时按 DEFAULT_ON。旧名 HIRO_VEIL_<name> 仍认，
+    两个都设时以新名为准（使用者 2026-11-07：策略开关去掉 HIRO_ 前缀）。"""
     value = os.environ.get(f"VEIL_{name}")
-    return (value if value is not None else os.environ.get(f"HIRO_VEIL_{name}")) == "1"
+    value = value if value is not None else os.environ.get(f"HIRO_VEIL_{name}")
+    if value in ("0", "1"):
+        return value == "1"
+    return name in DEFAULT_ON
 
 
 def keep_warm():
@@ -38,14 +45,14 @@ def keep_warm():
 def hp_guard():
     """VEIL_HP_GUARD=1：清牌阶段按姿态和消耗加成算出牌实际掉的体力，跌破保底线的不打；強気下不改姿态的掉血牌留到温存；
     強気下优先打切回温存的牌
-    （使用者 2026-11-07：脚本在強気、一心不乱加成后、元気不足时照打高消耗牌，trace 里一张牌 25→4）。默认关，回放验证后再开。"""
+    （使用者 2026-11-07：脚本在強気、一心不乱加成后、元気不足时照打高消耗牌，trace 里一张牌 25→4）。默认开（=0 关；22 个 trace 回放后打开，使用者 2026-11-07）。"""
     return _flag("HP_GUARD")
 
 
 def release_gain():
     """VEIL_RELEASE_GAIN=1：温存 / のんびり 下打「強気に変更」的牌，按「先结算牌、再结算夜空」算温存解除的 +1 出牌次数——
     夜空只剩 1 次、最终变成のんびり时也算（原来算 0，于是手里有 エンターテイナー+、巻き返し+ 也去喝ホエイ）。
-    实机 codex-20261107-1 第 1 局 R2 剩 8 回合：喝了ホエイ再打这两张，打完同回合还剩 1 次（trace 第 23 步）。默认关，回放验证后再开。"""
+    实机 codex-20261107-1 第 1 局 R2 剩 8 回合：喝了ホエイ再打这两张，打完同回合还剩 1 次（trace 第 23 步）。默认开（=0 关；22 个 trace 回放后打开，使用者 2026-11-07）。"""
     return _flag("RELEASE_GAIN")
 
 
@@ -60,14 +67,8 @@ def fp_reserve():
 def draw_last():
     """VEIL_DRAW_LAST=1：清牌时好几张都能加出牌次数，先打不抽牌、也不改姿态的那张（みずたまりスキップ 等），
     带抽牌的（インフルエンサー+、フルスロットル+、仕切り直し+）留后：手牌少了，抽进来的牌不会因手牌满而作废
-    （使用者 2026-11-07，验证局 R1 剩 7 回合：满手先打了 インフルエンサー+ / フルスロットル+，みずたまりスキップ 留到最后）。默认关。"""
+    （使用者 2026-11-07，验证局 R1 剩 7 回合：满手先打了 インフルエンサー+ / フルスロットル+，みずたまりスキップ 留到最后）。默认开（=0 关；22 个 trace 回放后打开，使用者 2026-11-07）。"""
     return _flag("DRAW_LAST")
-
-
-def free_extra():
-    """VEIL_FREE_EXTRA=1：过渡阶段「等待下回合」之前，先打不改姿态、不抽牌、自己补回出牌次数的一次性牌（みずたまりスキップ+）。
-    验证局 R2 剩 8 回合它留在手里等过渡结束（使用者 2026-11-07：「不会吃亏」）。默认关。"""
-    return _flag("FREE_EXTRA")
 
 
 def clear_first():
@@ -80,14 +81,14 @@ def clear_first():
 def drive_fp():
     """VEIL_DRIVE_FP=1：清牌阶段手里 アイドルになります+ / 巻き返し+ 因全力値不够发灰、又没有别的可打的加全力値牌时，
     打 オーバードライブ+（全力値+2、自带再动）攒全力値。原来清牌一律不打 オーバードライブ，它又是唯一的全力値来源，
-    全力値永远 0、两张一直灰着（使用者 2026-11-07，验证局 1-f R2 剩 7–1 回合：死循环）。默认关。"""
+    全力値永远 0、两张一直灰着（使用者 2026-11-07，验证局 1-f R2 剩 7–1 回合：死循环）。默认开（=0 关；22 个 trace 回放后打开，使用者 2026-11-07）。"""
     return _flag("DRIVE_FP")
 
 
 def fp_cap():
     """VEIL_FP_CAP=1：清牌阶段别把全力値加到 FULL_POWER_AT（满了下回合自动进全力、全力値清零）。有别的牌可打时，
     不打会让全力値到顶的加全力値牌。验证局 codex-20261107-1-c R2：プライド +3、成果+ +4、涙の思い出+ +4 在 T3 加到 11，
-    T4 自动全力打的全是清牌牌，之后 T6–T10 全力値 0，巻き返し+ / アイドルになります+ 打不出。默认关，回放验证后再开。"""
+    T4 自动全力打的全是清牌牌，之后 T6–T10 全力値 0，巻き返し+ / アイドルになります+ 打不出。默认开（=0 关；22 个 trace 回放后打开，使用者 2026-11-07）。"""
     return _flag("FP_CAP")
 
 
@@ -549,13 +550,6 @@ class VeilAdvisor:
                 raise ResumeBlocked("VEIL 过渡无法确认当前姿态或下回合切换")
             if need_warm and REBOUND in by_name and REBOUND not in played:
                 return play(by_name[REBOUND], "过渡：切回温存")
-            if free_extra():
-                # 不改姿态、不抽牌、自己补回出牌次数的一次性牌（みずたまりスキップ+）：打掉不花出牌次数，还从牌库清掉一张
-                free = next((c for c in eligible if c.tags.once and c.tags.extra_actions and not c.tags.draws
-                             and destination(c) is None and norm(c.name) not in CORE
-                             and f"play:{c.slot}" in actions), None)
-                if free:
-                    return play(free, "过渡：先打不改姿态的再动牌")
             if clear_first():
                 # 使用者 2026-11-07（1-g R1）：过渡尽量从五卡缩到四卡。过渡要打的（教えて / 推花 / 切温存）都打完、本来要等下回合时，
                 # 用剩下的出牌次数清掉不碍事的一次性牌（ひと呼吸+、アイドルになります+、眠気 等）。花全力値可以：循环第一张
@@ -857,6 +851,9 @@ class VeilAdvisor:
                     return play(max(fit, key=priority), "清牌：先打抽得少、手牌不溢出的再动牌")
         if release_first and count == 1 and len(eligible) > 1 and not gains_now(best):
             gainer = max((c for c in eligible if gains_now(c)), key=priority, default=None)
+            # 一次性优先（CLEAR_FIRST / KEEP_WARM）时，best 是一次性牌、又没有ホエイ 要省：不拿复用牌（切強気用掉温存）插队
+            if gainer is not None and (keep or clear_first()) and clears(best) and not clears(gainer) and WHEY not in drinks:
+                gainer = None
             if gainer is not None:
                 return play(gainer, "清牌：先打能加出牌次数的牌，不用ホエイ")
         if count == 1 and (len(eligible) > 1 or unlocks(best)) and not gains_now(best) and WHEY in drinks:

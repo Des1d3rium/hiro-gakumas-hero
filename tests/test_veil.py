@@ -132,7 +132,9 @@ def test_cycle_rechecks_fifth_card_after_core_and_does_not_skip_if_unavailable()
     assert choose(state, mem) == "play:4"
 
 
-def test_clear_flower_trigger_enables_gatagoto_and_closes_isshin():
+def test_clear_flower_trigger_enables_gatagoto_and_closes_isshin(monkeypatch):
+    # 合成局面的 強気 没写段階，体力闸按 2 段階每张另扣 3 估，会改排序；这条只测夜空触发
+    monkeypatch.setenv("VEIL_HP_GUARD", "0")
     strong = card(0, "強気牌+", "強気に変更", once=True)
     extra = card(1, "其他一次性牌+", once=True)
     extra.badge_score = 10
@@ -369,7 +371,7 @@ def test_hp_loss_uses_stance_and_isshin_from_master_data():
 
 
 def test_hp_guard_off_keeps_old_strong_priority(monkeypatch):
-    monkeypatch.delenv("VEIL_HP_GUARD", raising=False)
+    monkeypatch.setenv("VEIL_HP_GUARD", "0")
     strong = costly(0, "強気牌+", "強気に変更", 4)
     warm = costly(1, "温存牌+", "温存に変更", 3)
     state, mem = case(strong, warm, status="強気")
@@ -411,7 +413,7 @@ def _flower_one_hand():
 
 
 def test_release_gain_off_keeps_old_whey(monkeypatch):
-    monkeypatch.delenv("VEIL_RELEASE_GAIN", raising=False)
+    monkeypatch.setenv("VEIL_RELEASE_GAIN", "0")
     state, mem = _flower_one_hand()
     assert choose(state, mem) == "drink:0"
 
@@ -434,7 +436,7 @@ def _nonbiri_teach_hand():
 
 
 def test_release_gain_off_drinks_whey_in_nonbiri(monkeypatch):
-    monkeypatch.delenv("VEIL_RELEASE_GAIN", raising=False)
+    monkeypatch.setenv("VEIL_RELEASE_GAIN", "0")
     state, mem = _nonbiri_teach_hand()
     assert choose(state, mem) == "drink:0"  # 旧行为（实机 1-i 的问题）
 
@@ -508,7 +510,7 @@ def test_draw_last_plays_plain_extra_action_before_drawing_one(monkeypatch):
     hand = [full, puddle, card(2, "頂点へ", once=True), card(3, "心・技・体", "強気2段階目に変更", once=True),
             card(4, "ひと呼吸+", once=True)]
     state, mem = case(*hand)
-    monkeypatch.delenv("VEIL_DRAW_LAST", raising=False)
+    monkeypatch.setenv("VEIL_DRAW_LAST", "0")
     assert choose(state, mem) == "play:0"  # 开关关：旧顺序，抽牌的先打
     monkeypatch.setenv("VEIL_DRAW_LAST", "1")
     assert choose(state, mem) == "play:1"
@@ -530,15 +532,17 @@ def test_draw_last_allows_stance_change_when_total_gain_kept(monkeypatch):
     assert choose(state, mem) == "play:2"
 
 
-def test_free_extra_in_transition(monkeypatch):
-    """验证局 R2 剩 8 回合：过渡阶段该等下回合时，みずたまりスキップ+（不改姿态、不抽牌、补回次数）先打掉。"""
+def test_free_extra_in_transition_covered_by_clear_first(monkeypatch):
+    """验证局 R2 剩 8 回合：过渡阶段该等下回合时，みずたまりスキップ+（不改姿态、不抽牌、补回次数）先打掉。
+    原 VEIL_FREE_EXTRA 已删（2026-11-07 回放：唯一一步与 CLEAR_FIRST 过渡分支决定相同），由 CLEAR_FIRST 覆盖。"""
     puddle = card(4, "みずたまりスキップ+", "体力消費1元気+8スキルカード使用数追加+1", once=True)
     cards = [card(i, n) for i, n in enumerate((DRIVE, REBOUND, TEACH, ENTERTAINER))] + [puddle]
     state, mem = case(*cards, deck=[], status="次のターン開始時、温存に変更", flower=2)
     state.piles["next_draw"] = 4
-    monkeypatch.delenv("VEIL_FREE_EXTRA", raising=False)
+    monkeypatch.delenv("VEIL_CLEAR_FIRST", raising=False)
+    monkeypatch.setenv("VEIL_FREE_EXTRA", "1")  # 旧开关不再起作用
     assert choose(state, mem) == "skip"
-    monkeypatch.setenv("VEIL_FREE_EXTRA", "1")
+    monkeypatch.setenv("VEIL_CLEAR_FIRST", "1")
     assert choose(state, mem) == "play:4"
 
 
@@ -576,7 +580,7 @@ def test_fp_cap_avoids_filling_full_power_in_clear(monkeypatch):
     mem.strategy_data["veil_fp"] = 2
     state.hand = [big, other]
     big_first = choose(state, mem)
-    monkeypatch.delenv("VEIL_FP_CAP")
+    monkeypatch.setenv("VEIL_FP_CAP", "0")
     assert big_first == choose(state, mem)  # 加不满时与关开关一致
 
 
@@ -679,7 +683,7 @@ def test_drive_fp_breaks_zero_fullpower_deadlock(monkeypatch):
     state.hp = 8
     mem.strategy_data["veil_fp"] = 0
     monkeypatch.setenv("VEIL_HP_GUARD", "1")
-    monkeypatch.delenv("VEIL_DRIVE_FP", raising=False)
+    monkeypatch.setenv("VEIL_DRIVE_FP", "0")
     assert choose(state, mem) == "skip"
     monkeypatch.setenv("VEIL_DRIVE_FP", "1")
     assert choose(state, mem) == "play:0"
@@ -745,7 +749,7 @@ def test_transition_drives_fp_when_rebound_starved(monkeypatch):
     drive = card(3, DRIVE, "強気に変更パラメータ+4全力値+2スキルカード使用数追加+1次のターン、温存に変更")
     state, mem = case(teach, breath, rebound, drive, deck=[ENTERTAINER], status="強気", flower=1)
     mem.strategy_data["veil_fp"] = 0
-    monkeypatch.delenv("VEIL_DRIVE_FP", raising=False)
+    monkeypatch.setenv("VEIL_DRIVE_FP", "0")
     assert choose(state, mem) == "play:0"
     monkeypatch.setenv("VEIL_DRIVE_FP", "1")
     assert choose(state, mem) == "play:3"
@@ -998,6 +1002,7 @@ def test_star_turns_nonbiri_at_turn_start():
 def test_hand_swap_card_played_last(monkeypatch):
     """1-h R2 剩 10：強気、3 次出牌，仕切り直し+（手札をすべて入れ替える、+1、抽 2）先打，把一次性牌 頂点へ+ 换回牌库。"""
     monkeypatch.setenv("VEIL_CLEAR_FIRST", "1")
+    monkeypatch.setenv("VEIL_HP_GUARD", "0")  # 合成 強気 没写段階，体力闸会把两张都当掉血牌留到温存
     reset = card(0, "仕切り直し+", "手札をすべて入れ替える消費体力減少4ターンスキルカード使用数追加+1スキルカードを2枚引く", once=True)
     peak = card(1, "頂点へ+", "すべてのスキルカードのパラメータ値増加+6以降、ターン開始時、いずれかの指針の場合、すべてのスキルカードのパラメータ値増加+4", once=True)
     state, mem = case(reset, peak, status="強気", flower=1, actions_left=3)
@@ -1314,7 +1319,8 @@ def test_custom_master_same_name_copies_only_shared_items(monkeypatch):
     ({"VEIL_DRAW_LAST": "1"}, True),
     ({"HIRO_VEIL_DRAW_LAST": "1"}, True),                              # 旧名仍认
     ({"VEIL_DRAW_LAST": "0", "HIRO_VEIL_DRAW_LAST": "1"}, False),     # 两个都设：新名为准
-    ({}, False),
+    ({"HIRO_VEIL_DRAW_LAST": "0"}, False),                             # 旧名也能关
+    ({}, True),                                                         # 默认开（2026-11-07 回放后）
 ])
 def test_strategy_flags_drop_hiro_prefix(monkeypatch, env, expected):
     from hiro.brain import veil
@@ -1324,3 +1330,27 @@ def test_strategy_flags_drop_hiro_prefix(monkeypatch, env, expected):
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     assert veil.draw_last() is expected
+
+
+def test_strategy_flag_defaults(monkeypatch):
+    """2026-11-07 回放后：HP_GUARD / RELEASE_GAIN / DRAW_LAST / DRIVE_FP / FP_CAP 默认开；CLEAR_FIRST / FP_RESERVE / KEEP_WARM 默认关。"""
+    from hiro.brain import veil
+
+    for name in ("KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP"):
+        monkeypatch.delenv(f"VEIL_{name}", raising=False)
+        monkeypatch.delenv(f"HIRO_VEIL_{name}", raising=False)
+    on = {f.__name__ for f in (veil.hp_guard, veil.release_gain, veil.draw_last, veil.drive_fp, veil.fp_cap) if f()}
+    assert on == {"hp_guard", "release_gain", "draw_last", "drive_fp", "fp_cap"}
+    assert not (veil.clear_first() or veil.fp_reserve() or veil.keep_warm())
+    assert not hasattr(veil, "free_extra")
+
+
+def test_release_gain_yields_to_clear_first_without_whey(monkeypatch):
+    """CLEAR_FIRST 开、温存 1 次出牌、没有ホエイ：一次性 頂点へ+ 先打，不让 教えてあげる+ 切強気插队；有ホエイ 时照旧先打加次数的牌。"""
+    monkeypatch.setenv("VEIL_CLEAR_FIRST", "1")
+    teach = card(0, TEACH, "強気に変更パラメータ+6次のターン、スキルカードを2枚引く")
+    peak = card(1, "頂点へ+", "すべてのスキルカードのパラメータ値増加+6", once=True)
+    state, mem = case(teach, peak)
+    assert choose(state, mem) == "play:1"
+    state, mem = case(teach, peak, drinks=(WHEY,))
+    assert choose(state, mem) == "play:0"
