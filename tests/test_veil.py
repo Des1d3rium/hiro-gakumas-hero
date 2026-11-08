@@ -422,6 +422,29 @@ def test_release_gain_plays_entertainer_instead_of_whey(monkeypatch):
     assert choose(state, mem) == "play:0"  # 先结算牌：温存→強気 解除 +1，夜空再把強気改成のんびり
 
 
+def _nonbiri_teach_hand():
+    # 实机 codex-20261107-1-i 第 1 局 R2 剩 10 回合（T3）：のんびり、夜空剩 1、出牌 1 次；手里 教えてあげる+、演出計画++（一次性）、
+    # アイドルになります++（全力値不够、灰）；开关关时喝了ホエイ，打完两张还剩 1 次出牌跳过——ホエイ白喝
+    from dataclasses import replace as _replace
+
+    teach = card(0, "教えてあげる+", "強気に変更パラメータ+6熱意追加+2（2ターン）次のターン、スキルカードを2枚引く")
+    plan = card(1, "演出計画++", "絶好調5ターン以降、アクティブスキルカード使用時、固定元気+2", once=True)
+    idol = _replace(card(2, "アイドルになります++", "全力値消費3元気+9温存に変更スキルカード使用数追加+1", once=True), available=False)
+    return case(teach, plan, idol, status="のんびり", flower=1, drinks=(WHEY,))
+
+
+def test_release_gain_off_drinks_whey_in_nonbiri(monkeypatch):
+    monkeypatch.delenv("HIRO_VEIL_RELEASE_GAIN", raising=False)
+    state, mem = _nonbiri_teach_hand()
+    assert choose(state, mem) == "drink:0"  # 旧行为（实机 1-i 的问题）
+
+
+def test_release_gain_plays_strong_card_before_whey_in_nonbiri(monkeypatch):
+    monkeypatch.setenv("HIRO_VEIL_RELEASE_GAIN", "1")
+    state, mem = _nonbiri_teach_hand()
+    assert choose(state, mem) == "play:0"  # のんびり 下打強気牌：夜空触发、回到のんびり、+1 出牌，不用ホエイ
+
+
 # ---------------------------------------------------------------- 全力値账本（账本优先，画面只作参考）
 def _fp_cards():
     # 牌面文字取主数据原文（去掉 <nobr>）
