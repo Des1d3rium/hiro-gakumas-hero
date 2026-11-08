@@ -109,6 +109,8 @@ def _fallback(img) -> str | None:
     from hiro.vision.items import drink_full_badge
     from hiro.vision.quick import fallback_page
 
+    if img is None or img.shape[0] < img.shape[1]:
+        return None  # 横屏（LIVE / 游戏被杀后的安卓桌面）：这些兜底都按竖屏坐标裁图，会裁出空图（GKMS 第五局 cvtColor 断言）
     fb = fallback_page(img)
     if fb is not None:
         return fb

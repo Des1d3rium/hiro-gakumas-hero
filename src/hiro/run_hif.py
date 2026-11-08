@@ -66,7 +66,7 @@ def _supervised_resume(scenario, idol, session, Strategy=None) -> None:
     from hiro.loop.date_change import DateChanged
     from hiro.loop.resume import ResumeBlocked, run as resume_run
 
-    attempt = date_changes = 0
+    attempt = date_changes = relaunches = 0
     while True:
         try:
             resume_run(scenario, Strategy or load_strategy(), HiroController, idol=idol)
@@ -79,6 +79,11 @@ def _supervised_resume(scenario, idol, session, Strategy=None) -> None:
                 raise ResumeBlocked("日期切换后没能回到首页，需要人工处理") from None
             logger.info("日期切换已处理（第 %d 次），从首页续跑", date_changes)
         except Exception as e:
+            if _game_gone(session, e):
+                relaunches += 1
+                if relaunches > MAX_RELAUNCHES or not _relaunch_game(session):
+                    raise ResumeBlocked("学マス不在前台，重新拉起后没能回到首页，需要人工处理") from e
+                continue
             if attempt >= MAX_CRASH_RESTARTS:
                 raise
             attempt += 1
@@ -108,7 +113,35 @@ def _refill_ap(scenario) -> bool:
     return bool(r["ok"])
 
 
-def _recover_date_change(session) -> bool:
+MAX_RELAUNCHES = 2
+
+
+def _game_gone(session, err: Exception) -> bool:
+    """主循环异常时查一下学マス还在不在前台（安卓后端）。不在：开关 HIRO_RELAUNCH_GAME=1 时返回 True 交给 _relaunch_game；
+    开关关着就抛 ResumeBlocked 讲清原因（以前当普通崩溃重试 5 次，每次都截到横屏桌面、裁空图崩在识别里）。"""
+    from hiro.loop import game_app
+    from hiro.loop.resume import ResumeBlocked
+
+    if game_app.foreground(game_app.adb_shell()) is not False:
+        return False
+    logger.error("主循环异常时学マス不在前台（进程被杀 / 闪退？）：%r", err)
+    if not game_app.enabled():
+        raise ResumeBlocked("学マス不在前台（进程被杀 / 闪退？内存吃紧时 MuMu 会杀游戏）。请重新打开游戏后续跑，"
+                            "或设 HIRO_RELAUNCH_GAME=1 让程序自己拉起") from err
+    return True
+
+
+def _relaunch_game(session) -> bool:
+    """am start 拉起学マス，再按日期切换同一条路（标题页 → 首页）回首页；之后从「プロデュース中」续跑。"""
+    from hiro.loop import game_app
+
+    session.recover("crash_restart", "学マス不在前台：重新拉起游戏，回首页续跑")
+    if not game_app.relaunch(game_app.adb_shell()):
+        return False
+    return _recover_date_change(session, note=None)
+
+
+def _recover_date_change(session, note: str | None = "游戏日切换「日付変更」：回首页后续跑") -> bool:
     """日期切换：タイトルへ → TAP TO START → 登录奖励 → 首页。"""
     from kaa.tasks.actions.scenes import at_home
     from kotonebot import device
@@ -116,7 +149,8 @@ def _recover_date_change(session) -> bool:
     from hiro.loop.date_change import recover_to_home
     from hiro.produce.ops import ocr_boxes
 
-    session.recover("date_change", "游戏日切换「日付変更」：回首页后续跑")
+    if note:
+        session.recover("date_change", note)
     return recover_to_home(device.screenshot, lambda x, y: device.click(x, y), ocr_boxes, lambda img: at_home())
 
 

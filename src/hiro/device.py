@@ -267,6 +267,7 @@ PLAYCOVER_BACKENDS = ("maatools", "quartz")
 KAA_BACKENDS = {"adb": "custom", "mumu": "mumu12v5", "leidian": "leidian", "dmm": "dmm"}  # HIRO_DEVICE → KAA lifecycle.type
 BACKENDS = ("auto", *PLAYCOVER_BACKENDS, *KAA_BACKENDS)
 BACKEND: str | None = None  # connect() 实际选中的后端；PlayCover 专用的退路（横屏全屏、真实鼠标点击）看它决定开不开
+DEVICE = None  # connect() 建的设备（hiro.loop.game_app 从里面取 adb shell 查前台应用 / 拉起游戏）
 
 
 def requested_backend() -> str:
@@ -352,7 +353,7 @@ def connect(backend: str | None = None) -> Device:
     backend：缺省读 HIRO_DEVICE（auto / maatools / quartz / adb / mumu / leidian / dmm）。
     adb / mumu / leidian / dmm 交给 KAA 的设备工厂，要求先 hiro.kaa_env.init_kaa（KAA 配置里有后端设置）。
     """
-    global BACKEND
+    global BACKEND, DEVICE
     name = resolve_backend(backend)
     conf().device.default_scaler_factory = lambda: PortraitGameScaler()
     conf().device.default_logic_resolution = Size(720, 1280)
@@ -376,7 +377,7 @@ def connect(backend: str | None = None) -> Device:
                 raise RuntimeError("PlayCover 中找不到学マス")
             quartz = QuartzImpl(device=device, window_query=app._window_query)
             device.setup(screenshot=quartz, touch=PostToPidTouch(device, quartz))
-    BACKEND = name
+    BACKEND, DEVICE = name, device
     logger.info("设备后端：%s", name)
     device.start()
     device.screenshot()  # 缩放器要靠首张截图确定物理分辨率，之后才能换算点击坐标

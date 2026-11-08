@@ -426,7 +426,9 @@ class HiroController(ProduceController):
             return False
         from kotonebot import device
 
-        if self._landscape is not None and self._landscape.in_live(device.screenshot()):
+        shot = device.screenshot()
+        self._check_game_alive(shot)
+        if self._landscape is not None and self._landscape.in_live(shot):
             self._unknown_since = None  # LIVE 横屏演出：认不出是正常的，不计时（q8 LIVE 会被 3 分钟停下）
             return False
         now = time.monotonic()
@@ -454,6 +456,15 @@ class HiroController(ProduceController):
         if now - since >= self.UNKNOWN_STOP_AFTER:
             self.strategy._stop("unknown", f"画面持续 {now - since:.0f}s 认不出（{' / '.join(texts)}）")
         return False
+
+    @staticmethod
+    def _check_game_alive(img) -> None:
+        """横屏又认不出：可能是 LIVE，也可能是学マス被杀后的安卓桌面（GKMS 第五局）。安卓后端查一下前台应用，
+        不是学マス就抛 GameNotForeground，交给 run_hif 的续跑看守（HIRO_RELAUNCH_GAME=1 时重新拉起，否则讲清原因停下）。"""
+        from hiro.loop import game_app
+
+        if game_app.is_landscape(img) and game_app.foreground(game_app.adb_shell()) is False:
+            raise game_app.GameNotForeground("学マス不在前台（截到横屏桌面）")
 
     _rescuer = None  # hiro.loop.rescue.Rescuer，首次用到时创建（整局共用：同屏计数、10 分钟次数上限、本局统计）
 

@@ -84,7 +84,11 @@ def recover_to_home(shoot: Callable, click: Callable[[int, int], None], ocr: Cal
             return True
         boxes = ocr(img)
         texts = [(_norm(t), b) for t, _, b in boxes]
-        if pos := date_change_button(boxes):
+        if no_boost := next((_center(b) for t, b in texts if t == MUMU_NO_BOOST), None):
+            # MuMu 拉起游戏时的「是否为《学マス》开启 MuMu 加速服务?」：点「不加速」（第十五局、GKMS 第五局都是这么处理的）
+            logger.info("回首页：MuMu 加速服务提示，点「不加速」")
+            click(*no_boost)
+        elif pos := date_change_button(boxes):
             logger.info("日期切换 / 数据更新：点「タイトルへ」")
             click(*pos)
         elif any(any(k in t for k in DOWNLOAD_HINTS) for t, _ in texts):
@@ -109,6 +113,9 @@ def recover_to_home(shoot: Callable, click: Callable[[int, int], None], ocr: Cal
         sleep(interval)
     logger.warning("日期切换：%.0fs 内没回到首页", timeout)
     return False
+
+
+MUMU_NO_BOOST = "不加速"  # MuMu 加速服务提示的取消按钮（另一个是「立即加速」）
 
 
 DIALOG_STRIP = (880, 1240)  # 弹窗标题「日付変更」y≈973、按钮「タイトルへ」y≈1159（2026-10-30 实拍）；只 OCR 这一条，约 0.2s（整帧约 2s）
