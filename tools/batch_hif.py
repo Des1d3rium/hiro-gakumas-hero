@@ -1214,6 +1214,9 @@ def change(state, args, *, persist=None):
             state["debug_retries"] = plan
         else:
             state.pop("debug_retries", None)
+        if persist is not None:
+            # 有返回值时 main 不再 save：这里自己写盘（codex-20261108-3-c：原来只打印 ok、文件不变）
+            persist()
         return {"ok": True, "debug_retries": plan, "used": (state.get("active") or {}).get("debug_retries_used")}
     if cmd == "preflight":
         if state["active"] or state["completed"] or state["preflight"]:

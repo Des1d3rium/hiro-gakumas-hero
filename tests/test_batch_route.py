@@ -685,6 +685,19 @@ def test_debug_retries_command_sets_and_clears_plan():
     assert "debug_retries" not in state
 
 
+def test_debug_retries_command_writes_state_file(tmp_path, monkeypatch, capsys):
+    """codex-20261108-3-c：debug-retries 打印 ok 但文件没变（main 有返回值就跳过 save）。走 main 一遍，核对文件。"""
+    import json
+
+    monkeypatch.setattr(B, "STATE_DIR", tmp_path)
+    path = tmp_path / "t.json"
+    path.write_text(json.dumps({"total": 3, "completed": [], "preflight": {"idol": B.VEIL_IDOL},
+                                "active": {"run": 1, "phase": "playing"}, "debug_retries": {"1": 2, "2": 1}}), encoding="utf-8")
+    monkeypatch.setattr(B.sys, "argv", ["batch_hif.py", "--batch", "t", "debug-retries", "2,0"])
+    assert B.main() == 0
+    assert json.loads(path.read_text(encoding="utf-8"))["debug_retries"] == {"1": 2, "2": 0}
+
+
 def test_debug_retry_on_final_result_page(debug_retry):
     # codex-20261108-3 第 1 局：R2 结束的最终结果页没有「ラウンド2結果」（左上「優勝」+「現在順位」，分数旁带「+620,548」），
     # 原来认不出，计划的 1 次 R2 再挑戦没点
