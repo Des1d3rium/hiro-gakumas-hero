@@ -284,3 +284,67 @@ def _no_live_deck_list_frames(monkeypatch):
         return
     monkeypatch.setattr(DR, "SAVE_DIR", None)
     monkeypatch.setattr(DR, "_save", lambda imgs: None)
+
+
+def _under_fixtures(path) -> Path | None:
+    """path 在 tests/fixtures 下（含 HIRO_FIXTURES 软链）就返回相对路径，否则 None。"""
+    try:
+        p = Path(os.fspath(path))
+    except TypeError:
+        return None
+    for root in {FIXTURES, FIXTURES.resolve()}:
+        try:
+            return p.resolve().relative_to(root.resolve()) if p.is_absolute() else Path(os.path.abspath(p)).relative_to(root)
+        except (ValueError, OSError):
+            continue
+    return None
+
+
+def _patch_imread() -> None:
+    """只放了部分截图样例时（例如 tools/fixtures/build_local.py 从自己的截图 / trace 生成的那几十张），
+    缺哪张就只跳过读它的那条用例（模块 / 夹具级读图时跳过整组），别的照常跑；
+    原来只要 tests/fixtures 非空就全部开跑，缺图的几百条都会报错。在 conftest 导入时就换掉 cv2.imread，模块级夹具也生效。"""
+    if not HAVE_FIXTURES:
+        return
+    try:
+        import cv2
+    except ImportError:
+        return
+    real = cv2.imread
+    if getattr(real, "_hiro_fixture_guard", False):
+        return
+
+    def imread(path, *args, **kwargs):
+        rel = _under_fixtures(path)
+        if rel is not None:
+            path = os.path.normpath(os.fspath(path))  # finals/../trace/x.jpg：finals 目录不在时也要找得到
+        if rel is not None and not Path(path).is_file():
+            pytest.skip(f"缺截图样例 tests/fixtures/{rel.as_posix()}", allow_module_level=True)
+        return real(path, *args, **kwargs)
+
+    imread._hiro_fixture_guard = True
+    cv2.imread = imread
+
+
+_patch_imread()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """读 tests/fixtures 里不存在的文件（json 真值、npz…）抛 FileNotFoundError：同样按「缺样例」跳过。"""
+    outcome = yield
+    report = outcome.get_result()
+    if not HAVE_FIXTURES or call.excinfo is None:
+        return
+    why = None
+    if call.excinfo.errisinstance(FileNotFoundError):
+        rel = _under_fixtures(getattr(call.excinfo.value, "filename", None) or "")
+        why = rel and f"tests/fixtures/{rel.as_posix()}"
+    elif call.excinfo.errisinstance(StopIteration):
+        # next(FLOW.glob("*-idle.jpg")) 这类按通配找样例：目录 / 文件不在时抛 StopIteration
+        lines = [str(e.statement) for e in call.excinfo.traceback if "tests" in str(e.path)]
+        if any(".glob(" in line for line in lines):
+            why = "按通配找的样例文件不在"
+    if why:
+        report.outcome = "skipped"
+        report.longrepr = (str(item.fspath), item.location[1] or 0, f"Skipped: 缺截图样例 {why}")
