@@ -16,7 +16,7 @@ from hiro.brain.battle import BattleBrain
 from hiro.defaults.exam_state import ScreenExamStateSource
 from hiro.loop.errors import ResumeBlocked
 from hiro.brain.veil import (
-    CORE, DRIVE, IDOL, REBOUND, SODA, STANCES, TEACH, WARM, VeilAdvisor,
+    CORE, DRIVE, IDOL, REBOUND, SODA, STANCES, STRATEGY_FLAGS, TEACH, WARM, VeilAdvisor, _flag,
     NEUTRAL, STAR, after_play, destination, flower_count, keeps_nonbiri, full_power_count, keep_warm, next_stance_change, norm,
     stance, stance_level, stance_change_level, start_turn,
 )
@@ -921,7 +921,28 @@ class VeilScreen(ScreenExamStateSource):
                 "fp": data.get("veil_fp"), "fp_gap": data.get("veil_fp_gap"),
                 "fp_boosts": data.get("veil_fp_boosts") or None, "actions_left": memory.actions_left,
                 "cycle": data.get("veil_cycle"), "uncertain": bool(data.get("veil_uncertain")),
-                "uncertain_why": (data.get("veil_uncertain_why") or [None])[-1]}
+                "uncertain_why": (data.get("veil_uncertain_why") or [None])[-1], **self.trace_board(state, memory)}
+
+    def trace_board(self, state, memory) -> dict:
+        """可信 trace 库（使用者 2026-11-07）：决策实际用的牌面。原来 steps.jsonl 只有规整前的手牌（OCR 漏 / 多「+」），
+        牌堆 / 弃牌堆 / 除外区只在考试记忆里，回放只能从账本倒推。
+        hand：规整 + 客制化后的手牌 [槽位, 名字, 卡 id, 强化, 能打, 一次性]；piles：牌堆 / 弃牌堆 / 位置不明（多重集合，不知道顺序）；
+        excluded：开场牌组里已经打出离开的一次性牌；deck：当前牌组账本（含衍生的眠気）；
+        undone：本回合撤回过的出牌次数（画面延迟、点错）；flags：VEIL 策略开关的实际取值。"""
+        data = memory.strategy_data
+        piles = state.piles or {}
+        initial, deck = Counter(data.get("veil_initial") or {}), Counter(data.get("veil_deck") or {})
+        return {
+            "hand": [[c.slot, norm(c.name), c.card_id, c.upgrade, c.available, bool(c.tags.once)] for c in state.hand],
+            "drinks": [d.name for d in state.drinks],
+            "piles": None if not piles else {k: dict(Counter(norm(n) for n in piles.get(k) or [])) for k in ("deck", "grave", "unlocated")},
+            "next_draw": piles.get("next_draw"),
+            "excluded": dict(initial - deck) or None,
+            "deck": dict(deck) or None,
+            "played": [a[2:] for a in memory.this_turn if a.startswith("打 ")],
+            "undone": sum(1 for u in data.get("veil_undo_log") or [] if u.get("turn") == memory.turn),
+            "flags": {name: _flag(name) for name in STRATEGY_FLAGS},
+        }
 
     def read(self, frame, memory):
         from hiro.vision.hif import read_hif_exam

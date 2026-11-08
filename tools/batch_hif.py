@@ -1276,6 +1276,16 @@ def change(state, args, *, persist=None):
                             retry_drinks=snaps.get(str(args.round)))  # fmt: skip
         except ResumeBlocked as e:
             raise ValueError(str(e)) from e
+        if out.get("trace"):
+            # 可信 trace 自检（使用者 2026-11-07）：结论写进 <trace>/trust.json，这里只带摘要；自检出错不影响考试结果
+            try:
+                sys.path.insert(0, str(ROOT / "tools" / "audit"))
+                import trace_trust
+
+                t = trace_trust.check(Path(out["trace"]))
+                out["trust"] = {"trusted": t["trusted"], "steps": t["steps"], "bad_steps": t["bad_steps"], "first": t["problems"][:3]}
+            except Exception as e:  # noqa: BLE001
+                out["trust"] = {"error": f"{type(e).__name__}: {e}"}
         if ledger is not None:
             snapshot = snaps.get(str(args.round))
             restored_drinks = bool(out.get("retry") and snapshot is not None)

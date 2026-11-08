@@ -24,6 +24,29 @@ from hiro.contracts.observation import Observation
 from hiro.contracts.preview import Preview
 
 TRACES = Path("traces")
+_SECRET = ("KEY", "TOKEN", "SECRET", "PASSWORD", "COOKIE")
+
+
+def run_config(env=None, root: Path | None = None) -> dict[str, Any]:
+    """可信 trace 库（使用者 2026-11-07）：每段运行记下所有 HIRO_* / VEIL_* 环境变量的实际值（名字里带 KEY / TOKEN 等的不记）、
+    代码提交号、工作区有没有未提交的改动。原来 run.json 只有偶像 / 轮次，回放分不清当时开着哪些开关、跑的哪版代码。"""
+    import os
+    import subprocess
+
+    env = os.environ if env is None else env
+    flags = {k: v for k, v in sorted(env.items())
+             if k.startswith(("HIRO_", "VEIL_")) and not any(w in k.upper() for w in _SECRET)}
+    root = root or Path(__file__).resolve().parents[3]
+
+    def git(*args):
+        try:
+            r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=5)
+            return r.stdout.strip() if r.returncode == 0 else None
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    status = git("status", "--porcelain", "--untracked-files=no")
+    return {"env": flags, "commit": git("rev-parse", "HEAD"), "dirty": None if status is None else bool(status)}
 
 
 @dataclass
@@ -57,7 +80,7 @@ class TraceWriter:
         self.seq = _last_seq(self.dir)
         self._steps = (self.dir / "steps.jsonl").open("a", encoding="utf-8")
         run = self.dir / "run.json"
-        this = {"started": time.time(), **(meta or {})}
+        this = {"started": time.time(), **(meta or {}), "config": run_config()}
         try:
             old = json.loads(run.read_text(encoding="utf-8")) if run.exists() else None
         except (OSError, ValueError):
