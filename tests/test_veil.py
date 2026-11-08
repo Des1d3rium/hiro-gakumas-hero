@@ -55,7 +55,8 @@ def test_clear_priority_and_drinks():
 
 
 @pytest.mark.parametrize("flower,order", [(2, [DRIVE, REBOUND, TEACH, ENTERTAINER]), (1, [DRIVE, TEACH, REBOUND, ENTERTAINER])])
-def test_cycle_order_and_resume(flower, order):
+def test_cycle_order_and_resume(flower, order, monkeypatch):
+    monkeypatch.setenv("VEIL_CYCLE_SODA", "0")  # 这条测循环顺序；满手不喝ソーダ 见 test_cycle_soda_waits_for_hand_room
     cards = [card(i, name) for i, name in enumerate([*order, "眠気"])]
     state, mem = case(*cards, flower=flower, deck=[], drinks=(SODA, BOOST, WHEY))
     for slot in (2, 1, 0):
@@ -535,6 +536,7 @@ def test_draw_last_allows_stance_change_when_total_gain_kept(monkeypatch):
 def test_free_extra_in_transition_covered_by_clear_first(monkeypatch):
     """验证局 R2 剩 8 回合：过渡阶段该等下回合时，みずたまりスキップ+（不改姿态、不抽牌、补回次数）先打掉。
     原 VEIL_FREE_EXTRA 已删（2026-11-07 回放：唯一一步与 CLEAR_FIRST 过渡分支决定相同），由 CLEAR_FIRST 覆盖。"""
+    monkeypatch.setenv("VEIL_DRAW_ALL", "0")  # 合成牌库 5 张、下回合抽 4：DRAW_ALL 会先预约抽牌，这条测别的
     puddle = card(4, "みずたまりスキップ+", "体力消費1元気+8スキルカード使用数追加+1", once=True)
     cards = [card(i, n) for i, n in enumerate((DRIVE, REBOUND, TEACH, ENTERTAINER))] + [puddle]
     state, mem = case(*cards, deck=[], status="次のターン開始時、温存に変更", flower=2)
@@ -768,6 +770,7 @@ def test_transition_drives_fp_when_rebound_starved(monkeypatch):
 
 def test_transition_sheds_harmless_once_card(monkeypatch):
     """使用者 2026-11-07（1-g R1）：过渡该做的做完、本来等下回合时，用剩下的次数清掉不碍事的一次性牌，五卡缩成四卡。"""
+    monkeypatch.setenv("VEIL_DRAW_ALL", "0")  # 合成牌库 5 张、下回合抽 4：DRAW_ALL 会先预约抽牌，这条测别的
     breath = card(4, "ひと呼吸+", "好調4ターン集中+5", once=True)
     cards = [card(i, n) for i, n in enumerate((DRIVE, REBOUND, TEACH, ENTERTAINER))] + [breath]
     state, mem = case(*cards, deck=[], status="次のターン開始時、温存に変更", flower=2)
@@ -1336,12 +1339,15 @@ def test_strategy_flag_defaults(monkeypatch):
     """2026-11-07 回放后：HP_GUARD / RELEASE_GAIN / DRAW_LAST / DRIVE_FP / FP_CAP 默认开；CLEAR_FIRST / FP_RESERVE / KEEP_WARM 默认关。"""
     from hiro.brain import veil
 
-    for name in ("KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP"):
+    for name in veil.STRATEGY_FLAGS:
         monkeypatch.delenv(f"VEIL_{name}", raising=False)
         monkeypatch.delenv(f"HIRO_VEIL_{name}", raising=False)
-    on = {f.__name__ for f in (veil.hp_guard, veil.release_gain, veil.draw_last, veil.drive_fp, veil.fp_cap) if f()}
-    assert on == {"hp_guard", "release_gain", "draw_last", "drive_fp", "fp_cap"}
-    assert not (veil.clear_first() or veil.fp_reserve() or veil.keep_warm())
+    on = {f.__name__ for f in (veil.hp_guard, veil.release_gain, veil.draw_last, veil.drive_fp, veil.fp_cap,
+                               veil.draw_all, veil.last_turn_play, veil.cycle_soda, veil.stuck_soda) if f()}
+    # 2026-11-08 复盘后 DRAW_ALL / LAST_TURN / CYCLE_SODA / STUCK_SODA 也默认开
+    assert on == {"hp_guard", "release_gain", "draw_last", "drive_fp", "fp_cap",
+                  "draw_all", "last_turn_play", "cycle_soda", "stuck_soda"}
+    assert not (veil.clear_first() or veil.fp_reserve() or veil.keep_warm() or veil.hp_net())
     assert not hasattr(veil, "free_extra")
 
 

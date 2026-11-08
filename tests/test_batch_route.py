@@ -749,3 +749,14 @@ def test_defeat_white_retry_button_is_not_grey(debug_retry):
     assert B.debug_retry_step(real, dialog=True, img=gray) == ("debug_defeat_retry", (531, 1157))
     assert not B.retry_exhausted("本日あと0回無料再挑戦あと2回")
     assert B.retry_exhausted("再挑戦あと0回")
+
+
+def test_attempt_env_switches_flag_by_attempt():
+    """使用者 2026-11-08：R1 4 次，前两次开体力闸、后两次关。第几次 = 本轮已点的 debug + 敗退再挑戦次数。"""
+    spec = "r1:VEIL_HP_GUARD=1,1,0,0; r2:VEIL_X=7"
+    assert B.attempt_env(spec, 1, {}) == {"VEIL_HP_GUARD": "1"}
+    assert B.attempt_env(spec, 1, {"debug_retries_used": {"1": 1}}) == {"VEIL_HP_GUARD": "1"}
+    assert B.attempt_env(spec, 1, {"debug_retries_used": {"1": 2}}) == {"VEIL_HP_GUARD": "0"}
+    assert B.attempt_env(spec, 1, {"debug_retries_used": {"1": 3}, "retries_used": {"1": 2}}) == {"VEIL_HP_GUARD": "0"}
+    assert B.attempt_env(spec, 2, {"debug_retries_used": {"1": 3}}) == {"VEIL_X": "7"}
+    assert B.attempt_env(None, 1, {}) == {} and B.attempt_env("r2:VEIL_X=1", 1, {}) == {}

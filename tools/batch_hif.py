@@ -289,6 +289,25 @@ def result_next(boxes, dialog: bool):
 # 快速建可信 trace 库。只用免费 / 再挑戦チケット：确认框里有ジュエル、或是敗退的「プロデュース終了」框都不点。
 # 每轮最多 3 次（同 AGENTS.md 再挑戦上限）。计数存在 active.debug_retries_used，watch 重启不重来。
 DEBUG_RETRY_MAX = 3
+def attempt_env(spec, rnd, active) -> dict:
+    """按本轮第几次尝试换开关（使用者 2026-11-08：R1 4 次，前两次开体力闸、后两次关）。
+    HIRO_BATCH_ATTEMPT_ENV 写「r1:VEIL_HP_GUARD=1,1,0,0」，多条用「;」隔开；第 N 次尝试取第 N 个值，超出取最后一个。
+    第几次 = 本轮已点的 debug 再挑戦 + 敗退再挑戦次数（续跑同一次不变）。trace 的 run.json 照常记下实际的 VEIL_* 值。"""
+    out = {}
+    for part in (spec or "").split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        head, _, assign = part.partition(":")
+        name, _, values = assign.partition("=")
+        if head.strip().lower() != f"r{rnd}" or not name.strip() or not values:
+            continue
+        idx = sum(int((active.get(k) or {}).get(str(rnd), 0)) for k in ("debug_retries_used", "retries_used"))
+        vals = [v.strip() for v in values.split(",")]
+        out[name.strip()] = vals[min(idx, len(vals) - 1)]
+    return out
+
+
 DEBUG_RETRY: dict = {"plan": None, "used": {}, "pending": None, "ending": None, "round": None,  # pending：{"round", "at", "confirmed"}；tick 每步从批次状态填 plan / used
                "auto": False, "tickets": False, "auto_used": {}, "saved": None}  # auto：自动模式下普通敗退也点再挑戦（retry.on_defeat=auto）
 RETRY_FRAME_DIR = Path(__file__).resolve().parents[1] / "traces" / "retry-dialogs"  # 不带「無料」的敗退框存帧（校准用券那一行，不进仓库）
@@ -1547,6 +1566,9 @@ def change(state, args, *, persist=None):
                 print(json.dumps({"action": "drink_sync", "round": args.round, "diff": synced}, ensure_ascii=False), file=sys.stderr)
             snaps[str(args.round)] = list(ledger["drinks"])
             persist()
+        if set_env := attempt_env(os.environ.get("HIRO_BATCH_ATTEMPT_ENV"), args.round, active):
+            os.environ.update(set_env)
+            print(json.dumps({"action": "attempt_env", "round": args.round, "env": set_env}, ensure_ascii=False), file=sys.stderr)
         try:
             out = run_round(args.round, deck, f"batch-{args.batch}-{args.run}-exam{args.round}",
                             drinks=ledger["drinks"] if ledger else None,

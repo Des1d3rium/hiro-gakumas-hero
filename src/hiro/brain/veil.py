@@ -24,7 +24,9 @@ HAND_MAX = 5  # 手牌上限：抽牌超出的作废
 
 
 # 默认开的策略开关（使用者 2026-11-07，22 个 trace 回放后定）：设 VEIL_<name>=0 关掉。其余默认关，=1 打开
-DEFAULT_ON = frozenset({"HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP"})
+# 2026-11-08 trusted trace 复盘后：DRAW_ALL / LAST_TURN / CYCLE_SODA / STUCK_SODA 也默认开（使用者确认）；HP_NET 默认关
+DEFAULT_ON = frozenset({"HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP",
+                        "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA"})
 STRATEGY_FLAGS = ("KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP",
                   "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET")
 
@@ -97,25 +99,25 @@ def fp_cap():
 def draw_all():
     """VEIL_DRAW_ALL=1：过渡阶段「要不要打 教えてあげる+ 预约下回合多抽 2 张」按牌库张数判断：下回合抽的张数少于牌库
     （核心 4 张 + 第五张）就预约。原来只看下回合抽 4 / 5 张，センブリソーダ 让下回合抽 4 张时就当成够了。
-    trusted trace codex-20261108-3-c 第 2 局 R2 T5–T8：牌库 5 张、每回合抽 4 张，次次缺一张核心，连空 4 回合（使用者 2026-11-08 确认）。默认关。"""
+    trusted trace codex-20261108-3-c 第 2 局 R2 T5–T8：牌库 5 张、每回合抽 4 张，次次缺一张核心，连空 4 回合（使用者 2026-11-08 确认）。默认开（=0 关）。"""
     return _flag("DRAW_ALL")
 
 
 def last_turn_play():
     """VEIL_LAST_TURN=1：最后一回合（剩 1）不进过渡、不「等待下回合」，按清牌把能打的都打掉，オーバードライブ+ 也算。
-    trusted trace 3 第 2 局 R1 attempt2 T9、3-c 第 1 局 R2 T12：剩 1 回合手里有 エンターテイナー+ 等、还有出牌次数却跳过（使用者 2026-11-08 确认）。默认关。"""
+    trusted trace 3 第 2 局 R1 attempt2 T9、3-c 第 1 局 R2 T12：剩 1 回合手里有 エンターテイナー+ 等、还有出牌次数却跳过（使用者 2026-11-08 确认）。默认开（=0 关）。"""
     return _flag("LAST_TURN")
 
 
 def cycle_soda():
     """VEIL_CYCLE_SODA=1：五卡循环开头手牌放不下 2 张（满 5 / 4 张）时不喝センブリソーダ（当场抽的 2 张作废），
-    最后一回合照喝（只要 +10%）。trusted trace 里 10 次满手进循环喝ソーダ（使用者 2026-11-08 确认）。默认关。"""
+    最后一回合照喝（只要 +10%）。trusted trace 里 10 次满手进循环喝ソーダ（使用者 2026-11-08 确认）。默认开（=0 关）。"""
     return _flag("CYCLE_SODA")
 
 
 def stuck_soda():
     """VEIL_STUCK_SODA=1：清牌阶段还有出牌次数、手里没有一张允许打的牌（不是被体力闸压住）时，手牌放得下就喝センブリソーダ 抽 2 继续清。
-    trusted trace 3-3 第 1 局 R1 attempt2 T3：手牌空、1 次出牌、有ソーダ 却跳过（使用者 2026-11-08：不 optimal）。默认关。"""
+    trusted trace 3-3 第 1 局 R1 attempt2 T3：手牌空、1 次出牌、有ソーダ 却跳过（使用者 2026-11-08：不 optimal）。默认开（=0 关）。"""
     return _flag("STUCK_SODA")
 
 
