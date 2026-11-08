@@ -34,6 +34,7 @@ from hiro.contracts import Action, Decision as DecisionContract, ExecutionResult
 from hiro.perception.lesson import _read_int
 from hiro.produce import ops
 from hiro.recorder import Recorder
+from hiro.produce import hif_buttons as BTN
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ def _hud_int(img, box, kaa_box) -> int | None:
 _DRINK_CACHE = None  # 饮料栏区域缓存（考试中饮料栏很少变，命中时约 1ms）
 
 
-def _drinks(img) -> list[tuple[Drink, tuple]]:
+def _drinks(img, states: list | None = None) -> list[tuple[Drink, tuple]]:
     """饮料栏 → [(Drink, (x, y, w, h))]，从左到右。用识别层的素材包原版图标（hiro.vision.items.read_drink_slots，带区域缓存）；
     只有识别层有没把握的格（state=unknown）且一瓶都没认出时才退回 KAA。实机（2026-10-31 选拔①）KAA 认不出 H.I.F 饮料。
     四格都读成空槽时不退回：第十六局本战 144 步里 113 步饮料栏是空的，KAA 每帧还要再匹配 0.2–0.4s，
@@ -79,6 +80,8 @@ def _drinks(img) -> list[tuple[Drink, tuple]]:
     out, unsure = [], True
     try:
         slots = read_drink_slots(img, cache=_DRINK_CACHE)
+        if states is not None:
+            states[:] = [d["state"] for d in slots]  # 每格 drink / unknown / empty：签名要看「认不出的格」变空
         unsure = any(d["state"] == "unknown" for d in slots)
         for d in slots:
             if d["state"] != "drink":
@@ -122,7 +125,8 @@ class Frame:
         self.hp = _hud_int(img, hif.BOX_HP, boxes.BoxHp)
         self.genki = _hud_int(img, hif.BOX_GENKI, boxes.BoxGenki)
         self.cards = [c for c in locate_cards(img)]  # KAA 定位：只用来取点击位置
-        self.drinks: list[tuple[Drink, tuple]] = _drinks(img)
+        self.drink_states: list[str] = []
+        self.drinks: list[tuple[Drink, tuple]] = _drinks(img, self.drink_states)
         self._hand: list[dict] | None | bool = False  # 识别层手牌，按需读（见 hand）
         # 局面来源确认了饮料实际栏位（state.drinks 的 slot = 饮料栏 0–3 的物理位置）时置 True：
         # 点饮料只认该栏位上的那瓶，不按 drink_id 在别的栏位找、也不盲点空栏（见 _screen_slot）
@@ -153,7 +157,10 @@ class Frame:
     @property
     def signature(self) -> tuple:
         hand = tuple((c.card.name if c and c.card else None, c.available if c else None) for c in self.cards)
-        return (self.remaining, self.hp, self.genki, hand, tuple(d.name if d else None for d, _ in self.drinks))
+        # 饮料：认出的名字 + 每格占用情况。验证局 1-d R2 剩 10 回合：第 3 瓶ホエイ 认不出（unknown），喝掉一瓶后认出的
+        # 仍是两瓶ホエイ、签名不变 → 判「画面未变化」不记账，账本少算 1 次出牌，又多喝一瓶、最后剩 1 次出牌没用
+        occupied = sum(st != "empty" for st in self.drink_states)
+        return (self.remaining, self.hp, self.genki, hand, (tuple(d.name if d else None for d, _ in self.drinks), occupied))
 
 
 # ---------------------------------------------------------------- 分段计时
@@ -260,6 +267,8 @@ HIF_DIALOGS = (
     ("使用確認", "決定", 1000),  # Pドリンク使用確認：效果对象不存在，仍执行
     ("ターン終了", "はい", 1000),  # 还有可打的牌时跳过回合
     ("ドリンク詳細", "使う", 500),  # 点饮料后的详情框
+    # 取消选中 / 补点落在已选中的卡上会弹「スキルカード詳細」：只关掉（验证局 1-c R2 第一回合 タフネス+ 没打出后停在这框 8 分钟）
+    ("スキルカード詳細", "閉じる", 1000),
     ("相談終了確認", "決定", 1000),  # 相談还能买时点「終了」的确认（决策器已决定离开）
     ("横画面で開始", "TAP TO START", 800),  # 选拔赛三场全过后的 LIVE（横屏）开始提示
     ("ボイス再生確認", "決定", 1000),  # 本战开局的语音设置：先交 skip_settings 按用户设置选，读不出才按默认项点
@@ -382,7 +391,7 @@ _STRIP: dict = {"img": None, "sel": []}  # 最近一次条带识别：(图的 id
 # 用户确认（2026-11-02）：考试里的出牌 / 回合开始结束结算 / 饮料 / P 道具触发动画都能点屏幕跳过。
 # 动作生效后到下一帧稳定之间，每 ANIM_TAP_EVERY 秒点一次舞台空白处。位置与 DESELECT_TAP 相同（点了最多取消选中，main13 R2 实测），
 # 第十五到十七局考试帧上核对过：不在手牌（y≥640）、饮料栏、SKIP（621,739）、左侧状态栏、右侧牌库图标、顶部名次条上。
-ANIM_TAP = (360, 330)  # 与 DESELECT_TAP 同一点（舞台空白处）
+ANIM_TAP = BTN.STAGE_BLANK  # 与 DESELECT_TAP 同一点（舞台空白处）
 ANIM_TAP_EVERY = 0.4
 _anim = {"last": 0.0, "taps": 0}
 
@@ -451,7 +460,8 @@ def _stale_before_tap(frame) -> str | None:
         a = _lite_sig(frame.img)
         if a is None:
             return None  # 决策帧本身读不出（截图兜底等）：不拦
-        b = _lite_sig(device.screenshot())
+        b_img = device.screenshot()
+        b = _lite_sig(b_img)
     except Exception:
         return None
     if b is None:
@@ -460,6 +470,34 @@ def _stale_before_tap(frame) -> str | None:
         return f"剩余回合 {a[0][0]}→{b[0][0]}"
     if a[1] != b[1]:
         return f"手牌位置变了（{len(a[1])}→{len(b[1])} 张）"
+    if STALE_ART and (moved := _art_changed(frame.img, b_img, a[1])) is not None:
+        return f"手牌换了（槽 {moved} 卡面变了，张数没变）"
+    return None
+
+
+# 开关 HIRO_STALE_ART=1（默认关）：点击前再比每张手牌卡面的平均颜色，张数 / 角标位置不变但牌换了也拦。
+# 验证局 1-e R2 剩 8：ガタゴトすやすや+ 换手后 4 张变 4 张，只比角标位置没拦住，点中的是另一张牌
+STALE_ART = os.environ.get("HIRO_STALE_ART") == "1"
+ART_DIFF = 40  # 卡面平均颜色（0–255）任一通道差超过这么多算换了牌；加分特效 / 选中发光一般在 20 以内（待实机核对）
+
+
+def _art_means(img, letters):
+    """每个手牌角标（_lite_sig 的 (x//8, y//8)）上方卡面中间一块的平均 BGR。"""
+    out = []
+    for lx, ly in letters:
+        x, y = lx * 8, ly * 8
+        patch = img[max(0, y - 130):max(0, y - 40), max(0, x - 30):x + 50]
+        out.append(patch.reshape(-1, patch.shape[-1]).mean(axis=0) if patch.size else None)
+    return out
+
+
+def _art_changed(img_a, img_b, letters) -> int | None:
+    """两帧同一组角标位置上卡面平均颜色差得多的第一个槽号（从 0 数）；都差不多 None。"""
+    if img_a is None or img_b is None or img_a.shape != img_b.shape:
+        return None
+    for i, (x, y) in enumerate(zip(_art_means(img_a, letters), _art_means(img_b, letters))):
+        if x is not None and y is not None and float(abs(x - y).max()) > ART_DIFF:
+            return i
     return None
 
 
@@ -755,7 +793,7 @@ PLAY_RETAP_CALM_S = 1.5  # 补点前最多等画面停稳多久
 CONFIRM_RETAPS = 2  # 点了确认（第二下）后卡仍停在选中态：再点几次
 CONFIRM_CHECK_S = 0.5  # 第二下之后多久核对 SELECT 是否消失
 PLAY_POLL = 0.2
-DESELECT_TAP = (360, 330)  # 舞台空白处：点了会取消手牌选中（main13 R2 实测）
+DESELECT_TAP = BTN.STAGE_BLANK  # 舞台空白处：点了会取消手牌选中（main13 R2 实测）
 DESELECT_WAIT = 0.6
 SELECT_DX = 70  # 「SELECT」标签与卡中心的横向容差
 
@@ -1043,8 +1081,15 @@ def _screen_slot(frame, state, d) -> int | None:
             rect = drink_slot_rect(d.slot)
             if rect is None:
                 return None
-            return next((i for i, (dr, box) in enumerate(frame.drinks)
-                         if dr is not None and dr.id == want and abs(box[0] - rect[0]) < DRINK_SLOT_TOL), None)
+            hit = next((i for i, (dr, box) in enumerate(frame.drinks)
+                        if dr is not None and dr.id == want and abs(box[0] - rect[0]) < DRINK_SLOT_TOL), None)
+            states = getattr(frame, "drink_states", None) or []
+            if hit is None and d.slot < len(states) and states[d.slot] in ("unknown", "drink"):
+                # 按记录优先：这格有饮料（认不出 / 认成别的），局面层已按账本认定是这瓶 → 点这格固定位置
+                # （验证局 1-d R2 剩 10 回合：第 3 瓶ホエイ 读成 unknown，原来「定位不到」禁用，改喝了别的格）
+                frame.drinks.append((None, rect))
+                return len(frame.drinks) - 1
+            return hit
         found = next((i for i, (dr, _) in enumerate(frame.drinks) if dr is not None and dr.id == want), None)
         if found is not None:
             return found
@@ -1160,6 +1205,7 @@ def run_exam(
                            {"exam": exam, "idol": brain.profile.idol_id if brain.profile else None, "brain": brain})  # fmt: skip
     rec.log("exam_brain_start", exam=exam, profile=brain.profile.idol_id if brain.profile else None, source=source.confidence())
     failures = 0
+    landing_blocks: set[str] = set()  # 本回合点了没落地的出牌（memory.blocked 里），有别的牌打出后放开重试
     wait_state = BoundedWait(LIVE_WAIT_S)  # 局面来源暂时给不出（返回 None）时最多等这么久，之后换帧重读
     stable_wait = BoundedWait(STABLE_WAIT_S)
     PHASES.clear()
@@ -1172,6 +1218,9 @@ def run_exam(
     UNPLAYABLE["hit"] = False
     result_info: dict = {}
     last_state = None
+    last_context = None
+    end_reason = None
+    ended_seen = False
     try:
         for _ in Loop(interval=0.1):
             img = device.screenshot()
@@ -1182,6 +1231,7 @@ def run_exam(
                     continue
             with _phase("ended"):
                 if ended():
+                    ended_seen = True
                     break
             frame = None
             if animating and not slow:
@@ -1242,7 +1292,15 @@ def run_exam(
             legal = [Action.from_legal(a) for a in state.legal_actions()]
             contract = advisor.decide(state, memory, previews, legal)
             d = contract.to_battle()
-            rec.log("battle_decision", image=frame.img, exam=exam, source=source.confidence(), contract=contract.to_dict())
+            # 局面来源可给出决策时的内部局面（如 VEIL 的姿态 / 夜空计数 / 全力値账本），观测里没有这些字段
+            context = source.trace_context(state, memory) if hasattr(source, "trace_context") else None
+            last_context = context or last_context
+            rec.log("battle_decision", image=frame.img, exam=exam, source=source.confidence(), contract=contract.to_dict(),
+                    **({"context": context} if context else {}))
+            if context and session is not None:
+                import json as _json
+
+                session.note("context " + _json.dumps(context, ensure_ascii=False, default=str))
             logger.info("[%s T%s] %s ← %s：%s", exam, memory.turn, d.action, d.source, d.reason)
             todo = d
             if d.kind == "drink" or (source.confidence() == "save" and d.kind == "play"):
@@ -1304,6 +1362,9 @@ def run_exam(
                 logger.warning("[%s] %s：%s，不记账、回到主循环重读（第 %d 次）", exam, d.action, missed, failures)
                 rec.log("battle_play_not_landed", exam=exam, action=d.action, reason=missed, failures=failures)
                 memory.plan = []
+                # 本回合先禁用这张，让决策换别的牌（验证局 1-c：画面认成可打、实际发灰的 タフネス+ 连点到看门狗 184s 停机）
+                memory.block(d.action)
+                landing_blocks.add(d.action)
                 if session is not None:
                     session.recover("tap_no_effect", f"{d.action} {missed}（第 {failures} 次）")
                 if failures >= 3 and strict:
@@ -1319,6 +1380,10 @@ def run_exam(
                     session.note(f"blunder:play_missed_turn_end D34 {d.action}")
             elif changed:
                 brain.commit(state, memory, d)
+                if landing_blocks:
+                    # 打出了别的牌：手牌槽位会移动、使用条件也可能变了，放开之前没落地的禁用
+                    memory.blocked = [a for a in memory.blocked if a not in landing_blocks]
+                    landing_blocks.clear()
                 source.executed(Action.from_legal(d.action), result)
                 failures = 0
                 if session is not None:
@@ -1350,8 +1415,14 @@ def run_exam(
             t_cycle = t_done
             animating = animating or changed
         result_info = {"exam": exam, "turns": memory.turn, "history": memory.history}
+        end_reason = "ended" if ended_seen else "loop_exit"
+    except BaseException as e:  # noqa: BLE001  只记原因，原样抛出
+        end_reason = f"{type(e).__name__}: {e}"
+        raise
     finally:
-        rec.log("exam_brain_end", exam=exam, turns=memory.turn, history=memory.history)
+        # 退出原因：ended = 认到结算页；loop_exit = 主循环自己停了（没认到结算页）；其余是异常（ResumeBlocked / 中断…）的类型和文字
+        rec.log("exam_brain_end", exam=exam, turns=memory.turn, history=memory.history, reason=end_reason or "unknown",
+                remaining=getattr(last_state, "remaining_turns", None), context=last_context)
         if last_state is not None:  # 本战 R1：剩下的饮料和三属性倍率记进 finals_context，轮间 / R2 决策用（只记 r1）
             from hiro.state.finals_context import CONTEXT, note_exam
 

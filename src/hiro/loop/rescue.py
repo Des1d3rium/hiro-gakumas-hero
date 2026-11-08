@@ -27,6 +27,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from hiro.log import logging
+from hiro.produce import hif_buttons as BTN
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ MAX_PER_SCREEN = 3  # 同一画面最多连续几次
 LLM_TIMEOUT = 60.0  # claude -p 带图平时 6–9 秒；第二十三局录像、负载 60–90 时 50–70 秒（两次 40 秒超时）
 MAX_PER_WINDOW = (8, 600.0)  # 10 分钟内最多 8 次（画面在几个认不出的页之间来回）
 VERIFY_DIST = 40  # 点框前复核：同样文字的框中心偏差不超过这么多像素
-BLANK_TAP = (12, 12)  # 与 KAA skip() / 过场推进器同一点（ALT_TAP 附近有文字时才用；主循环本来就一直在点这里）
+BLANK_TAP = BTN.CORNER  # 与 KAA skip() / 过场推进器同一点（ALT_TAP 附近有文字时才用；主循环本来就一直在点这里）
 SAME_TEXT = 0.5  # 等回复期间：画面像素变了、但 OCR 文字有一半以上还在 = 同一画面（获得演出背景一直闪，第二十三局 4 次回复都被当成「画面已变」作废）
 IMAGE_SIZE = (540, 960)
 SAME_SCREEN_DIFF = 6.0  # 1/8 缩图灰度平均差小于这个算同一画面

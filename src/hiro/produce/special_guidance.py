@@ -23,6 +23,7 @@ from kotonebot import device, logging
 
 from hiro.contracts import Action, ActionKind, ExecutionResult
 from hiro.produce.ops import Run, button_sv, find_text, orange_lit
+from hiro.produce import hif_buttons as BTN
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ CUSTOMIZE_TAP, BACK_TAP, EXEC_TAP = (360, 1083), (213, 1083), (497, 1083)
 CUSTOMIZE_BTN_ROI, EXEC_BTN_ROI = (260, 1058, 200, 50), (420, 1058, 170, 50)  # 橙色按钮亮 = 可点
 EXEC_CONFIRM_TAP, END_CONFIRM_TAP = (500, 1160), (500, 1160)
 MENU_COLS, MENU_BLOCK_Y = (143, 364, 578), 845
-TOAST_TAP = (360, 1000)  # 「〜をカスタマイズしました」提示
+TOAST_TAP = BTN.TOAST  # 「〜をカスタマイズしました」提示
 BOTTOM_RIGHT = (360, 1110, 720, 1220)  # 弹窗底部右侧按钮
 
 ENTER_TIMEOUT = 5.0

@@ -19,10 +19,11 @@ import math
 import re
 import time
 from collections.abc import Callable
+from hiro.produce import hif_buttons as BTN
 
 AP_PER_DRINK = 20
 MAX_DRINKS = 3  # 一次最多喝几瓶（整局 40 AP = 2 瓶；多给 1 瓶余量）
-PLUS_TAP = (584, 1033)  # 确认框滑条右端「＋」（参考图 3）
+PLUS_TAP = BTN.AP_PLUS  # 确认框滑条右端「＋」（参考图 3）
 STEP_TIMEOUT = 6.0
 POLL = 0.5
 JEWEL = "ジュエル"
@@ -177,4 +178,40 @@ def refill(shoot: Callable, click: Callable[[int, int], None], ocr: Callable, *,
         click(*close)
     out["ok"] = True
     log(f"AP 补充：缺 {gap}，喝 APドリンク {out['drinks']} 瓶")
+    return out
+
+
+FAST_GAP = 0.8  # 三下之间的间隔（弹窗出现 / 叠上去的动画）
+AP_ROW = (200, 880, 720, 1010)  # 「AP回復」框 APドリンク 那一行（名字 + 「使う」），x1, y1, x2, y2
+
+
+def refill_fast(shoot: Callable, click: Callable[[int, int], None], ocr: Callable, header: Callable, *,
+                sleep: Callable[[float], None] = time.sleep, gap: float = FAST_GAP, log: Callable[[str], None] = print) -> dict:
+    """从「AP不足」弹窗开始，按固定位置隔 gap 秒点三下喝一瓶 APドリンク（+20，本战一局正好够）：
+    1「AP不足」右「回復する」(DIALOG_OK) → 2「AP回復」APドリンク 行「使う」(AP_USE) → 3「APドリンクを消費…」右下「回復する」(DIALOG_OK)，
+    之后直接回到 H.I.F 首页（使用者截图，2026-11-07）。
+    只在第 2 下之前局部 OCR 那一行：必须是 APドリンク、没有ジュエル（APドリンク 用完时这一行可能变成ジュエル回复），否则点「閉じる」返回失败。"""
+    out = {"ok": False, "drinks": 0, "error": None}
+    click(*BTN.DIALOG_OK)
+    sleep(gap)
+    img = shoot()
+    x1, y1, x2, y2 = AP_ROW
+    row = "".join(t.replace(" ", "") for t, _, _ in ocr(img[y1:y2, x1:x2]))
+    if "APドリンク" not in row or JEWEL in row or "使う" not in row:
+        click(*BTN.AP_CLOSE)
+        out["error"] = f"「AP回復」那一行不是 APドリンク（{row[:40]}），没点「使う」"
+        log(f"AP 补充失败：{out['error']}")
+        return out
+    click(*BTN.AP_USE)
+    sleep(gap)
+    click(*BTN.DIALOG_OK)
+    deadline = time.monotonic() + 4 * gap + 2
+    while time.monotonic() < deadline:
+        sleep(gap / 2)
+        if header(shoot()) is None:
+            out.update(ok=True, drinks=1)
+            log("AP 补充：喝了 1 瓶 APドリンク")
+            return out
+    out["error"] = "点完三下弹窗还在"
+    log(f"AP 补充失败：{out['error']}")
     return out

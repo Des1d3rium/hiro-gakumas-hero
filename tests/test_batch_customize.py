@@ -38,13 +38,18 @@ def test_menu_items_reads_left_and_maxed():
 class FakeGame:
     """轮间客制化的最小状态机：interval → grid → (点格子) 详情 → menu → 実行する → 直接出提示（没有「実行確認」，实机如此）。"""
 
-    def __init__(self, start="interval", confirm_box=False):
+    def __init__(self, start="interval", confirm_box=False, after="interval", lost_back=0):
         self.state, self.confirm_box, self.detail, self.clicks, self.swipes = start, confirm_box, None, [], 0
+        self.after, self.lost_back = after, lost_back  # after="menu"：关掉提示后停在菜单页（实机）；lost_back：前几下「もどる」没点上
+
+    STATES = ("interval", "grid", "menu", "confirm", "toast", "interval_after")
 
     def screenshot(self):
         import numpy as np
 
-        return np.zeros((1280, 720, 3), np.uint8)
+        # 每个状态 / 选中的卡画成不同灰度：OCR 缓存按画面变化判断是否重读（真实画面切页时一定会变）
+        v = 20 + 30 * self.STATES.index(self.state) + (7 if self.detail else 0)
+        return np.full((1280, 720, 3), v, np.uint8)
 
     def swipe(self, *a, **k):
         self.swipes += 1
@@ -63,10 +68,19 @@ class FakeGame:
         elif st == "confirm" and (x, y) == C.CONFIRM_TAP:
             self.state = "toast"
         elif st == "toast" and (x, y) == C.TOAST_TAP:
+            self.state = "interval_after" if self.after == "interval" else "menu"
+        elif st == "menu" and (x, y) == C.MENU_BACK:
+            if self.lost_back:
+                self.lost_back -= 1
+            else:
+                self.state, self.detail = "grid", None
+        elif st == "grid" and (x, y) == C.GRID_BACK:
             self.state = "interval_after"
 
     def ocr(self, img):
         crop = img.shape[0] < 1280
+        if crop and img.shape[0] == C.TOAST_BAND[1] - C.TOAST_BAND[0]:  # 提示横带
+            return [box("巻き返し＋をカスタマイズしました", 360, 1000 - C.TOAST_BAND[0])] if self.state == "toast" else []
         if crop:  # 详情栏条带（y 60–200）
             return [box(self.detail, 300, 115 - 60)] if self.detail and self.state == "grid" else []
         page = {
@@ -75,7 +89,7 @@ class FakeGame:
             "grid": [box("カスタマイズするスキルカード", 360, 500)],
             "menu": [box("カスタマイズメニュー", 360, 700), box("一覧に戻る", 215, 1160), box("巻き返し+", 360, 160),
                      box("成長追加", 578, 935), box("あと1回", 578, 888)],
-            "confirm": [box("実行確認", 360, 600), box("実行する", 500, 1160)],
+            "confirm": [box("実行確認", 360, 600), box("実行する", *C.CONFIRM_TAP)],
             "toast": [box("インターバル", 100, 40), box("巻き返し＋をカスタマイズしました", 360, 1000)],
         }
         return page[self.state]
@@ -91,6 +105,9 @@ def fake(monkeypatch):
         monkeypatch.setattr(ops, "ocr_boxes", g.ocr)
         monkeypatch.setattr(deck, "read_card_grid", lambda img, grid: [{"row": 0, "col": 0, "name": None, "center": (120, 600)}])
         monkeypatch.setattr(C.time, "sleep", lambda s: None)
+        import hiro.vision.pages as pages
+
+        monkeypatch.setattr(pages, "dialog_header", lambda img: (560, 600) if g.state == "confirm" else None)
         return g
 
     return setup
@@ -102,6 +119,15 @@ def test_customize_succeeds_on_toast_with_or_without_confirm_box(fake, confirm_b
     g = fake(confirm_box=confirm_box)
     r = C.customize(g, "巻き返し+", "成長追加")
     assert r["ok"] and r["toast"] and r["confirm_box"] == confirm_box and r["page"] == "interval"
+
+
+@pytest.mark.parametrize("lost_back", [0, 1])
+def test_customize_returns_to_interval_when_game_stays_on_menu(fake, lost_back):
+    # 实机 codex-20261107-1 第 1 局：第二项做完游戏停在菜单页，工具只退到选卡页（还没点上），代理手点「もどる」回轮间
+    pytest.importorskip("kaa")
+    g = fake(after="menu", lost_back=lost_back)
+    r = C.customize(g, "巻き返し+", "成長追加")
+    assert r["ok"] and r["page"] == "interval" and g.state == "interval_after"
 
 
 def test_customize_from_grid_scrolls_to_top_first(fake):
@@ -164,3 +190,29 @@ def test_refresh_price_schedule():
         tens += price == 10
         seq.append(price)
     assert seq == [10, 10, 20, 30, 40, 50, 50]
+
+
+def test_shop_auto_makes_room_when_full(monkeypatch):
+    """栏满、货架上有高价值饮料：先 make_room 丢一瓶低价值的再买（验证局 1-c 代理手动 drink-drop）。"""
+    import batch_shop as S
+
+    held = ["初星湯", "ジンジャーエール", "初星ホエイプロテイン", "ブーストエキス"]
+    state = {"shelf": [{"index": 6, "name": "初星ホエイプロテイン", "price": 100, "purchased": False}], "p": 150}
+    monkeypatch.setattr(S, "_page", lambda d: ("interval", None))
+    monkeypatch.setattr(S, "_shelf", lambda k, img: ({"interval": {"refresh": {"price": 200}}}, state["shelf"]))
+    monkeypatch.setitem(sys.modules, "hiro.produce.shop", NS(read_p=lambda img, ocr: state["p"]))
+    monkeypatch.setitem(sys.modules, "hiro.produce.ops", NS(ocr_boxes=None))
+
+    def buy(device, index):
+        state["shelf"], state["p"] = [{"index": 6, "name": "初星ホエイプロテイン", "purchased": True}], state["p"] - 100
+        return {"ok": True, "drink": "初星ホエイプロテイン"}
+
+    def make_room():
+        held.remove("初星湯")
+        return "初星湯"
+
+    monkeypatch.setattr(S, "buy", buy)
+    monkeypatch.setattr(S.time, "sleep", lambda s: None)
+    r = S.auto(NS(screenshot=None, click=None), free_slots=lambda: 4 - len(held), on_buy=held.append, make_room=make_room)
+    assert r["ok"] and held.count("初星ホエイプロテイン") == 2 and "初星湯" not in held
+    assert [s["op"] for s in r["steps"]][:2] == ["drop_low", "buy"]

@@ -12,6 +12,7 @@ MaaTools 连不上时（原版 PlayCover）回退到旧方案：
 """
 
 import logging
+import os
 import socket
 import struct
 import threading
@@ -42,6 +43,8 @@ CATALYST_IDIOM_SCALE = 0.77
 RECONNECT_TIMEOUT = 60.0
 RECONNECT_INTERVAL = 1.0
 SOCKET_TIMEOUT = 5.0
+# 连续空帧（切屏）最多等这么久再抛 MaaToolsEmptyFrame；比看门狗的 3 分钟短
+EMPTY_FRAME_WAIT = float(os.environ.get("HIRO_EMPTY_FRAME_WAIT", "120"))
 
 logger = logging.getLogger(__name__)
 
@@ -169,15 +172,24 @@ class MaaToolsImpl:
         return "landscape" if w > h else "portrait"
 
     def screenshot(self):
-        for attempt, delay in enumerate((0.15, 0.3, 0.6, None), start=1):
+        # 空帧多半是使用者切屏 / 上滑（验证局 codex-20261107-1-b 连续 4 次 1s 内就抛，watch 和 exam 直接退出）：
+        # 按 0.15s 起翻倍、最长 2s 的间隔一直重取，累计 EMPTY_FRAME_WAIT 秒还空才抛
+        start, delay, attempt = time.monotonic(), 0.15, 0
+        while True:
+            attempt += 1
             try:
                 image = self._call(b"BGR\x01", reply=self._read_bgr)
             except MaaToolsEmptyFrame as exc:
-                if delay is None:
-                    raise MaaToolsEmptyFrame(f"{exc}，连续 {attempt} 次") from exc
-                logger.warning("%s，%.2fs 后重取（第 %d 次）", exc, delay, attempt)
+                waited = time.monotonic() - start
+                if waited >= EMPTY_FRAME_WAIT:
+                    raise MaaToolsEmptyFrame(f"{exc}，连续 {attempt} 次、{waited:.0f}s") from exc
+                if attempt <= 3 or attempt % 10 == 0:
+                    logger.warning("%s，%.2fs 后重取（第 %d 次，已等 %.0fs）", exc, delay, attempt, waited)
                 time.sleep(delay)
+                delay = min(delay * 2, 2.0)
                 continue
+            if attempt > 1:
+                logger.warning("MaaTools 空帧恢复（第 %d 次取到画面）", attempt)
             self._size = (image.shape[1], image.shape[0])
             return image
 

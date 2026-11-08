@@ -125,3 +125,50 @@ def test_name_match_tolerates_ocr():
     assert ex._name_match("星々を見下ろす一番", NAME)
     assert ex._name_match("教えてあげる＋", "教えてあげる+")
     assert not ex._name_match("教えてあげる+", NAME)
+
+
+def test_signature_sees_unknown_drink_slot_emptied():
+    """验证局 1-d R2 剩 10 回合：3 瓶ホエイ、第 3 瓶认不出；喝掉一瓶后认出的仍是两瓶，签名要能看出「占用格」变少。"""
+    whey = NS(name="初星ホエイプロテイン")
+
+    def frame(states, n):
+        f = ex.Frame.__new__(ex.Frame)
+        f.remaining, f.hp, f.genki, f.cards = 10, 29, 29, []
+        f.drinks, f.drink_states = [(whey, None)] * n, states
+        return f
+
+    before = frame(["drink", "drink", "unknown", "empty"], 2)
+    after = frame(["drink", "drink", "empty", "empty"], 2)
+    assert before.signature != after.signature
+    assert frame(["drink", "drink", "drink", "empty"], 2).signature == before.signature  # unknown↔drink 闪烁不算变化
+
+
+def test_fixed_drink_slot_unknown_uses_record():
+    """按记录优先：固定栏位模式下，目标格读成 unknown（有饮料、认不出）时按账本点这格；读成 empty 时不点。"""
+    rect = ex.drink_slot_rect(2)
+    f = ex.Frame.__new__(ex.Frame)
+    f.fixed_drink_slots, f.drink_states = True, ["drink", "drink", "unknown", "empty"]
+    f.drinks = [(NS(id="whey"), ex.drink_slot_rect(0)), (NS(id="whey"), ex.drink_slot_rect(1))]
+    state = NS(drinks=[NS(slot=2, drink_id="whey")])
+    i = ex._screen_slot(f, state, NS(kind="drink", slot=2))
+    assert i is not None and f.drinks[i][1] == rect
+    f.drink_states[2] = "empty"
+    f.drinks = f.drinks[:2]
+    assert ex._screen_slot(f, state, NS(kind="drink", slot=2)) is None
+
+
+def test_art_changed_flags_swapped_card_same_layout():
+    """张数 / 角标位置不变、某张卡面换了：_art_changed 给出槽号（HIRO_STALE_ART）。"""
+    import numpy as np
+
+    from hiro.exec.exam import _art_changed
+
+    letters = ((10, 135), (30, 135), (50, 135))
+    a = np.full((1280, 720, 3), 120, np.uint8)
+    b = a.copy()
+    assert _art_changed(a, b, letters) is None
+    b[960:1040, 210:290] = 240  # 第 2 张（x=240）卡面换了
+    assert _art_changed(a, b, letters) == 1
+    b2 = a.copy()
+    b2[960:1040, 50:130] = 130  # 轻微发光不算
+    assert _art_changed(a, b2, letters) is None

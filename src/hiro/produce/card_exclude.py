@@ -20,11 +20,12 @@ from kotonebot import device, logging
 
 from hiro.contracts import Action, ExecutionResult
 from hiro.produce.ops import Run, button_sv, find_text, orange_lit, roi_diff
+from hiro.produce import hif_buttons as BTN
 
 logger = logging.getLogger(__name__)
 
 PAGE = "SELECT_CARD"
-EXCLUDE_TAP = (133, 1096)
+EXCLUDE_TAP = BTN.EXCLUDE
 CANDIDATES = ((220, 880), (360, 880), (500, 880))
 CARDS_ROI = (140, 810, 440, 140)  # 候选卡行
 MAIN_BTN = (260, 1062, 200, 50)  # 「受け取る」：选中候选后变亮

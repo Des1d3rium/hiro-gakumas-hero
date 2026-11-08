@@ -105,19 +105,62 @@ def add_card(ledger: dict, name: str, once: bool | None, *, why: str = "") -> No
     _log(ledger, "add", card=name, once=once, why=why or None)
 
 
-def remove_card(ledger: dict, name: str, *, why: str = "") -> None:
+def find_card(ledger: dict, name: str, *, loose: bool = False) -> str | None:
+    """账本里这张卡的名字。loose：完整名字找不到时按去掉「+」的名字找，只有一种强化等级命中才算
+    （识别的强化读数和账本差一个「+」时也能对上；有 X 和 X+ 两种就不猜）。"""
     name = norm(name)
-    if name not in ledger["cards"]:
-        raise ValueError(f"账本牌组里没有「{name}」")
+    if name in ledger["cards"]:
+        return name
+    if not loose:
+        return None
+    hits = {c for c in ledger["cards"] if c.rstrip("+") == name.rstrip("+")}
+    return hits.pop() if len(hits) == 1 else None
+
+
+def remove_card(ledger: dict, name: str, *, why: str = "", loose: bool = False) -> None:
+    read = norm(name)
+    name = find_card(ledger, read, loose=loose)
+    if name is None:
+        raise ValueError(f"账本牌组里没有「{read}」")
     ledger["cards"].remove(name)
     if name not in ledger["cards"] and name in ledger["once"]:
         ledger["once"].remove(name)
-    _log(ledger, "remove", card=name, why=why or None)
+    _log(ledger, "remove", card=name, read=read if read != name else None, why=why or None)
 
 
-def change_card(ledger: dict, remove: str, add: str, add_once: bool | None, *, why: str = "") -> None:
-    remove_card(ledger, remove, why=f"换卡换出 {why}".strip())
-    add_card(ledger, add, add_once, why=f"换卡换入 {why}".strip())
+def change_card(ledger: dict, remove: str, add: str, add_once: bool | None, *, why: str = "", loose: bool = False) -> None:
+    """换出 remove、换入 add。中途出错时账本原样不动（不会只删不加）。"""
+    saved = {k: list(ledger[k]) for k in ("cards", "once", "log")}
+    try:
+        remove_card(ledger, remove, why=f"换卡换出 {why}".strip(), loose=loose)
+        add_card(ledger, add, add_once, why=f"换卡换入 {why}".strip())
+    except ValueError:
+        ledger.update(saved)
+        raise
+
+
+def record_change(ledger: dict, out_card: dict | None, pending: dict | None, *, why: str = "授業换卡") -> str | None:
+    """授業换卡阶段 2 在游戏里提交之后记账；记上了返回 None，记不上返回要补记的说明（不抛错：游戏里已经换了，
+    抛错会把这次换卡整个丢掉，watch 照样往下点）。
+
+    换入的卡继承换出那张的强化：实机两局都是换出「X+」后换入的卡也带「+」（codex-20261107-6 第 1 局 忍耐力 → 忍耐力+，
+    codex-20261107-1 第 1 局 オープニングアクト → オープニングアクト+），阶段 1 候选读到的强化不算数。
+    换出那张按去掉「+」的名字找（挑卡时就是这么比的）。"""
+    if not (out_card or {}).get("name") or not (pending or {}).get("name"):
+        return "换出或换入的卡没认出，用 ledger-edit --change 旧 新 --once/--not-once 补记"
+    old = card_name(out_card["name"], out_card.get("upgrade"))
+    # 换出那张的强化以账本为准（阶段 2 识别把「立ち回りの基本+」读成没强化时，换入的也会少一个「+」）
+    booked = find_card(ledger, old, loose=True)
+    booked_up = len(booked) - len(booked.rstrip("+")) if booked else 0
+    upgrade = max(out_card.get("upgrade") or 0, booked_up, pending.get("upgrade") or 0)
+    new = card_name(pending["name"], upgrade)
+    try:
+        change_card(ledger, old, new, pending.get("once"), why=why, loose=True)
+    except ValueError as e:
+        return (f"游戏里已换成（换出 {old}，换入 {new}），账本没记上：{e}。核对牌组一览后用 "
+                f"ledger-edit --change <账本里换出的卡名> {new} {'--once' if pending.get('once') else '--not-once'} 补记")
+    ledger["pending_add"] = None
+    return None
 
 
 def upgrade_card(ledger: dict, name: str, *, why: str = "") -> None:
@@ -139,6 +182,86 @@ def drink_add(ledger: dict, name: str, *, why: str = "") -> int:
     return slot
 
 
+def _secs(hms: str) -> int | None:
+    try:
+        h, m, sec = (int(x) for x in hms.split(":"))
+    except (AttributeError, ValueError):
+        return None
+    return h * 3600 + m * 60 + sec
+
+
+def acquire_drink(ledger: dict, name: str, *, why: str, window: int = 45, now: str | None = None) -> str:
+    """获得演出看到的饮料（清单 10）→ 记账结果：added / dup（window 秒内已有同名「drink+」，是选择页 / 商店那次的演出）/
+    full（账本栏满：账本和实机对不上，记一条 drink? 交代理核对）。"""
+    name = norm(name)
+    t = _secs(now or _now())
+    for e in reversed(ledger["log"]):
+        dt = None if t is None or _secs(e.get("t", "")) is None else (t - _secs(e["t"])) % 86400
+        if dt is None or dt > window:
+            break
+        if e.get("op") in ("drink+", "drink=") and (e.get("drink") == name or name in (e.get("drinks") or [])):
+            return "dup"
+    if None not in ledger["drinks"]:
+        _log(ledger, "drink?", drink=name, why=f"{why}；账本栏已满，核对实机（ledger --read-drinks）")
+        return "full"
+    drink_add(ledger, name, why=why)
+    return "added"
+
+
+def acquire_card(ledger: dict, name: str, once: bool | None, *, why: str, window: int = 45, now: str | None = None) -> str:
+    """获得演出看到的技能卡（使用者 2026-11-07：随机事件给的卡 / 强化漏记）→ 记账结果：
+    added：账本里没有同名（去「+」）的卡，记一张；dup：window 秒内已有这张的 add（差し入れ / 换卡那次的演出）；
+    ambiguous：账本已有同名卡（可能是强化演出，也可能是又给了一张）→ 只记一条 card?，由考前 deck-sync 按牌组一览定。"""
+    name = norm(name)
+    base = name.rstrip("+")
+    t = _secs(now or _now())
+    for e in reversed(ledger["log"]):
+        dt = None if t is None or _secs(e.get("t", "")) is None else (t - _secs(e["t"])) % 86400
+        if dt is None or dt > window:
+            break
+        if e.get("op") in ("add", "card?") and str(e.get("card", "")).rstrip("+") == base:
+            return "dup"
+    if any(c.rstrip("+") == base for c in ledger["cards"]):
+        _log(ledger, "card?", card=name, why=f"{why}；账本已有同名卡，强化还是新增待考前 deck-sync 核对")
+        return "ambiguous"
+    if once is None:
+        _log(ledger, "card?", card=name, why=f"{why}；查不到是否一次性，待 deck-sync 核对")
+        return "unknown_once"
+    add_card(ledger, name, once, why=why)
+    return "added"
+
+
+def sync_deck(ledger: dict, screen: list[tuple[str, bool | None]], *, why: str) -> list[str]:
+    """考前牌组对账（使用者 2026-11-07 第二层）：screen = 牌组一览读到的 [(带「+」的卡名, 一次性)]，整副读全才调用。
+    账本缺的补上；同名只差「+」的按画面改强化；账本多出来的只记差异不删（可能是识别漏读）。返回改动 / 差异说明。"""
+    from collections import Counter
+
+    have = Counter(norm(c) for c in ledger["cards"])
+    seen = Counter(norm(n) for n, _ in screen)
+    once_of = {norm(n): o for n, o in screen}
+    missing = seen - have  # 画面有、账本没有
+    extra = have - seen  # 账本有、画面没有
+    notes = []
+    for name in sorted(missing.elements()):
+        base = name.rstrip("+")
+        old = next((c for c in sorted(extra.elements()) if c.rstrip("+") == base), None)
+        if old is not None:  # 强化次数不同：按画面改
+            extra[old] -= 1
+            once = old in ledger["once"]
+            remove_card(ledger, old, why=f"考前对账：强化 {old}→{name}（{why}）")
+            add_card(ledger, name, once, why=f"考前对账：强化 {old}→{name}（{why}）")
+            notes.append(f"强化 {old}→{name}")
+        elif once_of.get(name) is None:
+            notes.append(f"画面有 {name}、账本没有，但查不到是否一次性，未补")
+        else:
+            add_card(ledger, name, once_of[name], why=f"考前对账：账本漏记（{why}）")
+            notes.append(f"补记 {name}")
+    for name in sorted((+extra).elements()):
+        notes.append(f"账本多出 {name}（画面没有，未删）")
+    _log(ledger, "deck_sync", diff=notes or None, why=why)
+    return notes
+
+
 def drink_remove(ledger: dict, slot: int, *, why: str = "", op: str = "drink-") -> str:
     """丢 / 喝掉第 slot 格（0 起）：剩下的往左挤。返回去掉的饮料名。"""
     slots = ledger["drinks"]
@@ -158,12 +281,27 @@ def drink_set(ledger: dict, slots: list[str | None], *, why: str) -> None:
     _log(ledger, "drink=", drinks=new, why=why)
 
 
+def mark_full(ledger: dict, *, why: str) -> int:
+    """游戏说饮料栏已满（领取页出现「受け取らない」/「Pドリンク所持上限」），账本却有空格：空格记成占位「未识别饮料」
+    （验证局 1-e：公開レッスン 后 P 道具白送的 2 瓶没有获得演出可认，账本 2 瓶、实机 4 瓶）。之后商店 / 考试按画面认出名字再补。
+    返回补了几格。"""
+    empty = [i for i, d in enumerate(ledger["drinks"]) if not d]
+    if not empty:
+        return 0
+    new = [d or UNKNOWN_DRINK for d in ledger["drinks"]]
+    drink_set(ledger, new, why=f"栏满但账本有 {len(empty)} 个空格，记占位（{why}）")
+    return len(empty)
+
+
 def after_exam(ledger: dict, exam_drinks: list[dict | None] | None, *, why: str) -> None:
     """考试里按格号记的饮料（state drink / consumed / empty）→ 考完的饮料栏：喝掉的去掉，剩下的往左挤。"""
     if exam_drinks is None:
         return
     left = [d["name"] for d in exam_drinks if d and d.get("state") == "drink" and d.get("name")]
     drink_set(ledger, left, why=why)
+
+
+UNKNOWN_DRINK = "未识别饮料"
 
 
 def compare_drinks(ledger: dict, observed: list[dict]) -> list[str]:
@@ -173,6 +311,9 @@ def compare_drinks(ledger: dict, observed: list[dict]) -> list[str]:
         i, state = slot["slot"], slot["state"]
         want = ledger["drinks"][i] if 0 <= i < SLOTS else None
         if state == "unknown":
+            if want is None:
+                # 有饮料、认不出，账本却是空格：也是漏记（验证局 1-d：P 道具 / 事件给的两瓶ホエイ 没记，shop-auto 以为有空格去买失败）
+                out.append(f"第 {i + 1} 格：账本 空，画面 有饮料（认不出）")
             continue
         got = norm(slot["name"]) if state == "drink" and slot.get("name") else None
         if state == "drink" and got is None:
@@ -182,10 +323,49 @@ def compare_drinks(ledger: dict, observed: list[dict]) -> list[str]:
     return out
 
 
+def sync_drinks(ledger: dict, observed: list[dict] | None, *, why: str) -> list[str]:
+    """饮料懒同步（使用者 2026-11-07：「直到饮料拿不下了，才进行更新和追踪」）：在看得到饮料栏的页面（商店 / 相談）
+    要按栏位做决定前，按画面覆盖账本。读清的格（drink 带名字 / empty）以画面为准，读不清的格保留账本。
+    返回改动说明（空 = 一致，不写日志）。获得演出漏记、多记都在这里被纠正。"""
+    if not observed:
+        return []
+    diff = compare_drinks(ledger, observed)
+    if not diff:
+        return []
+    from collections import Counter
+
+    new = list(ledger["drinks"])
+    unread = []
+    for slot in observed:
+        i, state = slot["slot"], slot["state"]
+        if not 0 <= i < SLOTS:
+            continue
+        if state == "empty":
+            new[i] = None
+        elif state == "drink" and slot.get("name"):
+            new[i] = norm(slot["name"])
+        else:
+            unread.append(i)
+    # 读不清的格：账本里还没在画面读清格出现过的饮料按账本顺序补（栏位会挤动，不能按同一格号沿用）
+    seen = Counter(n for j, n in enumerate(new) if n and j not in unread)
+    left = []
+    for n in ledger["drinks"]:
+        if n and seen[n] > 0:
+            seen[n] -= 1
+        elif n:
+            left.append(n)
+    for i in unread:
+        # 账本没有可补的：记占位名，保证这格算「有饮料」（不当空格去买；make_room 也不会丢认不出的）
+        new[i] = left.pop(0) if left else UNKNOWN_DRINK
+    drink_set(ledger, new, why=f"懒同步（{why}）：{'；'.join(diff)}")
+    return diff
+
+
 def to_deck(ledger: dict) -> dict:
     """给 veil_exam 的牌组清单（同 deck-base 格式）。"""
+    custom = [{"card": e["card"], "item": e["item"]} for e in ledger.get("log", []) if e.get("op") == "customize"]
     return {"cards": list(ledger["cards"]), "once": sorted(set(ledger["once"])), "rebound_repeatable": ledger["rebound_repeatable"],
-            "evidence": f"账本（回忆「{ledger['memory']}」+ {len(ledger['log']) - 1} 条变动）"}  # fmt: skip
+            "custom": custom, "evidence": f"账本（回忆「{ledger['memory']}」+ {len(ledger['log']) - 1} 条变动）"}  # fmt: skip
 
 
 def summary(ledger: dict) -> dict:

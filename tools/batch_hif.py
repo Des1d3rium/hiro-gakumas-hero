@@ -12,6 +12,7 @@ import tempfile
 import time
 import unicodedata
 from pathlib import Path
+from hiro.produce import hif_buttons as BTN
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / "reports" / "batches"
@@ -29,7 +30,7 @@ QUICK_TRANSITIONS = {
 }
 VEIL_IDOL = "i_card-skin-hmsz-3-016"
 STUDY_DETAIL_TOP = 420  # 授業分支：展开的选项说明在这条线以下、第一行选项以上
-STUDY_LINE_TAP = (360, 1000)  # 授業结束后的训练员台词框
+STUDY_LINE_TAP = BTN.TOAST  # 授業结束后的训练员台词框
 # 角落 (12,12) 不点的页面：代理正在看牌组一览 / 考试前说明（要先登记牌组和检查点）。其余页面都点。
 CORNER_HOLD_PAGES = {"DECK_LIST", "HIF_EXAM_BRIEFING"}
 AUTO_ROUTE_STOP = (
@@ -54,15 +55,228 @@ HOLD_PATTERNS = (
     (r"Pドリンク詳細|Pドリンク所持上限|捨てる", "饮料栏操作"),
     (r"キャンセル|はい$|いいえ$|決定$", "确认框"),
     (r"獲得可能スキルカード|再生成", "结算回忆"),
+    (r"^MEMORY$", "结算回忆生成"),  # LIVE 后「MEMORY」生成页只有 MEMORY / 生成 两个字（实机第 2 局 watch 在这里一直点角落）
     (r"開始確認|アイドル選択|ショップ|ミッション|ジュエル", "首页 / 开局"),
-    (r"本戦開始|横画面", "考试前 / LIVE"),
+    (r"本戦開始", "考试前"),
 )
 HOLD_TEXTS = tuple(p for p, _ in HOLD_PATTERNS[:3])  # 兼容旧名
+LIVE_FAIL = ("locked", "nogame", "failed")
+LIVE_OCR_EVERY = 2.0  # 横屏帧多久 OCR 一次找「TAP TO START」
+# LIVE 跳过（使用者 2026-11-07：「live 开启后，点击一次屏幕唤起跳过按钮，然后点击一次右上角的跳过，再点击橙色按钮」）。
+# 横屏帧 1280x720 上的相对位置，按使用者截图（2000x1250，16:9 铺满宽、上下各约 62px 黑边）换算
+LIVE_REVEAL = (0.50, 0.50)  # 画面中间：唤出控制条（快门在右侧 x≈0.91，不碰）
+# 右上角「⏭」：验证局 codex-20261107-1-b 实机帧（MaaTools 1280x720）上控制条在 y 35–150，⏭ 中心 (1201,105)（帧坐标；
+# 点击时减去顶部白条高度 top_bar，见 live_skip_step）。
+# 原来按使用者窗口截图换算成 (1203,40)，落在控制条上方，点了 4 次都没出确认框
+LIVE_SKIP = (0.938, 0.146)  # 帧坐标（含顶部白条），只作参考
+LIVE_SKIP_FIXED = (0.9375, 0.10)  # 点击用：屏幕坐标（使用者 2026-11-07 实机截图 2000x1250 上 ⏭ 在 (1875,125)）
+LIVE_END_OK = (0.61, 0.89)  # 「ライブ終了確認」橙色「終了する」(1220,1062) → (781,640)；OCR 认到文字时按文字点
+LIVE_SKIP_AFTER = 2.0  # LIVE 开始后等这么久再跳（等曲目页退场）
+LIVE_SKIP_EVERY = 4.0  # 没见到确认框时隔这么久重试一次
+LIVE_SKIP_MAX = 4
+LIVE_END_DANGER = ("ジュエル", "購入", "有償", "破棄", "リタイア")
+LIVE_EXIT_AFTER = 1.5  # 点「終了する」后等这么久，按 fn+shift+F 直接回竖屏（使用者 2026-11-07）
+
+
+LIVE_CONTROLS = re.compile(r"\d{1,2}:\d{2}/\d{1,2}:\d{2}|歌詞")  # 控制条露出来时左上的播放时间「00:20/01:32」/ 左下「歌詞OFF」
+LIVE_END_TRIES = 3
+
+
+def top_bar(img, limit: int = 80) -> int:
+    """横屏帧顶部的纯白条高度（MaaTools 横屏帧整体下移、上面补白：实机 1280x720 帧 y 0–34 全白，「歌詞OFF」贴底被截）。
+    点击坐标按游戏画面算、不含这条白边——按帧坐标点会低这么多：验证局 1-d 点 ⏭ (1200,105) 触摸落在 y≈140（控制条下方），
+    4 次都没出确认框。点之前把 y 减掉它。"""
+    import numpy as np
+
+    rows = 0
+    for y in range(min(limit, img.shape[0])):
+        row = img[y]
+        if float(np.mean(row)) < 250 or float(np.std(row)) > 3:
+            break
+        rows += 1
+    return rows
+
+
+def live_skip_step(img, boxes, live, click):
+    """横屏 LIVE 播放中，每次 OCR 后按画面走一步（不盲点）：
+    - 「ライブ終了確認」框在：点「終了する」（按文字；框里有付费 / 破棄字样不点）。框没消失下一次再点，最多 LIVE_END_TRIES 次；
+    - 控制条露着（播放时间 / 歌詞）：点右上角 ⏭；
+    - 都没有：点画面中间唤出控制条，下一次 OCR 看到控制条再点 ⏭（控制条已经露着时点中间会把它收起来）。
+    框消失后才记 ended（之后 live_step 按 fn+shift+F 回竖屏）。返回 (kind, tap) 交给 advance 点，没事做返回 None。"""
+    h, w = img.shape[:2]
+    dy = top_bar(img)
+    at = lambda rel: (int(w * rel[0]), int(h * rel[1]) - dy)  # noqa: E731
+    texts = ["".join(unicodedata.normalize("NFKC", t).split()) for t, _, _ in boxes]
+    now = time.monotonic()
+    if any("ライブ終了確認" in t or "ライブを終了しますか" in t for t in texts):
+        if any(d in t for t in texts for d in LIVE_END_DANGER):
+            return None
+        if live.get("end_tries", 0) >= LIVE_END_TRIES:
+            return None  # 点了几次框都还在：停着，watch 照常按停点报给代理
+        ok = next((((b[0] + b[2]) // 2, (b[1] + b[3]) // 2 - dy) for t, (_, _, b) in zip(texts, boxes) if t.endswith("終了する")), None)
+        live["end_tries"] = live.get("end_tries", 0) + 1
+        live["end_seen"] = now
+        return "live_end", ok or at(LIVE_END_OK)
+    if live.get("end_seen") and not live.get("ended"):
+        live["ended"] = now  # 点过「終了する」、框已消失：LIVE 结束
+        return None
+    started = live.setdefault("started", now)  # watch 中途接手（没看到 TAP TO START）时从第一帧横屏算
+    if live.get("ended") or now - started < LIVE_SKIP_AFTER:
+        return None
+    # 使用者 2026-11-07：进 LIVE 后所有点击都点 ⏭ 的固定位置，直到退出 LIVE（第一下唤出控制条，之后点中 ⏭ 出确认框）。
+    # 不再按控制条 / 中间唤出分支，也不限次数。坐标按屏幕（不含帧顶白条）：使用者实机截图 ⏭ 在 (0.9375, 0.10)
+    live["skips"] = live.get("skips", 0) + 1
+    return "live_skip", (int(w * LIVE_SKIP_FIXED[0]), int(h * LIVE_SKIP_FIXED[1]))
+
+
+def live_fail_reason(op, result) -> str:
+    """LIVE 切全屏失败的停点提示：进入 / 退出给不同处置（N9：退出失败时原来也写「手动点全屏按钮」）。"""
+    if result == "locked":
+        return f"LIVE：屏幕锁住 / 显示器休眠（{result}），解锁后 watch 会接着切"
+    if op == "exit":
+        return (f"LIVE 结束后退出全屏失败（{result}）：手动按 fn+shift+F 或点窗口左上角绿色按钮退出全屏，"
+                "回到竖屏后 watch 自动接着推进")
+    return f"LIVE 黑屏：进入全屏失败（{result}），手动点游戏窗口的全屏按钮，LIVE 结束回竖屏后再退出全屏"
+
+
+HOME_NAV = (250, 1165, 470, 1279)  # 首页底栏「ホーム」
+SETTLE_LEAD_MAX = 300.0  # settle 前段（结果页之后 → 回忆页，含优胜 LIVE）最长推进时间
+SETTLE_FAST_GAP = 0.3  # 回忆定下后只点不读时的间隔
+
+
+# 批量开局自动点「プロデュース開始」（HIRO_BATCH_AUTO_START=0 关掉）。命中这些字样一律不点
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import batch_rules  # noqa: E402  周回模式默认规则（conf/batch-rules.json，使用者可随时改）
+
+
+def _env_flag(name, rule):
+    v = os.environ.get(name)
+    return batch_rules.get(rule, True) if v is None else v != "0"
+
+
+AUTO_START = False  # 本次命令是否允许自动点「プロデュース開始」：change() 开头按 start_allowed(state) 设
+
+
+def start_allowed(state) -> bool:
+    """open.auto_start：repeat（默认）= 每批第一局由代理核对后手点，之后的重复局自动点；true / false = 每局都自动 / 都不自动。
+    环境变量 HIRO_BATCH_AUTO_START=0 / 1 临时覆盖。"""
+    env = os.environ.get("HIRO_BATCH_AUTO_START")
+    mode = (env != "0") if env is not None else batch_rules.get("open.auto_start", "repeat")
+    if mode == "repeat":
+        return len(state.get("completed") or []) >= 1
+    return bool(mode)
+START_DANGER = ("破棄", "リタイア", "別の端末", "他の端末", "別端末", "再開", "ジュエル", "購入", "有償", "不足", "データ")
+
+
+def same_frame(a, b) -> bool:
+    """点之前重新截的帧和刚分析的帧是否同一画面（缩略图差 < OcrGate.SAME）。"""
+    return a is not None and b is not None and a.shape == b.shape and OcrGate.diff(OcrGate.thumb(a), OcrGate.thumb(b)) < OcrGate.SAME
+
+
+def watch_gap(default: float) -> float:
+    """watch 连点间隔：HIRO_WATCH_TAP_GAP（秒，0.1–1.0）覆盖，没设用 advance.ADVANCE_EVERY。实机对比 0.4 / 0.2 用。"""
+    try:
+        v = float(os.environ.get("HIRO_WATCH_TAP_GAP") or batch_rules.get("watch.tap_gap", default))
+    except (TypeError, ValueError):
+        return default
+    return min(1.0, max(0.1, v))
+SETTLE_STUCK = 4  # 连点这么多次画面都没变：整帧读一次（可能是认不出的按钮页）
+SETTLE_FAST_MAX = 200  # 只点不读最多这么多下（约 1 分钟多），之后全部回到逐步读
+SETTLE_POPUP_TAP = (360, 1170)  # 结算后活动弹窗底部按钮（1-e 代理手点这里回到首页）
+INTERVAL_GO = (513, 1160)  # 「インターバル終了確認」右「本戦へ」（hiro.produce.interval 实测）
+
+
+def interval_end(device, timeout: float = 15.0) -> dict:
+    """轮间 → R2（使用者 2026-11-07：「終了」不做 OCR，直接点固定坐标；1-h 读成「X終了」没点上）。
+    只在左上是「インターバル」时点；確認框用像素标题条判出现，点「本戦へ」后等标题消失。"""
+    from hiro.produce import interval
+    from hiro.produce.ops import ocr_boxes
+    from hiro.vision.pages import dialog_header
+
+    if not interval.on_interval(device.screenshot(), ocr_boxes):
+        return {"ok": False, "why": "左上不是「インターバル」，不点"}
+    device.click(*BTN.SHOP_END)
+    deadline = time.time() + 5
+    while dialog_header(device.screenshot()) is None:
+        if time.time() >= deadline:
+            return {"ok": False, "why": "点了「終了」，5s 内没出确认框"}
+        time.sleep(0.3)
+    device.click(*INTERVAL_GO)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        time.sleep(0.5)
+        if not interval.on_interval(device.screenshot(), ocr_boxes):
+            return {"ok": True}
+    return {"ok": False, "why": f"点了「本戦へ」，{timeout:.0f}s 后左上仍是「インターバル」"}
+
+
+SETTLE_TAP = BTN.SETTLE  # 回忆定下后结算页：「×」(360,1188) 与后面「次へ」圆角框 (y 1125–1195) 的重合处（= hif_buttons.SETTLE）
+TAP_THROUGH = tuple(batch_rules.get("watch.tap_through_holds", []))  # 停点确认期间仍点角落
 HOLD_CONFIRM = 3  # watch：同一停点连续读到几次才退出（约 1–2 秒）
 
 
 class HoldPage(Exception):
     """watch 遇到必须由代理处理的页面：停下、不点角落。"""
+
+
+# 获得演出（饮料 / 技能卡）：物品条盖在页面中下部，下面还露着「受け取る」按钮或所持一览。这些帧只是动画，
+# 点角落就过（实机 codex-20261107-6 第 2 局：差し入れ领了「初星スーパーソーダ」后、公開レッスン获得センブリソーダ时都误停）
+BANNER_PASS = ("领取选择", "考试中")
+
+
+def acquire_banner(boxes) -> bool:
+    """物品条下的效果说明行：中心 y 在 905–1070、左缘 x < 170、宽 > 150。选择页这一带只有图标，没有这种长文字行。"""
+    return any(905 <= (b[1] + b[3]) / 2 <= 1070 and b[0] < 170 and b[2] - b[0] > 150 for _, _, b in boxes)
+
+
+def result_next(boxes, dialog: bool):
+    """考试结果页（ラウンドN結果 / 現在順位 + 底部「次へ」）：先点一次「次へ」。顺利晋级就没有弹窗，直接往下走；
+    敗退会弹「再挑戦確認」（有弹窗标题条 → 这里不点，照旧停下交给代理）。使用者 2026-11-07：「如果下一步之后会有这个弹窗，才唤起你」。"""
+    from hiro.produce import hif_buttons as BTN
+
+    if dialog or not batch_rules.get("watch.result_next_first", True):
+        return None
+    labels = ["".join(unicodedata.normalize("NFKC", t).split()) for t, _, _ in boxes]
+    if any("再挑戦確認" in t or "プロデュース終了" in t for t in labels):
+        return None
+    page = any(re.search(r"ラウンド\d結果|現在順位", t) for t in labels)
+    if not page:
+        return None
+    if any(t.endswith("次へ") and not t.startswith("タップ") and 1090 <= (b[1] + b[3]) / 2 <= 1180
+           for t, (_, _, b) in zip(labels, boxes)):
+        return BTN.RESULT_NEXT
+    # 清单 5：考前「現在順位」页底部是「タップして次へ」（y≈1187，不是按钮），按文字位置点
+    hint = next((b for t, (_, _, b) in zip(labels, boxes)
+                 if re.fullmatch(r"(?:タップして|TAPで)次へ", t) and 1090 <= (b[1] + b[3]) / 2 <= 1230), None)
+    if hint:
+        RANK_SEEN["at"] = None
+        return (hint[0] + hint[2]) // 2, (hint[1] + hint[3]) // 2
+    # 「タップして次へ」淡入前几帧既没按钮也没提示：先等 RANK_WAIT_S 秒再让它落到停点（验证局 R1 / R2 各误报一次）
+    now = time.monotonic()
+    if RANK_SEEN["at"] is None or now - RANK_SEEN["last"] > 3.0:  # 离开这页 3s 以上再回来才重新计时
+        RANK_SEEN["at"] = now
+    RANK_SEEN["last"] = now
+    return "wait" if now - RANK_SEEN["at"] < RANK_WAIT_S else None
+
+
+RANK_WAIT_S = 5.0
+RANK_SEEN = {"at": None, "last": 0.0}
+BRIEFING_TAP = (360, 300)  # 考前说明页：点上方空白进入考试（同 batch_prep.BRIEFING_TAP）
+
+
+def briefing_step(boxes, dialog: bool):
+    """考前说明页（優勝条件 / 合格条件，没有回合数）：「タップして次へ」出来了就点进考试 → ("exam_briefing", tap)；
+    之前是倍率ボーナス演出 → "wait"（不点、也不停）。不是这页返回 None。清单 5：原来两轮都停下由代理手点。"""
+    if dialog or not batch_rules.get("prep.exam_briefing", True):
+        return None
+    labels = ["".join(unicodedata.normalize("NFKC", t).split()) for t, _, _ in boxes]
+    if not any("優勝条件" in t or "合格条件" in t for t in labels):
+        return None
+    if any(re.search(r"残.?ター|ターン目|再挑戦|ジュエル|破棄|リタイア", t) for t in labels):
+        return None
+    if any(t.endswith("次へ") and "タップ" in t or t.startswith("TAP") for t in labels):
+        return "exam_briefing", BRIEFING_TAP
+    return "wait"
 
 
 def hold_reason(texts):
@@ -74,6 +288,13 @@ def hold_reason(texts):
             if m := re.search(pattern, label):
                 return f"{reason}：{m.group(0)}"
     return None
+
+
+def commu_confirmed(boxes) -> bool:
+    """剧情底栏要 OCR 也认得出：「早送り」+ 任一（ログ / AUTO / SKIP）。清单 4：白字模板在授業分支页淡入帧上误中，
+    按剧情点 SKIP 的位置 (225,1200) 正好是饮料栏第 2 格（同 hiro.loop.controller._skip_commu 的判据）。"""
+    labels = ["".join(unicodedata.normalize("NFKC", t).split()).upper() for t, _, b in boxes if b[1] >= 1100]
+    return any("早送" in t for t in labels) and any("ログ" in t or "AUT" in t or "SKI" in t for t in labels)
 
 
 def animation_tap(img, *, ocr, blocked, header, quick, fallback, corner):
@@ -93,6 +314,8 @@ def animation_tap(img, *, ocr, blocked, header, quick, fallback, corner):
         tap = corner
 
     boxes = ocr(img)
+    if page is not None and page["page"] == "commu" and not commu_confirmed(boxes):
+        return None
     labels = ["".join(unicodedata.normalize("NFKC", t).split()).upper() for t, _, _ in boxes]
     controls = []
     for label, (_, _, box) in zip(labels, boxes):
@@ -187,6 +410,76 @@ def route_tap(img, boxes, *, action_page):
     return None
 
 
+class OcrGate:
+    """watch 的 OCR 节流（整帧 OCR 一次约 270ms，分条带读反而更慢——每次调用有约 50ms 固定开销，所以只能少读）：
+    - 同一画面（缩略图与上次 OCR 的帧差 < SAME）沿用上次的 OCR 结果：停点要连续确认 3 次，后两次不再读；
+    - 画面在动（与上一帧差 > MOVING）、上一步判定是被动页（点角落 / 动画）、又没有弹窗，且距上次 OCR 不到 BLIND_S：
+      不读，直接照上一步点（使用者：一直点左上角能加快动画）；
+    - 所以最多每 BLIND_S 秒整帧读一次，考试舞台这种一直在动的停点页也会在 BLIND_S 内认出来。"""
+
+    SAME = 1.5
+    MOVING = 4.0
+    BLIND_S = 1.5
+    PASSIVE = ("corner", "animation")
+
+    def __init__(self, ocr, clock=time.monotonic):
+        self._ocr, self.clock = ocr, clock
+        self.prev = self.ocr_thumb = self.boxes = self.last = None
+        self.ocr_at = -1e9
+        self.calls = 0
+
+    @staticmethod
+    def thumb(img):
+        import cv2
+
+        return cv2.cvtColor(cv2.resize(img, (36, 64), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY).astype("float32")
+
+    @staticmethod
+    def diff(a, b):
+        return float(abs(a - b).mean())
+
+    def ocr(self, img):
+        th = self.thumb(img)
+        if self.ocr_thumb is not None and self.boxes is not None and self.diff(th, self.ocr_thumb) < self.SAME:
+            return self.boxes
+        self.calls += 1
+        self.boxes, self.ocr_thumb, self.ocr_at = self._ocr(img), th, self.clock()
+        return self.boxes
+
+    def blind(self, img, header):
+        """画面在动、上一步是被动页时，不读直接照上一步点：返回 (kind, tap) 或 None。"""
+        if img is None or img.shape[:2] != (1280, 720):
+            return None
+        th = self.thumb(img)
+        prev, self.prev = self.prev, th
+        last = self.last
+        if (last is None or last[0] not in self.PASSIVE or prev is None or self.diff(th, prev) <= self.MOVING
+                or self.clock() - self.ocr_at >= self.BLIND_S or header(img) is not None or acquire_bar(img)):
+            return None
+        return last
+
+    def decide(self, img, decide, header):
+        """一步：能盲点就盲点，否则交给 decide（用 self.ocr 读）。停点（HoldPage）后清掉上一步，保证停点每次都重新确认。"""
+        if (hit := self.blind(img, header)) is not None:
+            return hit
+        try:
+            self.last = decide(img, self.ocr)
+        except HoldPage:
+            self.last = None
+            raise
+        return self.last
+
+
+def acquire_bar(img) -> bool:
+    """获得演出的名称栏（像素，约 1ms）：有它就不盲点，走完整判定，好把饮料记账（验证局：P 道具在公開レッスン 结束时白送的
+    随机饮料只有获得演出，盲点连点角落时一帧都没识别，账本漏 2 瓶）。"""
+    import cv2
+
+    from hiro.vision.quick import _acquire_bar
+
+    return img is not None and img.shape[:2] == (1280, 720) and _acquire_bar(cv2.cvtColor(img, cv2.COLOR_BGR2HSV))
+
+
 def auto_decide(img, *, ocr, quick, fallback, header):
     """watch / VEIL burst 的一步（纯判定，不点）：返回 (kind, tap)；该停下交给代理时抛 HoldPage；
     其余（帧不对、加载中）返回 None。
@@ -198,14 +491,18 @@ def auto_decide(img, *, ocr, quick, fallback, header):
         return None
     dialog = header(img) is not None
     page = quick(img)
-    fb = fallback(img) if page is None and not dialog else None
     boxes = None
+    if page is not None and page["page"] == "commu":
+        boxes = ocr(img)
+        if not commu_confirmed(boxes):
+            page = None  # 不是剧情（授業分支页淡入等）：按没认出处理，下面照常判授業分支 / 停点
+    fb = fallback(img) if page is None and not dialog else None
     if page is None and not dialog and fb in {None, "ACTION_SELECT"}:
         # Only read the top strip to identify a study branch. The
         # resident corner tap does not depend on full-frame OCR.
         study = fb is None and any(t.strip() == "授業" for t, _, _ in ocr(img[:150, :220]))
         if fb == "ACTION_SELECT" or study:
-            boxes = ocr(img)
+            boxes = boxes if boxes is not None else ocr(img)
             if result := route_tap(img, boxes, action_page=fb == "ACTION_SELECT"):
                 return result
             if fb == "ACTION_SELECT":
@@ -213,19 +510,65 @@ def auto_decide(img, *, ocr, quick, fallback, header):
             # Other 授業 pages (card change etc.) fall through to the checks below.
     # 整帧读一次：选择页、考试、商店、确认框等都停下交给代理。快识别认成动画的页面也读：
     # 商店 / 轮间选中饮料时会被认成 ACQUIRE，轮间菜单会被认成 CUSTOMIZE_RESULT（全局回放）。
-    if reason := hold_reason([t for t, _, _ in (boxes if boxes is not None else ocr(img))]):
-        raise HoldPage(reason)
+    boxes = boxes if boxes is not None else ocr(img)
+    if tap := result_next(boxes, dialog):
+        return None if tap == "wait" else ("result_next", tap)
+    if step := briefing_step(boxes, dialog):
+        return None if step == "wait" else step
+    if page is not None and page["page"] in CORNER_HOLD_PAGES:
+        # 牌组一览底部「スキルカード(23)」标签行会被 acquire_banner 当成效果说明行，「所持スキルカード」又在 BANNER_PASS 的
+        # 「考试中」里 → 原来当获得演出点角落（验证局代理开一览核对的 1 分钟点了 104 下）。先停。
+        raise HoldPage(f"页面 {page['page']}")
+    if reason := hold_reason([t for t, _, _ in boxes]):
+        kind = reason.split("：")[0]
+        # 考试出牌页选中一张牌时，牌的说明行也落在 acquire_banner 那一带（验证局 1-c：exam 退出后代理手选牌，watch 2 分钟点了
+        # 126 下角落、手点的牌没生效）→ 「考试中」还要看到获得演出的名称栏（像素）才放行
+        if not (acquire_banner(boxes) and kind in BANNER_PASS and (kind != "考试中" or acquire_bar(img))):
+            raise HoldPage(reason)
+        note_drink(page, dialog)
+        return "corner", ADVANCE_TAP
     if fb is not None:
         raise HoldPage(f"fallback 页面 {fb}")
     if page is not None and (page["dispatch"] or page["page"] in CORNER_HOLD_PAGES):
         raise HoldPage(f"页面 {page['page']}")
+    note_drink(page, dialog)
     if page is not None and not dialog:
         kind = page["fields"].get("kind")
         if page["page"] in QUICK_ANIMATIONS or (page["page"] == "TRANSITION" and kind in QUICK_TRANSITIONS):
             tap = tuple(page["tap"])
+            if page["page"] == "commu":
+                return "commu", tap  # 不进 OcrGate.PASSIVE：剧情 SKIP 不盲点重复（剧情结束后同一位置是饮料栏）
             if tap != ADVANCE_TAP:
                 return "animation", tap
     return "corner", ADVANCE_TAP
+
+
+ACQUIRED: list[dict] = []  # auto_decide 看到的饮料获得演出（名字 + 时间），watch tick 取走记账
+ACQUIRE_SAME_S = 8.0  # 同名饮料的获得演出这么久内只算一次（同一个演出连着好几帧）
+
+
+def note_drink(page, dialog) -> None:
+    """清单 10：事件 / 公開レッスン 等直接给的饮料只有获得演出、不经过选择页，原来不进账本。只在当作动画点过去的帧上记
+    （商店 / 相談 选中饮料也会被认成 ACQUIRE，但那些页先按停点处理，到不了这里）；watch tick 去重后记账。"""
+    if page is None or dialog or page["page"] != "ACQUIRE":
+        return
+    f = page["fields"]
+    if f.get("kind") == "drink":
+        note_acquire(f.get("name"))
+    elif f.get("kind") == "card" and f.get("name"):
+        # 第一层（使用者 2026-11-07：随机事件给的卡 / 强化漏记）：卡的获得演出也记，名称栏带强化次数
+        name = "".join(unicodedata.normalize("NFKC", f["name"]).split()).rstrip("+") + "+" * int(f.get("upgrade") or 0)
+        note_acquire(name, kind="card", card_id=f.get("card_id"))
+
+
+def note_acquire(name, *, kind: str = "drink", card_id: str | None = None) -> None:
+    if not name:
+        return
+    now = time.monotonic()
+    if ACQUIRED and ACQUIRED[-1]["name"] == name and now - ACQUIRED[-1]["t"] < ACQUIRE_SAME_S:
+        ACQUIRED[-1]["t"] = now
+        return
+    ACQUIRED.append({"name": name, "t": now, "new": True, "kind": kind, "card_id": card_id})
 
 
 def action_hold(boxes):
@@ -241,7 +584,8 @@ def flow_page(boxes, action, *, dialog, keep_memory=False):
     """Return a guarded action from OCR on the current portrait frame."""
     from hiro.produce.ops import button_text, find_text
 
-    boxes = [(unicodedata.normalize("NFKC", t).replace(" ", ""), c, b) for t, c, b in boxes]
+    # OCR 常把「次へ」的平假名へ读成片假名ヘ（实机フォト选择页「次ヘ」）
+    boxes = [(unicodedata.normalize("NFKC", t).replace(" ", "").replace("次ヘ", "次へ"), c, b) for t, c, b in boxes]
     texts = [t for t, _, _ in boxes]
 
     def has(*words):
@@ -263,6 +607,12 @@ def flow_page(boxes, action, *, dialog, keep_memory=False):
     if action == "open":
         if has("AP不足", "APが不足") and has("回復する"):
             return "ap_shortage", None
+        if (AUTO_START and not dialog and has("プロデュース開始") and has("育成情報")
+                and not has(*START_DANGER)):
+            # 重复育成（使用者 2026-11-07：「重复育成完全可以使用这个」）：沿用首检核对过的偶像 / 回忆 / 编成，
+            # 开局确认页没有弹窗、没有破棄 / 别的设备 / 再開 / 付费字样时直接点「プロデュース開始」。
+            # 别的设备有进度、AP 不足等都会以弹窗出现：有弹窗就不点，照旧交给代理 / AP 流程
+            return "start", button("プロデュース開始", region=(150, 980, 570, 1110))
         if dialog or has("開始確認", "開始する", "プロデュース再開", "再開する", "ジュエル", "購入"):
             return "opening_confirmation", None
         if has("Hatsuboshi", "HATSUBOSHI", "H.I.F", "選抜"):
@@ -275,6 +625,10 @@ def flow_page(boxes, action, *, dialog, keep_memory=False):
 
     if has("開始確認", "開始する", "プロデュース再開", "再開する", "本戦へ"):
         return "protected", None
+
+    if has("メモリー確定確認") and not has("ジュエル", "購入", "有償"):
+        # 回忆挑选后的「メモリー確定確認」：batch_regen.decide 按偏移点；漏了（框滑入时点空）这里按文字补点
+        return "memory_confirm", button("生成する", region=(360, 1080, 720, 1230))
 
     import batch_memory
 
@@ -322,7 +676,11 @@ def flow_page(boxes, action, *, dialog, keep_memory=False):
             return "regeneration_review", None
         return "memory_done", button("次へ")
     if has("最終プロデュース評価", "プロデュース履歴", "プロデュース完了", "イベント報酬進捗"):
-        return "result", button("次へ", "完了する", "閉じる")
+        # 最終プロデュース評価页只有底部「TAPで次へ」，没有「次へ」按钮（实机 codex-20261107-6 第 1 局）
+        return "result", button("次へ", "完了する", "閉じる") or button("TAPで次へ")
+    if tap := button("TAP", region=(200, 1000, 520, 1230)):
+        # 回忆生成后逐项揭示能力，底部只有「TAP」（实机 codex-20261107-6 第 1 局）
+        return "memory_reveal", tap
     return "settlement_review", None
 
 
@@ -349,9 +707,28 @@ def device_action(action, *, watch_tick=None, auto_route=False):
                 raise ValueError("暂停旗标已出现，重新定位后再操作")
             device.click(x, y)
 
+        raw = {"m": None}
+
+        def live_click(x, y):
+            """LIVE 横屏全屏的点击：不走竖屏缩放器（逻辑 720x1280 和横屏物理分辨率对不上，点不到该点的地方），按屏幕像素直接给
+            MaaTools（MaaToolsImpl.click 自己再除 Catalyst 0.77）。(x, y) 是 1280x720 的屏幕坐标（不含帧顶白条）。
+            实测（验证局 1-e，2026-11-07）：⏭ (1200,72) → 原始 (2700,180) 确认框弹出；「終了する」同法点中。"""
+            if pause_flag.ENABLED and pause_flag.reason() is not None:
+                raise ValueError("暂停旗标已出现，重新定位后再操作")
+            from hiro.device import MaaToolsImpl
+
+            if raw["m"] is None:
+                raw["m"] = MaaToolsImpl(None)
+                raw["m"].start()
+            h, w = raw["m"].screenshot().shape[:2]
+            if h > w:  # 已回竖屏：按普通点击
+                device.click(x, y)
+                return
+            raw["m"].click(round(x * w / 1280), round(y * h / 720))
+
         if action == "refill":
             # Only called from the actual AP shortage dialog, before starting.
-            return ap_refill.refill(shoot, click, ocr_boxes, log=lambda msg: print(msg, file=sys.stderr))
+            return ap_refill.refill_fast(shoot, click, ocr_boxes, dialog_header, log=lambda msg: print(msg, file=sys.stderr))
         if action in {"settle", "open"}:
             import batch_memory
 
@@ -360,10 +737,30 @@ def device_action(action, *, watch_tick=None, auto_route=False):
             refilled = False
             memories: list[dict] = []  # 结算里看到的每一份回忆的评估（按交接提示词优先级）
             seen_choice = False
-            for _ in range(60):
+            regen_done = False
+            fast = {"thumb": None, "same": 0, "taps": 0}
+            slow = {"thumb": None, "same": 0}
+            steps = 0
+            # 只按整帧读的步数算 60 步上限：回忆定下后的只点不读（最多 SETTLE_FAST_MAX 下）原来也占这 60 步，
+            # 点 60 下就报 timeout（1-e、1-f 两局 settle 都是这样超时，之后画面其实自己回到首页）
+            while steps < 60:
                 img = shoot()
                 if img is None or img.shape[:2] != (1280, 720):
                     return {"page": "unsupported_frame", "memories": memories}
+                if action == "settle" and regen_done and fast["taps"] < SETTLE_FAST_MAX:
+                    # 回忆定下之后：只点不读。弹窗（像素）、底栏像首页（局部 OCR「ホーム」）、连点几下画面不变时才整帧读一次
+                    th = OcrGate.thumb(img)
+                    fast["same"] = fast["same"] + 1 if fast["thumb"] is not None and OcrGate.diff(th, fast["thumb"]) < OcrGate.SAME else 0
+                    fast["thumb"] = th
+                    x1, y1, x2, y2 = HOME_NAV
+                    near_home = any("ホーム" in t for t, _, _ in ocr_boxes(img[y1:y2, x1:x2]))
+                    if dialog_header(img) is None and not near_home and fast["same"] < SETTLE_STUCK:
+                        click(*SETTLE_TAP)
+                        fast["taps"] += 1
+                        time.sleep(SETTLE_FAST_GAP)
+                        continue
+                    fast["same"] = 0
+                steps += 1
                 boxes = ocr_boxes(img)
                 texts = [t for t, _, _ in boxes]
                 keep_memory = False
@@ -374,18 +771,49 @@ def device_action(action, *, watch_tick=None, auto_route=False):
                     # 命中优先项、又没见过「再生成前 / 後」挑选页（不确定再生成会不会直接替换）：不再再生成，保住命中的这份
                     keep_memory = bool(ev["hit"]) and not seen_choice
                 page, tap = flow_page(boxes, action, dialog=dialog_header(img) is not None, keep_memory=keep_memory)
+                if action == "settle" and not regen_done and (
+                        page in {"generate", "regenerate", "memory_reveal", "memory_choice"}
+                        or any("獲得するメモリーを選択" in t for t in texts)):
+                    # LIVE 后的生成 / 再生成 / 挑选交给 batch_regen：快进 + 局部 OCR + 固定坐标，用完次数后逐个版本挑
+                    import batch_regen
+
+                    regen = batch_regen.run(shoot, click, ocr_boxes, dialog_header, log=lambda m: print(m, file=sys.stderr))
+                    regen_done = True
+                    memories.extend({"label": v["label"], "hit": v["hit"], "card": v["card"], "name": v.get("name"), "frame": v.get("frame")} for v in regen.get("versions") or [])
+                    if not regen["ok"]:
+                        return {"page": regen["page"], "regen": regen, "memories": memories}
+                    last = None
+                    time.sleep(0.65)
+                    continue
                 if page == "memory_choice":
                     seen_choice = True
                     if tap is None:
                         return {"page": page, "choice": dict(LAST_CHOICE), "memories": memories}
                 if page == "ap_shortage" and not refilled:
-                    result = ap_refill.refill(shoot, click, ocr_boxes, log=lambda msg: print(msg, file=sys.stderr))
+                    result = ap_refill.refill_fast(shoot, click, ocr_boxes, dialog_header, log=lambda msg: print(msg, file=sys.stderr))
                     if not result["ok"]:
                         return {"page": page, **result}
                     refilled = True
                     last = None
                     time.sleep(0.65)
                     continue
+                close_x = any(t.strip() in ("x", "×", "X", "✕") and b[1] > 1100 for t, _, b in boxes)
+                th = OcrGate.thumb(img)
+                slow["same"] = slow["same"] + 1 if slow["thumb"] is not None and OcrGate.diff(th, slow["thumb"]) < OcrGate.SAME else 0
+                slow["thumb"] = th
+                if action == "settle" and regen_done and slow["same"] >= SETTLE_STUCK:
+                    # 回忆定下后画面连着几轮不变（1-e：活动弹窗「あさり先生シール」点 × / 次へ 重合处不动，超时）：
+                    # 点画面上任何一个「×」/「閉じる」，没有就点弹窗底部按钮
+                    shut = next((b for t, _, b in boxes if t.strip() in ("x", "×", "X", "✕", "閉じる", "OK")), None)
+                    click(*((int((shut[0] + shut[2]) / 2), int((shut[1] + shut[3]) / 2)) if shut else SETTLE_POPUP_TAP))
+                    slow["same"] = 0
+                    time.sleep(0.65)
+                    continue
+                if tap is None and page == "settlement_review" and (regen_done or close_x):
+                    regen_done = regen_done or close_x  # 底部有「×」= 回忆已定（新进程续跑时也能接上快收尾）
+                    # 回忆定下之后：一直点「×」和它后面模糊的「次へ」圆角框重合处，有 × 关 ×、没有就点到次へ，一路回到首页
+                    #（实机 codex-20261107-6 第 1 局：あさり先生シール获得页点左上角不动，点这里 36 步回首页）
+                    tap = SETTLE_TAP
                 if tap is None and page == "settlement_review":
                     tap = animation_tap(img, ocr=lambda _: boxes, blocked=blocked, header=dialog_header,
                                         quick=quick_page, fallback=fallback_page, corner=ADVANCE_TAP)
@@ -396,18 +824,73 @@ def device_action(action, *, watch_tick=None, auto_route=False):
                 else:
                     unread = 0
                     identity = tuple(t for t, _, _ in boxes if page != "regenerate" or "回可能" in t)
-                    signature = (page, identity)
+                    # 开局：同一类页面只点一次（不按 OCR 文字去重——淡出中的帧文字会变，第 2 局曾疑似因此把偶像页「次へ」
+                    # 补点到了紧接着的开始确认页「プロデュース開始」上，两者位置几乎重合）
+                    signature = (page,) if action == "open" else (page, identity)
                     if signature != last or page == "settlement_review":
+                        if action == "open" and not same_frame(img, shoot()):
+                            last = None  # OCR 期间画面变了：这一下不点，下一轮按新画面重新判断
+                            time.sleep(0.65)
+                            continue
                         click(*tap)
                         last = signature
                 time.sleep(0.65)
             return {"page": "timeout", "memories": memories}
+        live = {"guard": None, "ocr_at": -1e9}
+
+        def live_step(img):
+            """横屏 LIVE（PlayCover 横屏黑屏）：黑屏持续就切全屏（hiro.loop.landscape：全屏按钮 → AXFullScreen → 菜单，逐个核对），
+            LIVE 结束回竖屏后退出全屏；横屏有画面时每 2s OCR 一次，认到 TAP TO START 就点。
+            返回 None = 不是 LIVE，交给 auto_decide；否则返回 (kind, tap 或 None)。切换失败 / 屏幕锁住时停下交给使用者。"""
+            from hiro.loop.controller import live_start_tap
+            from hiro.loop.landscape import LandscapeGuard
+
+            if img is None:
+                return None
+            g = live["guard"] = live["guard"] or LandscapeGuard(shoot=device.screenshot)
+            if g.last_result in LIVE_FAIL and not g.exit_cleared():
+                raise HoldPage(live_fail_reason(g.last_op, g.last_result))
+            if g.tick(img):
+                return "live_fullscreen", None
+            if live.get("ended") and not live.get("exited") and time.monotonic() - live["ended"] >= LIVE_EXIT_AFTER:
+                # 跳过 LIVE 后直接回竖屏：fn+shift+F（landscape.METHODS 退出时先试它），失败下一帧按 LIVE_FAIL 停下交给使用者
+                live["exited"] = True
+                g.exit_now()
+                return "live_portrait", None
+            if not g.in_live(img):
+                return None
+            if img.shape[1] > img.shape[0] and time.monotonic() - live["ocr_at"] >= LIVE_OCR_EVERY:
+                live["ocr_at"] = time.monotonic()
+                boxes = ocr_boxes(img)
+                if tap := live_start_tap(img, boxes):
+                    live["started"] = time.monotonic()
+                    return "live_start", (tap[0], tap[1] - top_bar(img))  # 帧坐标 → 屏幕坐标（live_click 按屏幕点）
+                if tap := live_skip_step(img, boxes, live, click):
+                    return tap
+            return "live", None
+
+        gate = OcrGate(ocr_boxes)
+
         def advance():
             img = shoot()
             if auto_route:
-                result = auto_decide(img, ocr=ocr_boxes, quick=quick_page, fallback=fallback_page, header=dialog_header)
+                result = live_step(img)
+                if result is None:
+                    try:
+                        result = gate.decide(img, lambda im, ocr: auto_decide(im, ocr=ocr, quick=quick_page, fallback=fallback_page,
+                                                                             header=dialog_header), dialog_header)
+                    except HoldPage as hold:
+                        if str(hold).startswith("行动页"):
+                            gate.ocr_thumb = None  # N2：行动页淡入帧变化很小，OCR 会沿用旧读数；停点确认期间每帧重读
+                        # 使用者建议：这几类停点在确认退出的那几轮里照样点角落——是获得动画就跳过，真是选择页 (12,12) 也无害
+                        if (str(hold).split("：")[0] in TAP_THROUGH and dialog_header(img) is None
+                                and str(hold) != HELD["reason"]):  # 已确认的停点不再点
+                            click(*ADVANCE_TAP)
+                        raise
+                elif result[1] is None:
+                    return result if result[0] != "live" else None  # LIVE 演出中：不点，watch 只打印一次 waiting
                 if result is not None:
-                    click(*result[1])
+                    (live_click if result[0].startswith("live_") else click)(*result[1])
                 return result
             if img is None or img.shape[:2] != (1280, 720):
                 return None
@@ -423,9 +906,35 @@ def device_action(action, *, watch_tick=None, auto_route=False):
                 return ("corner" if tap == ADVANCE_TAP else "animation"), tap
             return None
 
-        if watch_tick is not None:
-            while watch_tick(advance):
+        if action == "settle-lead":
+            # 使用者 2026-11-07（1-h）：结算前段不用 settle 自己的 OCR 判页——偶像名片「TAPで次へ」被当未知弹窗停下、
+            # 优胜 LIVE 黑屏要另起 watch。改用 burst / watch 同一套规则（auto_route，含 LIVE 全屏 / 跳过 / 回竖屏）一路推进，
+            # 推到回忆页（「结算回忆」停点）再交给 settle。别的停点连续 3 次同一个就交回代理
+            deadline = time.monotonic() + SETTLE_LEAD_MAX
+            taps, held, same = 0, None, 0
+            while time.monotonic() < deadline:
+                try:
+                    result = advance()
+                except HoldPage as hold:
+                    reason = str(hold)
+                    if reason.startswith("结算回忆"):
+                        return {"ok": True, "taps": taps, "hold": reason}
+                    same = same + 1 if reason == held else 1
+                    held = reason
+                    if same >= 3:
+                        return {"ok": False, "taps": taps, "hold": reason}
+                    time.sleep(ADVANCE_EVERY)
+                    continue
+                held, same = None, 0
+                if result is not None:
+                    taps += 1
                 time.sleep(ADVANCE_EVERY)
+            return {"ok": False, "taps": taps, "why": f"{SETTLE_LEAD_MAX:.0f}s 内没到回忆页"}
+        if watch_tick is not None:
+            gap = watch_gap(ADVANCE_EVERY)
+            print(json.dumps({"t": round(time.time(), 2), "action": "start", "gap": gap}), flush=True)
+            while watch_tick(advance):
+                time.sleep(gap)
             return None
         actions = []
         for _ in range(8):
@@ -442,6 +951,9 @@ def device_action(action, *, watch_tick=None, auto_route=False):
         device.stop()
 
 
+LOCK_WAIT = 30.0  # 命令行等批次文件锁的上限（秒）
+
+
 def save(path, state):
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as f:
         temp = Path(f.name)
@@ -456,6 +968,8 @@ def save(path, state):
 
 
 def change(state, args, *, persist=None):
+    global AUTO_START
+    AUTO_START = start_allowed(state)
     cmd = args.command
     if cmd == "preflight":
         if state["active"] or state["completed"] or state["preflight"]:
@@ -566,7 +1080,8 @@ def change(state, args, *, persist=None):
         if cmd == "ledger" and args.log:
             out["log"] = ledger["log"]
         return out
-    elif cmd in {"change-scan", "change-pick", "shop-scan", "shop-buy", "shop-refresh", "shop-auto", "drink-drop", "drink-overflow", "customize", "memory-abilities"}:
+    elif cmd in {"change-scan", "change-pick", "shop-scan", "shop-buy", "shop-refresh", "interval-end", "shop-auto", "drink-drop", "drink-overflow", "customize",
+                 "memory-abilities", "deck-sync"}:
         if active["phase"] != "playing":
             raise ValueError(f"{cmd} 只允许在 playing 阶段使用")
         sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa"), str(ROOT / "tools")]
@@ -582,6 +1097,11 @@ def change(state, args, *, persist=None):
                 return batch_change.scan(device, args.batch, args.run)
             if cmd == "shop-scan":
                 return batch_shop.scan(device)
+            if cmd == "deck-sync":
+                out = deck_sync(device, ledger, why=args.why)
+                if out.get("diff") is not None:
+                    persist()
+                return out
             if cmd == "memory-abilities":
                 from hiro.vision.status import read_memory_abilities
 
@@ -605,16 +1125,49 @@ def change(state, args, *, persist=None):
                         ledger["rebound_repeatable"] = True
                     persist()
                 return out
+            if cmd == "interval-end":
+                return interval_end(device)
             if cmd == "shop-refresh":
                 return batch_shop.refresh(device)
+            if cmd in {"shop-auto", "shop-buy"} and ledger is not None:
+                if synced := L.sync_drinks(ledger, batch_shop.read_bar(device), why=cmd):
+                    persist()
+                    print(json.dumps({"action": "drink_sync", "diff": synced}, ensure_ascii=False), file=sys.stderr)
             if cmd == "shop-auto":
                 def on_buy(name):
                     if ledger is not None:
                         L.drink_add(ledger, name, why="shop-auto 买高价值饮料")
                         persist()
 
+                def make_room():
+                    # 丢一瓶低价值饮料：账本和画面都认得、都不是高价值的才丢（HIRO_SHOP_DROP_LOW=0 关掉）
+                    if ledger is None or os.environ.get("HIRO_SHOP_DROP_LOW", "1") == "0":
+                        return None
+                    bar = batch_shop.read_bar(device)
+                    for i, name in enumerate(ledger["drinks"]):
+                        seen = bar[i].get("name") if i < len(bar) and bar[i].get("state") == "drink" else None
+                        if not name or not seen or L.norm(seen) != L.norm(name) or batch_shop.high_value(name):
+                            continue
+                        out = batch_shop.drop(device, i)
+                        if not out["ok"]:
+                            return None
+                        L.drink_remove(ledger, i, why=f"shop-auto 腾格子买高价值饮料（画面 {out['drink']}）")
+                        persist()
+                        return name
+                    return None
+
                 free = (lambda: ledger["drinks"].count(None)) if ledger is not None else (lambda: 4)
-                return batch_shop.auto(device, free_slots=free, on_buy=on_buy, max_refresh=args.max_refresh)
+                out = batch_shop.auto(device, free_slots=free, on_buy=on_buy, max_refresh=args.max_refresh, make_room=make_room)
+                if out.get("ok") and ledger is not None and batch_rules.get("shop.deck_sync", True):
+                    # 使用者 2026-11-07：退出商店 / 轮间前记账——补给完、按「終了」前整副牌组对账（相談在 R1 前，轮间在 R2 前）
+                    where = {"interval": "R2 前（轮间）"}.get(out.get("page"), "R1 前（相談）")
+                    try:
+                        out["deck_sync"] = deck_sync(device, ledger, why=where)
+                    except Exception as e:  # noqa: BLE001  对账失败不挡补给
+                        out["deck_sync"] = {"ok": False, "why": f"deck-sync 出错：{e}"}
+                    if (out["deck_sync"] or {}).get("diff") is not None:
+                        persist()
+                return out
             if cmd == "shop-buy":
                 if ledger is not None and None not in ledger["drinks"]:
                     raise ValueError(f"账本饮料栏已满（{ledger['drinks']}），先 drink-drop 再买")
@@ -625,6 +1178,7 @@ def change(state, args, *, persist=None):
                 return out
             if cmd == "drink-drop":
                 out = batch_shop.drop(device, args.slot - 1)
+                out["slot"] = args.slot  # 对外和 --slot 一样从 1 数（原来输出 0 起的格号，1-d 代理看到 --slot 2 输出 1）
                 if out["ok"] and ledger is not None:
                     L.drink_remove(ledger, args.slot - 1, why=f"丢掉（画面 {out['drink']}）")
                     persist()
@@ -648,13 +1202,9 @@ def change(state, args, *, persist=None):
                                              "once": out["picked"]["once"]}  # fmt: skip
                     persist()
                 elif "changed" in out:
-                    got, pending = out["changed"], ledger.get("pending_add")
-                    if not got.get("name") or not pending or not pending.get("name"):
-                        out["ledger_todo"] = "换出或换入的卡没认出，用 ledger-edit --change 旧 新 --once/--not-once 补记"
-                    else:
-                        L.change_card(ledger, L.card_name(got["name"], got.get("upgrade")),
-                                      L.card_name(pending["name"], pending.get("upgrade")), pending["once"], why="授業换卡")
-                        ledger["pending_add"] = None
+                    # 游戏里已经换了：记账失败也不抛错（否则整次换卡丢账），写进 ledger_todo 交给代理补
+                    if todo := L.record_change(ledger, out["changed"], ledger.get("pending_add"), why="授業换卡"):
+                        out["ledger_todo"] = todo
                     persist()
             return out
         finally:
@@ -684,12 +1234,19 @@ def change(state, args, *, persist=None):
             if base is None or change is None:
                 raise ValueError("先 memory-load 建本局账本，或登记基准牌组和本局变卡记录，或用 --deck 提交本轮完整清单")
             deck = apply_deck_change(base, change)
+        # 开考前饮料栏快照（每轮第一次 exam 时记）：再挑戦时游戏把饮料栏恢复到开考前，账本也恢复（1-f 代理手动改的）
+        snaps = active.setdefault("exam_start_drinks", {})
+        if ledger is not None and str(args.round) not in snaps:
+            snaps[str(args.round)] = list(ledger["drinks"])
+            persist()
         try:
             out = run_round(args.round, deck, f"batch-{args.batch}-{args.run}-exam{args.round}",
                             drinks=ledger["drinks"] if ledger else None,
                             abilities=ledger.get("abilities") if ledger else None)  # fmt: skip
         except ResumeBlocked as e:
             raise ValueError(str(e)) from e
+        if ledger is not None and out.get("retry") and snaps.get(str(args.round)) is not None:
+            L.drink_set(ledger, snaps[str(args.round)], why=f"R{args.round} 再挑戦：饮料栏恢复到开考前")
         if ledger is not None and out.get("drinks") is not None:
             L.after_exam(ledger, out["drinks"], why=f"R{args.round} 考完（喝掉的去掉、往左挤）")
             out["ledger_drinks"] = ledger["drinks"]
@@ -709,7 +1266,12 @@ def change(state, args, *, persist=None):
             raise ValueError("须确认本局已开始并提供结算记录")
         outcome = None
         if cmd == "settle":
+            lead = device_action("settle-lead", auto_route=True)
+            if not lead.get("ok") and str(lead.get("hold") or "").startswith("考试结果"):
+                return {"page": "hold", "lead": lead}  # 还在结果页 / 再挑戦確認：交给代理（再挑戦由使用者定），不进结算
+            # 其他停点（首页、确认框等）照旧交给 settle 自己的流程（续跑时可能已过了回忆页）
             outcome = device_action("settle")
+            outcome["lead"] = lead
             if outcome["page"] != "home":
                 return outcome
         record = {"run": args.run, "result": args.result}
@@ -730,12 +1292,161 @@ def change(state, args, *, persist=None):
         return device_action(cmd)
 
 
+ACTION_HOLD_S = float(batch_rules.get("watch.action_hold_s", 10.0))  # N2：行动页停点持续这么久才报（首日淡入帧 7.7s 后自己认出）
+CHOICE_HOLDS = ("差し入れ 选饮料", "领取选择", "选择页", "饮料栏操作", "相談 / 商店", "轮间客制化")
+CHOICE_SKIP_S = 20.0  # 选择页 / 商店处理完这么久内的饮料获得演出是那一次的（已由代理 / prep 记账），不重复记
+CHOICE = {"at": -1e9}
+
+
+def deck_sync(device, ledger, *, why: str) -> dict:
+    """第二层（使用者 2026-11-07）：在有牌组按钮的培育页（相談 / 选行动页 / 轮间）打开「所持スキルカード」一览，
+    整副读全后和账本对账（batch_ledger.sync_deck：漏记的补、强化差「+」的改、多出的只记）。读不全不改账本。"""
+    import batch_ledger as L
+
+    from hiro.produce import deck_review
+    from hiro.produce.ops import ocr_boxes
+    from hiro.state.catalog import catalog
+    from hiro.state.knowledge import is_once
+
+    if ledger is None:
+        return {"ok": False, "why": "本局没有账本"}
+    from hiro.vision.hif import is_hif_exam
+
+    text = os.environ.get("HIRO_DECK_TEXT") == "1"
+    if is_hif_exam(device.screenshot()) and not text:
+        # 考试里的一览按 保留 / 手札 / 山札 / 捨札 / 除外 分组，网格读法对不上（1-e R2 出牌页跑过：滑过头、6 张认不出）
+        return {"ok": False, "why": "考试页的牌组一览是分组的，网格读法不能对账；在相談 / 选行动页 / 轮间跑，或开 HIRO_DECK_TEXT=1", "diff": None}
+    deck_review.SAVE_DIR = ROOT / "reports" / "live" / "deck-list"
+
+    def ocr_texts(img):
+        return [(t, ((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)) for t, _, b in ocr_boxes(img)]
+
+    reader = None
+    if text:
+        # HIRO_DECK_TEXT=1（默认关，使用者 2026-11-07）：一览切到列表显示，按卡名文字对账；考试页的分组一览也能读
+        from hiro.produce import deck_text
+
+        reader = lambda: deck_text.read_list(  # noqa: E731
+            shoot=device.screenshot, click=device.click, swipe=lambda x1, y1, x2, y2, d: device.swipe(x1, y1, x2, y2, d),
+            ocr_boxes=ocr_boxes, view_diff=deck_review._view_diff, save=deck_review._save)
+    r = deck_review.review_deck(shoot=device.screenshot, click=device.click,
+                                swipe=lambda x1, y1, x2, y2, d: device.swipe(x1, y1, x2, y2, d), ocr_texts=ocr_texts,
+                                text_reader=reader)
+    if reader is not None:
+        t = r.get("text") or {}
+        out = {"ok": bool(t.get("complete")) and r["closed"], "opened": r["opened"], "closed": r["closed"], "mode": "text",
+               "deck_size": t.get("total"), "problems": r["problems"], "diff": None, "groups": t.get("groups")}
+        if not out["ok"]:
+            return out  # 读不全不改账本
+        screen = [(n, _once_by_name(n)) for n in t["cards"]]
+        out["diff"] = L.sync_deck(ledger, screen, why=why)
+        out["cards"] = len(screen)
+        return out
+    out = {"ok": r["deck"] is not None and r["closed"], "opened": r["opened"], "closed": r["closed"],
+           "deck_size": r["deck_size"], "problems": r["problems"], "diff": None}
+    if r["deck"] is None:
+        return out
+    screen = []
+    for c in r["deck"]:
+        try:
+            name = catalog().card(c["card_id"], int(c.get("upgrade") or 0))["name"]
+        except Exception:  # noqa: BLE001
+            out["ok"] = False
+            out["problems"].append(f"主数据查不到 {c.get('card_id')}+{c.get('upgrade')}，不对账")
+            return out
+        screen.append((name, is_once(c["card_id"])))
+    out["diff"] = L.sync_deck(ledger, screen, why=why)
+    out["cards"] = len(screen)
+    return out
+
+
+def _once_by_name(name: str) -> bool | None:
+    """卡名（带「+」）→ 是否レッスン中1回（主数据 playMovePositionType=Lost）；查不到 None。"""
+    try:
+        from hiro.state.context import catalog
+
+        row = catalog().db.execute("SELECT playMovePositionType FROM ProduceCard WHERE name = ? LIMIT 1", (name,)).fetchone()
+    except Exception:  # noqa: BLE001
+        return None
+    return None if row is None else "Lost" in str(row[0])
+
+
+def _just_booked(ledger, name: str, last: int = 6) -> bool:
+    """账本最近几条记录里有这个名字（去「+」比）：选择页 / prep 刚记过它。没有账本时按旧规则当作记过。"""
+    if ledger is None:
+        return True
+    base = "".join(unicodedata.normalize("NFKC", name).split()).rstrip("+")
+    for entry in (ledger.get("log") or [])[-last:]:
+        names = [entry.get(k) for k in ("card", "drink")]
+        if any(isinstance(n, str) and n.rstrip("+") == base for n in names):
+            return True
+    return False
+
+
+def drain_acquired(state, active, persist) -> list[dict]:
+    """把 auto_decide 攒下的饮料获得演出记进账本（清单 10），返回要打印的日志行。"""
+    out = []
+    ledger = active.get("ledger")
+    for e in ACQUIRED:
+        if not e.pop("new", False):
+            continue
+        card = e.get("kind") == "card"
+        action, key = ("card_acquired", "card") if card else ("drink_acquired", "drink")
+        if e["t"] - CHOICE["at"] < CHOICE_SKIP_S and _just_booked(ledger, e["name"]):
+            # 只跳过选择页刚记过的那张 / 那瓶；别的名字照记（1-f：换卡阶段 2 后 11s 支援卡事件给的 ティーパーティ+ 被当成换卡的演出跳过）
+            out.append({"action": action, key: e["name"], "ledger": "choice"})
+            continue
+        if ledger is None:
+            out.append({"action": action, key: e["name"], "ledger": "no_ledger"})
+            continue
+        sys.path.insert(0, str(ROOT / "tools"))
+        import batch_ledger as L
+
+        if card:
+            from hiro.state.knowledge import is_once
+
+            res = L.acquire_card(ledger, e["name"], is_once(e.get("card_id")),
+                                 why="获得演出（事件等，watch 自动记）")
+            persist()
+            out.append({"action": action, key: e["name"], "ledger": res})
+            continue
+        res = L.acquire_drink(ledger, e["name"], why="获得演出（事件 / 公開レッスン 等，watch 自动记）")
+        persist()
+        out.append({"action": "drink_acquired", "drink": e["name"], "ledger": res})
+    del ACQUIRED[:-1]  # 留最后一条做同名去重
+    return out
+
+
+STAY = _env_flag("HIRO_WATCH_STAY", "watch.stay")  # 常驻：停点不退出（使用者 2026-11-07），设 0 恢复退出码 3
+HELD = {"reason": None, "prep": None}
+EMPTY = {"seen": False}
+PREP = _env_flag("HIRO_WATCH_PREP", "prep.enabled")  # 前六周固定流程（使用者 2026-11-07），设 0 关掉
+
+
+def prep_step(path, state):
+    sys.path[:0] = [str(ROOT / "tools")]
+    import batch_prep
+    from hiro.device import connect
+    from hiro.produce.ops import ocr_boxes
+
+    device = connect("maatools")
+    try:
+        return batch_prep.handle(device, ocr_boxes, change, state, path.stem, state["active"]["run"],
+                                 persist=lambda: save(path, state), log=lambda m: print(m, file=sys.stderr))
+    except Exception as e:  # noqa: BLE001 —— 固定流程出错就按原样停下交给代理
+        print(f"prep 失败：{e!r}", file=sys.stderr)
+        return None
+    finally:
+        device.stop()
+
+
 def watch(path, run):
     sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa")]
     from hiro.loop import pause_flag
 
     last_idle = False
     holds: list[str] = []
+    streak = {"reason": None, "since": 0.0}
 
     def tick(advance):
         nonlocal last_idle
@@ -752,21 +1463,63 @@ def watch(path, run):
                 raise ValueError("常驻快点仅适用于首检记录为 [VEIL] 秦谷美玲的批次")
             if pause_flag.ENABLED and pause_flag.reason() is not None:
                 return True
+            from hiro.device import MaaToolsEmptyFrame
+
             try:
                 result = advance() if active.get("phase") == "playing" else None
+            except MaaToolsEmptyFrame as e:
+                # 切屏 / 上滑：设备层已等过一阵还是空帧，常驻 watch 不退出，报一次后接着等
+                if not EMPTY["seen"]:
+                    EMPTY["seen"] = True
+                    print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), "action": "screen_lost",
+                                      "reason": str(e)}, ensure_ascii=False), flush=True)
+                time.sleep(2.0)
+                return True
             except HoldPage as hold:
                 # 同一个停点连续 HOLD_CONFIRM 次才退出：过场里半帧的行动页 / 选择页不算
                 holds.append(str(hold))
-                if len(holds) >= HOLD_CONFIRM and len(set(holds[-HOLD_CONFIRM:])) == 1:
-                    raise
+                if streak["reason"] != holds[-1]:
+                    streak.update(reason=holds[-1], since=time.monotonic())
+                if PREP and len(holds) >= 2 and holds[-1] == holds[-2] and HELD["prep"] != holds[-1]:
+                    HELD["prep"] = holds[-1]  # 同一停点只试一次固定流程
+                    # 前六周固定流程（tools/batch_prep.py）：差し入れ / 相談 / 换卡 / 选饮料选卡，watch 自己做完不唤醒代理
+                    done = prep_step(path, state)
+                    if done:
+                        holds.clear()
+                        if any(w in done for w in ("饮料", "技能卡", "换卡")):
+                            CHOICE["at"] = time.monotonic()  # 选择页之后的获得演出已由 prep 记账，不再重复记
+                        print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), "action": "prep", "done": done},
+                                         ensure_ascii=False), flush=True)
+                        return True
+                waited = time.monotonic() - streak["since"]
+                if (len(holds) >= HOLD_CONFIRM and len(set(holds[-HOLD_CONFIRM:])) == 1
+                        and (not holds[-1].startswith("行动页") or waited >= ACTION_HOLD_S)):
+                    if not STAY:
+                        raise
+                    if HELD["reason"] != holds[-1]:
+                        # 常驻：停点只报一次，不退出也不再点；页面一变（代理处理完）就自动接着推进，不丢动画时间
+                        HELD["reason"] = holds[-1]
+                        print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), "action": "hold",
+                                          "reason": holds[-1]}, ensure_ascii=False), flush=True)
+                    del holds[:-HOLD_CONFIRM]
                 return True
             holds.clear()
+            streak["reason"] = None
+            HELD["prep"] = None
+            EMPTY["seen"] = False
+            if HELD["reason"] is not None:
+                if HELD["reason"].split("：")[0] in CHOICE_HOLDS:
+                    CHOICE["at"] = time.monotonic()
+                HELD["reason"] = None
+                print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), "action": "resume"}), flush=True)
             if result is not None:
                 kind, tap = result
-                print(json.dumps({"run": active.get("run"), "action": kind, "tap": tap}, ensure_ascii=False), flush=True)
+                print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), "action": kind, "tap": tap}, ensure_ascii=False), flush=True)
             elif not last_idle:
-                print(json.dumps({"run": active.get("run"), "action": "waiting"}), flush=True)
+                print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), "action": "waiting"}), flush=True)
             last_idle = result is None
+            for line in drain_acquired(state, active, lambda: save(path, state)):
+                print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), **line}, ensure_ascii=False), flush=True)
         return True
 
     with (STATE_DIR / ".watch.lock").open("a") as resident:
@@ -831,6 +1584,7 @@ def main():
     for name, help_text in (("shop-scan", "相談 / 轮间：读货架上的饮料，标出高价值三种"),
                             ("shop-refresh", "相談 / 轮间：用 P 刷新货架（要ジュエル会取消）后重读")):  # fmt: skip
         sub.add_parser(name, help=help_text).add_argument("run", type=int)
+    sub.add_parser("interval-end", help="轮间主画面：固定像素点「終了」→「本戦へ」，等左上「インターバル」消失").add_argument("run", type=int)
     p = sub.add_parser("shop-auto", help="相談 / 轮间：一条命令补给——买高价值饮料、P 够就刷新，直到饮料栏满 / P 不够（自动记账）")
     p.add_argument("run", type=int)
     p.add_argument("--max-refresh", type=int, default=10)
@@ -845,6 +1599,9 @@ def main():
     p.add_argument("--card", required=True, help="卡名（带 +），如 巻き返し+")
     p.add_argument("--item", required=True, help="菜单项名（部分即可），如 成長追加、強気追加、制限削除")
     p.add_argument("--need-maxed", help="同名多张时：只选这一项已做满的那张，如 制限削除")
+    p = sub.add_parser("deck-sync", help="相談 / 选行动页 / 轮间：打开牌组一览整副读一遍，和账本对账（漏记补上、强化按画面、多出只记）")
+    p.add_argument("run", type=int)
+    p.add_argument("--why", default="考前对账")
     p = sub.add_parser("drink-drop", help="培育页：丢饮料栏第 SLOT 格（1–4，固定像素，自动记账）")
     p.add_argument("run", type=int)
     p.add_argument("--slot", type=int, required=True, choices=(1, 2, 3, 4))
@@ -875,14 +1632,16 @@ def main():
         if args.command == "watch":
             return watch(path, args.run)
         with (STATE_DIR / ".lock").open("a") as lock:
-            deadline = time.monotonic() + 2.0
+            # watch 每步（含前六周固定流程、几秒到十几秒）都拿着这把锁；原来只等 2s，等不到报 Errno 35，
+            # 代理当成命令静默没生效（1-d `ledger-edit --drink-set`）。改成最多等 LOCK_WAIT 秒，等不到明确说是 watch 占着
+            deadline = time.monotonic() + LOCK_WAIT
             while True:
                 try:
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
                 except BlockingIOError:
                     if time.monotonic() >= deadline:
-                        raise
+                        raise ValueError(f"批次文件被占用 {LOCK_WAIT:.0f}s（watch 正在执行一步），本命令没有执行，稍后重跑") from None
                     time.sleep(0.05)
             if args.command == "init":
                 if args.total < 1 or path.exists():

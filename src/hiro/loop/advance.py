@@ -20,11 +20,12 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from hiro.produce import hif_buttons as BTN
 
-ADVANCE_TAP = (12, 12)  # 与 KAA kaa.tasks.common.skip() 相同
+ADVANCE_TAP = BTN.CORNER  # 与 KAA kaa.tasks.common.skip() 相同
 # 角落点了一阵还过不去时改点上方中间空白（第二十三局：P 道具效果触发说明条 / 获得卡片演出，(12,12) 点不掉停 78s，
 # 总控点 (360,250) 才过）。只在这一块没有 OCR 文字时点（ALT_CLEAR：点击点周围），由主循环判断后传 alt=True
-ALT_TAP = (360, 250)
+ALT_TAP = BTN.TOP_BLANK
 ALT_CLEAR = (200, 170, 520, 330)
 ALT_AFTER = 8.0  # 同一段认不出持续这么久才改点 ALT_TAP
 

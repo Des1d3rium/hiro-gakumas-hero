@@ -16,11 +16,12 @@ from kaa.tasks.produce.session import ProduceSession
 from kotonebot import contains, device, logging, ocr
 
 from hiro.loop.pause_flag import active_clock  # noqa: E402
+from hiro.produce import hif_buttons as BTN
 
 logger = logging.getLogger(__name__)
 
 DISCARD_TITLE = "プロデュースデータの破棄"
-CANCEL_BUTTON = (218, 1160)  # 破弃对话框左下「キャンセル」
+CANCEL_BUTTON = BTN.DIALOG_CANCEL  # 破弃对话框左下「キャンセル」
 ENTER_TIMEOUT = 40.0
 
 
@@ -135,7 +136,7 @@ END_BUTTON_TEXTS = ("次へ", "閉じる", "OK", "スキップ", "決定", "完�
 # 点中央不翻页，180s 后停机。这类画面没有按钮，点底部空白推进；有购买 / ジュエル字样一律不点
 REWARD_HINTS = ("ログインボーナス", "ガシャチケット", "獲得", "開催期間", "受け取りました", "プレゼント", "TAP", "タップ")
 REWARD_DANGER = ("購入", "ジュエル", "有償", "課金")
-REWARD_TAP = (360, 1180)
+REWARD_TAP = BTN.BOTTOM_BLANK
 
 
 def reward_tap(boxes) -> tuple[int, int] | None:

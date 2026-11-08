@@ -25,6 +25,7 @@ import numpy as np
 from kotonebot import logging
 
 from hiro.produce.ops import find_text, ocr_boxes, roi_diff
+from hiro.produce import hif_buttons as BTN
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ GAP_SAT_MAX = 40  # 行间空隙的平均饱和度
 DETAIL_ROI = (40, 170, 640, 340)  # 详情栏 (x, y, w, h)：换选中回忆 / 换页时这里变
 STATS_ROI = (100, 30, 600, 90)
 PAGE_PREV, PAGE_NEXT = (230, 530), (485, 530)
-CANCEL_TAP = (211, 1162)
+CANCEL_TAP = BTN.DIALOG_CANCEL
 FILTER_TAP, SORT_KEY_TAP, SORT_DIR_TAP = (399, 1050), (495, 1050), (653, 1050)
 SWIPE_FROM, SWIPE_ROWS = 1000, 2  # 一次上滑 2 行（行距 137.5），可见 3 行 → 与上一页重叠 1 行，用来核对没有跳行
 SWIPE_DURATION, SWIPE_HOLD = 1.0, 0.4  # 慢滑 + 终点停住再抬起：不带惯性（2026-11-01 实机：3 行快滑一次滚过 4 行以上，整行漏扫）

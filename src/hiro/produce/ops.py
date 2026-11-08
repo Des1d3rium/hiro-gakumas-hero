@@ -22,6 +22,7 @@ from kotonebot import contains, device, logging, ocr
 from kotonebot.primitives import Rect
 
 from hiro.contracts import Action, ExecutionResult
+from hiro.produce import hif_buttons as BTN
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +237,8 @@ class Run:
     def __init__(self, action: Action, page: str | None, shoot, click, clock, sleep, *, label: str = "", ocr=None, calib: bool = False):
         self.action, self.page, self.label = action, page, label or (page or "")
         self.shoot, self.click_fn, self.clock, self.sleep = shoot, click, clock, sleep
-        self.ocr = ocr or ocr_boxes
+        self._ocr_raw = ocr or ocr_boxes
+        self._ocr_last = (None, None)  # (同一张截图对象, 结果)：同一帧被多处检查时只读一次
         self.taps: list[list[int]] = []
         self.waited = 0.0
         self.t0 = clock()
@@ -244,6 +246,16 @@ class Run:
         self._snaps = 0
         self.real_click = None  # 真实鼠标点击（hiro.real_click.click）：只在实机路径显式打开，测试里的假点击不会触发
         self.real_taps = 0
+
+    def ocr(self, img):
+        """整帧 / 局部 OCR；同一张截图（同一个数组对象）重复读时沿用结果。画面「差不多」不沿用：
+        商店里 P 点、「交換済」这类小块变化可能低于差异阈值，沿用旧结果会把已买的当成没买。"""
+        last_img, last = self._ocr_last
+        if img is last_img:
+            return last
+        out = self._ocr_raw(img)
+        self._ocr_last = (img, out)
+        return out
 
     def snap(self, img: np.ndarray, tag: str) -> None:
         if self.calib is None:
@@ -321,7 +333,7 @@ class Run:
 
 RECEIVE_BAND = (1040, 1150)  # 三选一底部「受け取る」所在的一条（实测中心 (355,1096)）
 RECEIVE_ROI = (260, 1062, 200, 50)  # 「受け取る」按钮：没选中时灰（S 116–134 / V 171–186），选中后橙色
-RECEIVE_TAP = (360, 1092)
+RECEIVE_TAP = BTN.BOTTOM_LOW
 RECEIVE_SAT_GAIN = 50  # 选中后按钮由灰转橙：饱和度比点之前高这么多也算亮
 
 

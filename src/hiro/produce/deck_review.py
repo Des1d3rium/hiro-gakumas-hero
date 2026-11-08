@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from hiro.produce import hif_buttons as BTN
 
 CLOSE_TEXTS = ("閉じる",)
-CLOSE_TAP = (360, 1160)  # 一览底部「閉じる」（识屏：KAA OwnedSkillCardsDialog.ButtonClose）
+CLOSE_TAP = BTN.BOTTOM_HIGH  # 一览底部「閉じる」（识屏：KAA OwnedSkillCardsDialog.ButtonClose）
 RETAP_AFTER = 5.0  # 点了牌组按钮这么久一览还没出来、画面还是原页面：再点一次
 LATE_WATCH = 4.0  # 放弃读牌后再盯这么久，一览晚出来就关掉
 OPEN_TIMEOUT = 12.0  # 第二十局开局：一览 6 秒后才弹出（转场后第一次点），读牌放弃后一览留在画面上
@@ -78,8 +79,10 @@ def _still(shoot, sleep, clock):
 
 
 def review_deck(*, shoot: Callable, click: Callable[[int, int], None], swipe: Callable[[int, int, int, int, float], None],
-                ocr_texts: Callable, sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.monotonic) -> dict:  # fmt: skip
-    """返回 {deck, deck_size, problems, opened, closed}。deck 为 ProduceState.deck 格式或 None。"""
+                ocr_texts: Callable, sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.monotonic,
+                text_reader: Callable | None = None) -> dict:  # fmt: skip
+    """返回 {deck, deck_size, problems, opened, closed}。deck 为 ProduceState.deck 格式或 None。
+    text_reader：给了就在一览打开后改用它读（列表显示 + OCR 卡名，hiro.produce.deck_text），结果放 out["text"]，不读网格。"""
     from hiro.vision.deck import find_deck_button, is_deck_list, merge_deck_pages, read_deck_list
 
     out = {"deck": None, "deck_size": None, "problems": [], "opened": False, "closed": False}
@@ -116,6 +119,13 @@ def review_deck(*, shoot: Callable, click: Callable[[int, int], None], swipe: Ca
                 break
         return out
     sleep(0.6)  # 入场动画
+    if text_reader is not None:
+        out["text"] = text_reader()
+        out["problems"].extend(out["text"].get("problems") or [])
+        out["closed"] = _close(shoot, click, ocr_texts, sleep, clock, is_deck_list)
+        if not out["closed"]:
+            out["problems"].append("牌组一览没关掉")
+        return out
     imgs = [shoot()]
     reads = [read_deck_list(imgs[0])]
     page = reads[0]

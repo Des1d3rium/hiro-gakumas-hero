@@ -29,6 +29,7 @@ from hiro.contracts import Action, ActionKind, ExecutionResult
 from hiro.produce import shop
 from hiro.produce.ops import Run, find_text, orange_lit
 from hiro.produce.special_guidance import grid_center
+from hiro.produce import hif_buttons as BTN
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,8 @@ COLS_X = (126, 286, 445, 605)
 ROWS_Y = (562, 753)
 DEFAULT_CENTERS = {0: (COLS_X[0], ROWS_Y[0]), 1: (COLS_X[1], ROWS_Y[0]), 2: (COLS_X[0], ROWS_Y[1]), 3: (COLS_X[1], ROWS_Y[1]),
                    4: (COLS_X[2], ROWS_Y[0]), 5: (COLS_X[3], ROWS_Y[0]), 6: (COLS_X[2], ROWS_Y[1]), 7: (COLS_X[3], ROWS_Y[1])}  # fmt: skip
-UPGRADE_TAP = (176, 928)
-RECOVER_TAP = (622, 930)
+UPGRADE_TAP = BTN.INTERVAL_UPGRADE
+RECOVER_TAP = BTN.INTERVAL_RECOVER
 HP_BAND = (320, 50, 440, 95)  # 顶部「18/33」
 RECOVER_CONFIRM = ("回復する", "回復", "決定", "はい", "OK")
 # 「体力回復確認」框（第十七局 calib 20261102-172120-轮间/02-confirm）：滑条两端 −/＋，每格 2 体力 / 10P；上方「+2」是本次回复量
@@ -64,9 +65,19 @@ DIGIT_FIX = str.maketrans({"ろ": "3", "る": "3", "O": "0", "o": "0", "〇": "0
                            "B": "8", "／": "/"})  # fmt: skip  # 顶部数字常见 OCR 混淆（q10 轮间：「21/3ろ」）
 
 
+def _crop_ocr(ocr, img, box):
+    """只识别 box（x1, y1, x2, y2）这一块，坐标换回整帧（单次约 0.07s，整帧约 0.27s）。"""
+    x1, y1, x2, y2 = box
+    return [(t, sc, (a + x1, b + y1, c + x1, d + y1)) for t, sc, (a, b, c, d) in ocr(img[y1:y2, x1:x2])]
+
+
+HP_CROP = (260, 30, 500, 115)  # HP_BAND 外扩一圈
+TITLE_CROP = (0, 0, 260, 100)  # TITLE_REGION 外扩一圈（与 tools/batch_shop._page 同一块）
+
+
 def read_hp(img: np.ndarray, ocr) -> tuple[int, int] | None:
-    """顶部「体力/上限」。数字按 DIGIT_FIX 纠正常见 OCR 混淆，前面的心形图标等杂字忽略（「♥16/33」）。"""
-    for t, _, (x1, y1, x2, y2) in ocr(img):
+    """顶部「体力/上限」。数字按 DIGIT_FIX 纠正常见 OCR 混淆，前面的心形图标等杂字忽略（「♥16/33」）。只读顶部这一块。"""
+    for t, _, (x1, y1, x2, y2) in _crop_ocr(ocr, img, HP_CROP):
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
         if HP_BAND[0] <= cx <= HP_BAND[2] and HP_BAND[1] <= cy <= HP_BAND[3]:
             if m := re.search(r"(\d+)/(\d+)", t.replace(" ", "").translate(DIGIT_FIX)):
@@ -89,7 +100,8 @@ def find_item(page_fields: dict, index: int) -> dict | None:
 
 
 def on_interval(img: np.ndarray, ocr) -> bool:
-    return find_text(ocr(img), TITLE_TEXT, region=TITLE_REGION) is not None
+    """左上角「インターバル」标题（只读那一块）。"""
+    return find_text(_crop_ocr(ocr, img, TITLE_CROP), TITLE_TEXT, region=TITLE_REGION) is not None
 
 
 def _end(r: Run) -> ExecutionResult:
@@ -123,7 +135,11 @@ def _recover_dialog(boxes) -> bool:
 def _clear_recover_dialog(r: Run, *, accept: bool) -> bool | None:
     """残留的「体力回復確認」弹窗（main12：P 点读错，回体力在确认框还开着时就判成功，弹窗挡住之后每一步）。
     accept=True 点「回復する」，否则点「キャンセル」。返回 None = 没有弹窗；True/False = 弹窗是否已关掉。"""
+    from hiro.vision.pages import dialog_header
+
     img = r.shoot()
+    if dialog_header(img) is None:  # 没有弹窗标题条（像素，约 20ms）就不用 OCR
+        return None
     boxes = r.ocr(img)
     if not _recover_dialog(boxes):
         return None

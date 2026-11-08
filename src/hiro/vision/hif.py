@@ -415,8 +415,10 @@ FINALS_R2_MIN_NPC2 = 370_000  # 排第二的 NPC：R1 29.4–31.5 万，R2 42.1�
 def finals_round_from_npc(npc: list[int | None]) -> int | None:
     """按 NPC 分数判本战第几轮。npc 从左到右 = NPC 之间的名次（第一位总是分数高的那位）。
     第一位读到：≥ 50 万为 R2；只读到第二位：≥ 37 万为 R2；都读不到（加分特效挡住，r2 00197）给 None，不按半截判。"""
-    first = npc[0] if npc else None
-    second = npc[1] if len(npc) > 1 else None
+    # 两轮 NPC 分数都在 29 万以上；更小的读数是首位数字被裁掉（464,588 → 64,588），不拿来判轮次
+    plausible = lambda v: v if v is not None and v >= 250_000 else None  # noqa: E731
+    first = plausible(npc[0]) if npc else None
+    second = plausible(npc[1]) if len(npc) > 1 else None
     if first is not None:
         return 2 if first >= FINALS_R2_MIN_NPC else 1
     if second is not None:
@@ -950,6 +952,8 @@ def _read_hif_exam(img: MatLike, cache: RegionCache | None, *, batch_names: bool
         "unrecognized_cards": missing,
     }
     out["multiplier_pct"], out["multiplier_votes"] = _vote_multiplier(img, out["multiplier_pct"], cache, out["attr"])
-    if out["finals"] and out.get("finals_round") is None and (out.get("remaining_turns") or 0) > 9:
-        out["finals_round"] = 2  # NPC 分数被特效挡住时：剩余回合 > 9 只可能是 R2（R1 9 回合、R2 12 回合）
+    if out["finals"] and (out.get("remaining_turns") or 0) > 9:
+        # 剩余回合 > 9 只可能是 R2（R1 9 回合、R2 12 回合）：NPC 分数被特效挡住，或首位数字被裁掉
+        # （464,588 读成 64,588 → 误判 R1）时都以回合数为准
+        out["finals_round"] = 2
     return out

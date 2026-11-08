@@ -40,10 +40,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 from cv2.typing import MatLike
+from hiro.produce import hif_buttons as BTN
 
 TEMPLATES = Path(__file__).with_name("templates")
-SKIP_TAP = (12, 12)
-LOGIN_BONUS_TAP = (360, 1180)  # 活动登录奖励：底部空白（正中央是道具框，点它不翻页；执行 23e6965 实机验证）
+SKIP_TAP = BTN.CORNER
+LOGIN_BONUS_TAP = BTN.BOTTOM_BLANK  # 活动登录奖励：底部空白（正中央是道具框，点它不翻页；执行 23e6965 实机验证）
 DECK_LIST_CLOSE = (360, 1157)  # 牌组一览底部「閉じる」（同总控 controller.DECK_LIST_CLOSE）
 DIALOG_HEADER_MAX_Y = 1100
 GRAY_TPL = {  # 名称 → (搜索区域, 阈值)
@@ -183,7 +184,7 @@ def _acquire_bar(hsv: np.ndarray) -> bool:
 PITEM_NOTE_Y = (380, 720)  # P 道具效果说明浮条出现的范围
 PITEM_NOTE_H = (80, 200)
 PITEM_NOTE_BORDER_X = ((20, 30), (690, 700))  # 左右白色竖边
-PITEM_NOTE_TAP = (360, 250)  # 浮条上方空白：(12,12) 点不掉（执行 23e6965，第二十三局 SP 课后停 78 秒）
+PITEM_NOTE_TAP = BTN.TOP_BLANK  # 浮条上方空白：(12,12) 点不掉（执行 23e6965，第二十三局 SP 课后停 78 秒）
 
 
 def _pitem_note(hsv: np.ndarray) -> tuple[int, int] | None:

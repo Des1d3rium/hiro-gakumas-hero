@@ -10,13 +10,14 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from hiro.produce import hif_buttons as BTN
 
 ROOT = Path(__file__).resolve().parents[1]
 SCAN_DIR = ROOT / "reports" / "live" / "deck-list"
 STAGE1_WORDS = ("獲得するスキルカードを選",)
 STAGE2_WORDS = ("チェンジするスキルカード", "スキルカードが選択されていません")
-NEXT_TAP = (360, 1094)  # 阶段 1「次へ」
-CHANGE_TAP = (518, 1160)  # 阶段 2「チェンジ」
+NEXT_TAP = BTN.BOTTOM_LOW  # 阶段 1「次へ」
+CHANGE_TAP = BTN.DIALOG_OK  # 阶段 2「チェンジ」
 SETTLE = 0.6
 STAGE_WAIT = 6.0
 

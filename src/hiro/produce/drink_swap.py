@@ -24,6 +24,7 @@ from kotonebot import device, logging
 
 from hiro.contracts import Action, ActionKind, ExecutionResult
 from hiro.produce.ops import Run, button_sv, find_text, orange_lit
+from hiro.produce import hif_buttons as BTN
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ SKIP_CHECKBOX = (253, 1006)  # 「受け取らない」勾选框（KAA CheckboxU
 # Pドリンク詳細
 DETAIL_TITLE = ("ドリンク詳細",)
 DISCARD_TEXT = ("捨てる",)
-DISCARD_TAP = (606, 890)  # 考试详情框里「捨てる」的位置（OCR 找不到时的兜底）
+DISCARD_TAP = BTN.EXAM_DRINK_DISCARD  # 考试详情框里「捨てる」的位置（OCR 找不到时的兜底）
 CONFIRM_TEXTS = ("はい", "決定", "OK")  # 丢弃确认框「廃棄確認」：いいえ / はい（q8-r1 calib 03 帧），按文字点底部右侧
 CONFIRM_TITLE = ("廃棄確認",)
 DIALOG_BUTTONS = (360, 1080, 720, 1240)  # 弹窗底部右侧按钮区（キャンセル 在左，确认在右）

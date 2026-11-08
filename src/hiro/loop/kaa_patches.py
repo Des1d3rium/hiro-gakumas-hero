@@ -24,6 +24,7 @@ from collections.abc import Callable
 
 from kotonebot import device, logging
 from kotonebot.primitives import Rect
+from hiro.produce import hif_buttons as BTN
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ CHANGE_STAGE_TIMEOUT = 15.0  # 单个阶段最多等多久（含入场动画）
 CHANGE_POLL = 0.5
 CHANGE_LETTER_THRESHOLD = 0.65  # 与 KAA 阶段 1 相同
 CHANGE2_CARD_AREA = (66, 623, 641, 1106)  # KAA DialogCardChange2.BoxCardArea（x1, y1, x2, y2）
-CHANGE_CANCEL_TAP = (211, 1160)  # 阶段 2 左下「キャンセル」（KAA 参考图 dialog_card_change_2.png）
+CHANGE_CANCEL_TAP = BTN.DIALOG_CANCEL  # 阶段 2 左下「キャンセル」（KAA 参考图 dialog_card_change_2.png）
 CHANGE1_MARK_X = (213, 352, 491)  # 阶段 1 三张候选的角标 x（参考图实测，列距 139）
 CHANGE1_COL_TOL = 40
 # 阶段 1 角标漏检时的兜底：用找到的任一角标对准列（容差 CHANGE1_ANCHOR_TOL），按列距推算目标列，点角标上方的卡面
@@ -57,8 +58,8 @@ CHANGE2_COL_TOL, CHANGE2_ROW_TOL = 6, 14
 # 删卡 / 强化页（全屏选卡）
 CARD_OP_REGION = {"remove": (0, 380, 720, 1110), "enhance": (0, 690, 720, 1115)}  # 同识别 deck.REMOVAL_GRID / ENHANCE_GRID  # 强化页上方两格详情栏里也有卡面，卡格从 y≈700 起
 CARD_OP_BUTTON = {"remove": ("削除",), "enhance": ("強化",)}
-CARD_OP_BUTTON_TAP = {"remove": (360, 1158), "enhance": (364, 1160)}  # 没有取消键时底部居中的唯一按钮（参考图）
-CARD_OP_BUTTON_TAP_WITH_CANCEL = (520, 1161)  # 相談删卡页：左「キャンセル」右「削除」
+CARD_OP_BUTTON_TAP = {"remove": BTN.BOTTOM_HIGH, "enhance": BTN.BOTTOM_HIGH}  # 没有取消键时底部居中的唯一按钮（参考图）
+CARD_OP_BUTTON_TAP_WITH_CANCEL = BTN.DIALOG_OK  # 相談删卡页：左「キャンセル」右「削除」
 CARD_OP_CONFIRM = {"remove": ("削除する", "削除", "決定", "はい", "OK"), "enhance": ("強化する", "強化", "決定", "はい", "OK")}  # 相談删卡确认框的按钮就叫「削除」
 CARD_OP_DONE = {"remove": ("削除しました",), "enhance": ("強化しました",)}
 CARD_OP_LABEL = {"remove": "删除", "enhance": "强化"}
@@ -495,7 +496,7 @@ def change_stage2(self, index: int = 0, card_id: str | None = None, cancel: bool
 
 CHANGE_CONFIRM_TITLE = ("チェンジ確認",)  # 「スキルカードチェンジ確認」（第二十局 calib 20261103-032052/05）
 CHANGE_CONFIRM_OK = ("決定", "はい", "OK")
-CHANGE_CONFIRM_TAP = (520, 1160)  # 确认框右下「決定」
+CHANGE_CONFIRM_TAP = BTN.DIALOG_OK  # 确认框右下「決定」
 
 
 def confirm_change_dialog(img, run=None) -> bool:
@@ -766,11 +767,11 @@ class MemoryMismatch(RuntimeError):
     """本战开始确认页上选中的选拔回忆不是指定的那份：不开局。"""
 
 
-MEMORY_CHANGE_BTN = (636, 577)  # 开始确认页「選択中の選抜試験メモリー」右侧「変更」
-MEMORY_OK_BTN = (360, 1085)  # 回忆列表底部「OK」
-MEMORY_SORT_BTN = (527, 860)  # 列表上的排序键按钮（「スター性」/「入手」…）→ ソート・フィルタ 弹窗
+MEMORY_CHANGE_BTN = BTN.MEMORY_CHANGE  # 开始确认页「選択中の選抜試験メモリー」右侧「変更」
+MEMORY_OK_BTN = BTN.MEMORY_LIST_OK  # 回忆列表底部「OK」
+MEMORY_SORT_BTN = BTN.MEMORY_SORT  # 列表上的排序键按钮（「スター性」/「入手」…）→ ソート・フィルタ 弹窗
 MEMORY_SORT_NEWEST = (413, 273)  # 弹窗里「入手」
-MEMORY_SORT_OK = (500, 1160)  # 弹窗「決定」
+MEMORY_SORT_OK = BTN.DIALOG_OK  # 弹窗「決定」
 MEMORY_CELLS = [(x, y) for y in (487, 627, 767) for x in (140, 360, 580)]  # 列表可见的 3×3 格
 MEMORY_PAGES = 12  # 回忆 45 份以上（q10），每次只滑 2 行防跳行
 

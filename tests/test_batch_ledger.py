@@ -33,6 +33,47 @@ def test_change_card_moves_once_flag(ledger):
     assert "タフネス+" not in ledger["once"] and "忍耐力" in ledger["once"]
 
 
+def test_record_change_inherits_upgrade_of_removed_card():
+    # 实机（codex-20261107-1 第 1 局）：换出「立ち回りの基本+」后，阶段 1 读到的「オープニングアクト」进牌组是「オープニングアクト+」
+    led = L.new_ledger({"memory": "m", "cards": ["立ち回りの基本+", "巻き返し+"], "once": [], "evidence": "x"})
+    todo = L.record_change(led, {"name": "立ち回りの基本", "upgrade": 1}, {"name": "オープニングアクト", "upgrade": 0, "once": True})
+    assert todo is None
+    assert "オープニングアクト+" in led["cards"] and "オープニングアクト+" in led["once"]
+    assert "立ち回りの基本+" not in led["cards"] and led["pending_add"] is None
+
+
+def test_record_change_matches_removed_card_without_plus():
+    # 账本少记了一个「+」（旧版记账），扫描读到 upgrade=1：按去掉「+」的名字仍能删掉那张
+    led = L.new_ledger({"memory": "m", "cards": ["オープニングアクト", "巻き返し+"], "once": ["オープニングアクト"], "evidence": "x"})
+    led["pending_add"] = {"name": "アンダンテ", "upgrade": 0, "once": True}
+    assert L.record_change(led, {"name": "オープニングアクト", "upgrade": 1}, led["pending_add"]) is None
+    assert led["cards"] == ["巻き返し+", "アンダンテ+"] and led["once"] == ["アンダンテ+"]
+    assert led["log"][-2]["read"] == "オープニングアクト+"
+
+
+def test_record_change_failure_keeps_ledger_and_returns_todo():
+    led = L.new_ledger({"memory": "m", "cards": ["タフネス", "タフネス+"], "once": [], "evidence": "x"})
+    before = {k: list(led[k]) for k in ("cards", "once", "log")}
+    pending = {"name": "アンダンテ", "upgrade": 0, "once": True}
+    todo = L.record_change(led, {"name": "タフネス", "upgrade": 2}, pending)  # X 和 X+ 都有：不猜
+    assert todo and "ledger-edit --change" in todo and "アンダンテ++" in todo
+    assert {k: led[k] for k in before} == before and led["pending_add"] is None  # pending 由调用方保留
+    assert L.record_change(led, {"name": None}, pending).startswith("换出或换入的卡没认出")
+
+
+def test_change_card_is_atomic(ledger):
+    with pytest.raises(ValueError):
+        L.change_card(ledger, "巻き返し+", "タフネス+", False)  # 换入一次性状态矛盾：不能只删不加
+    assert ledger["cards"] == MEMORY["cards"]
+
+
+def test_remove_card_is_strict_unless_loose(ledger):
+    with pytest.raises(ValueError):
+        L.remove_card(ledger, "巻き返し")
+    L.remove_card(ledger, "巻き返し", loose=True)
+    assert "巻き返し+" not in ledger["cards"]
+
+
 def test_add_requires_once_and_consistency(ledger):
     with pytest.raises(ValueError):
         L.add_card(ledger, "忍耐力", None)
@@ -85,3 +126,75 @@ def test_memory_store_roundtrip(tmp_path, monkeypatch):
         L.save_memory("veil-a", {**MEMORY, "cards": ["眠気"]}, "i_test")  # 不同牌组不覆盖
     with pytest.raises(ValueError):
         L.memory_path("../x")
+
+
+def test_sync_drinks_overwrites_readable_slots(monkeypatch):
+    """饮料懒同步：画面读清的格覆盖账本，读不清的格留账本；一致时不写日志。"""
+    monkeypatch.setattr(L, "_now", lambda: "10:00:00")
+    led = L.new_ledger({"memory": "m", "cards": [], "evidence": "t"}, ["初星湯", None, None, None])
+    obs = [{"slot": 0, "state": "drink", "name": "初星湯"}, {"slot": 1, "state": "drink", "name": "初星ホエイプロテイン"},
+           {"slot": 2, "state": "unknown"}, {"slot": 3, "state": "empty"}]
+    diff = L.sync_drinks(led, obs, why="shop-auto")
+    assert diff and led["drinks"] == ["初星湯", "初星ホエイプロテイン", L.UNKNOWN_DRINK, None]  # 认不出 = 有饮料
+    n = len(led["log"])
+    assert L.sync_drinks(led, obs, why="shop-auto") == [] and len(led["log"]) == n
+
+
+def test_sync_drinks_unread_slot_takes_unmatched_ledger_drink(monkeypatch):
+    """栏位挤动后读不清的格：补账本里没在画面出现的那瓶，而不是同格号的旧值（验证局 1-c 商店前）。"""
+    monkeypatch.setattr(L, "_now", lambda: "10:00:00")
+    led = L.new_ledger({"memory": "m", "cards": [], "evidence": "t"},
+                       ["ジンジャーエール", "初星ホエイプロテイン", "ブーストエキス", None])
+    obs = [{"slot": 0, "state": "drink", "name": "初星湯"}, {"slot": 1, "state": "drink", "name": "ジンジャーエール"},
+           {"slot": 2, "state": "unknown"}, {"slot": 3, "state": "drink", "name": "ブーストエキス"}]
+    L.sync_drinks(led, obs, why="shop-auto")
+    assert led["drinks"] == ["初星湯", "ジンジャーエール", "初星ホエイプロテイン", "ブーストエキス"]
+
+
+def test_record_change_inherits_booked_upgrade_when_scan_misses_plus():
+    """阶段 2 把「立ち回りの基本+」读成没强化：换入的仍按账本里的「+」记（使用者 2026-11-07）。"""
+    led = L.new_ledger({"memory": "m", "cards": ["立ち回りの基本+", "巻き返し+"], "once": [], "evidence": "x"})
+    assert L.record_change(led, {"name": "立ち回りの基本", "upgrade": 0}, {"name": "涙の思い出", "upgrade": 0, "once": True}) is None
+    assert "涙の思い出+" in led["cards"] and "立ち回りの基本+" not in led["cards"]
+
+
+def test_sync_drinks_unknown_slot_over_empty_ledger_is_occupied(monkeypatch):
+    """验证局 1-d：账本漏记两瓶ホエイ（画面认不出），以为有空格去买失败 → 认不出的格记占位，算有饮料。"""
+    monkeypatch.setattr(L, "_now", lambda: "10:00:00")
+    led = L.new_ledger({"memory": "m", "cards": [], "evidence": "t"}, ["ジンジャーエール", "ブーストエキス", None, None])
+    obs = [{"slot": 0, "state": "unknown"}, {"slot": 1, "state": "drink", "name": "ジンジャーエール"},
+           {"slot": 2, "state": "drink", "name": "ブーストエキス"}, {"slot": 3, "state": "unknown"}]
+    assert L.sync_drinks(led, obs, why="shop-auto")
+    assert led["drinks"] == [L.UNKNOWN_DRINK, "ジンジャーエール", "ブーストエキス", L.UNKNOWN_DRINK] and None not in led["drinks"]
+
+
+def test_to_deck_carries_customize_log():
+    led = L.new_ledger({"memory": "m", "cards": ["インフルエンサー+"], "once": [], "evidence": "x"})
+    L._log(led, "customize", card="インフルエンサー+", item="強気追加")
+    assert L.to_deck(led)["custom"] == [{"card": "インフルエンサー+", "item": "強気追加"}]
+
+
+def test_acquire_card_adds_new_and_flags_same_name(monkeypatch):
+    """第一层：获得演出看到的卡——账本没有同名的记一张；已有同名（可能是强化）只记 card? 留给考前对账。"""
+    monkeypatch.setattr(L, "_now", lambda: "10:00:00")
+    led = L.new_ledger({"memory": "m", "cards": ["巻き返し+"], "once": [], "evidence": "x"})
+    assert L.acquire_card(led, "ティーパーティ+", True, why="事件") == "added" and "ティーパーティ+" in led["once"]
+    assert L.acquire_card(led, "ティーパーティ+", True, why="事件") == "dup"
+    assert L.acquire_card(led, "巻き返し++", False, why="事件") == "ambiguous" and led["cards"].count("巻き返し+") == 1
+
+
+def test_sync_deck_adds_missing_fixes_upgrade_keeps_extra(monkeypatch):
+    """第二层：考前按牌组一览对账——漏记的补、强化差「+」的改、账本多出的只记不删。"""
+    monkeypatch.setattr(L, "_now", lambda: "10:00:00")
+    led = L.new_ledger({"memory": "m", "cards": ["巻き返し+", "モチベ", "眠気"], "once": ["モチベ"], "evidence": "x"})
+    notes = L.sync_deck(led, [("巻き返し+", False), ("モチベ+", True), ("ティーパーティ+", True)], why="R1 前")
+    assert sorted(led["cards"]) == sorted(["巻き返し+", "眠気", "モチベ+", "ティーパーティ+"])
+    assert "モチベ+" in led["once"] and "ティーパーティ+" in led["once"] and "モチベ" not in led["once"]
+    assert any("强化 モチベ→モチベ+" in n for n in notes) and any("账本多出 眠気" in n for n in notes)
+
+
+def test_mark_full_fills_empty_slots_with_placeholder(ledger):
+    """领取页说栏满、账本有空格：空格记占位（1-e 公開レッスン 白送的 2 瓶漏记）。"""
+    assert L.mark_full(ledger, why="P道具饮料页") == 2
+    assert ledger["drinks"] == ["ブーストエキス", "センブリソーダ", L.UNKNOWN_DRINK, L.UNKNOWN_DRINK]
+    assert L.mark_full(ledger, why="再来一次") == 0

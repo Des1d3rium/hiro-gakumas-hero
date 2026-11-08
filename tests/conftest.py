@@ -264,3 +264,23 @@ def _master_ok() -> bool:
         return PublicAssetSource().master_db() is not None
     except Exception:  # noqa: BLE001
         return False
+
+
+@pytest.fixture(autouse=True)
+def _isolate_batch_rules(tmp_path, monkeypatch):
+    """周回模式规则（tools/batch_rules.py）：测试不读使用者本机的 conf/batch-rules.json，一律用 DEFAULTS。
+    要测覆盖的用例自己再设 HIRO_BATCH_RULES。"""
+    if "HIRO_BATCH_RULES" not in os.environ:
+        monkeypatch.setenv("HIRO_BATCH_RULES", str(tmp_path / "batch-rules.none.json"))
+
+
+@pytest.fixture(autouse=True)
+def _no_live_deck_list_frames(monkeypatch):
+    """测试里的一览读法不往实机留档目录（reports/live/deck-list）存帧：被测代码会把 deck_review.SAVE_DIR 设成那里，
+    之后的假黑帧都存了进去（1-f 审计以为实机一览截到黑屏）。要测存帧的用例自己再 patch。"""
+    try:
+        import hiro.produce.deck_review as DR
+    except Exception:  # noqa: BLE001
+        return
+    monkeypatch.setattr(DR, "SAVE_DIR", None)
+    monkeypatch.setattr(DR, "_save", lambda imgs: None)

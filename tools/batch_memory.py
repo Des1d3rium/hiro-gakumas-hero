@@ -41,6 +41,18 @@ def evaluate(texts: list[str]) -> dict:
     return {"hit": None, "card": card}
 
 
+def card_name(texts: list[str]) -> str | None:
+    """挑选页卡面区（batch_regen.CARD_CROP）的 OCR 文字 → 「獲得可能スキルカード」那张卡的卡名（不管在不在优先表里）。
+    版式（codex-6 实机帧量过）：「獲得可能スキルカード」→ 获得时机徽章（「開始時に獲得」「中間試験/1次オーディション後に獲得」，
+    都带「獲得」）→ 卡名 → 「アノマリーのみ」之类。取标题后第一个不带「獲得」的文字；认不出标题返回 None。
+    只用来记录 / 核对（evaluate 的 card 只报优先表里的强化版卡名，没命中时是 None，看不出读到了什么）。"""
+    items = [norm(t) for t in texts]
+    start = next((i for i, t in enumerate(items) if "獲得可能" in t), None)
+    if start is None:
+        return None
+    return next((t for t in items[start + 1:start + 4] if t and "獲得" not in t), None)
+
+
 def is_choice(texts: list[str]) -> bool:
     flat = "".join(norm(t) for t in texts)
     return sum(w in flat for w in CHOICE_WORDS) >= 1 and ("再生成前" in flat or "どちら" in flat)

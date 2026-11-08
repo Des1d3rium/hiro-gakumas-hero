@@ -20,6 +20,7 @@ from kotonebot import device, logging
 
 from hiro.contracts import Action, ActionKind, ExecutionResult
 from hiro.produce.ops import Run, button_sv, find_text, orange_lit, roi_diff
+from hiro.produce import hif_buttons as BTN
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +29,11 @@ CELL = 125  # 货架格边长（hiro.vision.shop.CELL）
 EXCHANGE_BTN, EXCHANGE_TAP = (250, 1050, 220, 70), (360, 1085)
 CONFIRM_BTN, CONFIRM_TAP = (410, 1128, 180, 60), (500, 1158)  # 交換確認 / スキルカード削除 弹窗的确认键
 CANCEL_PILL, CANCEL_TAP = (110, 1138, 150, 44), (180, 1160)  # 选卡页 / 弹窗左下的白色「キャンセル」
-END_TAP = (640, 1085)
-SERVICE_TAP = {"upgrade": (220, 968), "delete": (535, 968)}
+END_TAP = BTN.SHOP_END
+SERVICE_TAP = {"upgrade": BTN.SHOP_UPGRADE, "delete": BTN.SHOP_DELETE}
 SERVICE_USED_REGION = {"upgrade": (40, 940, 345, 1012), "delete": (360, 940, 690, 1012)}  # 用过的服务键上盖「交換済」（q12 第 12 天：(202,993)）
 SERVICE_USED = "本次相談已用过"
-SKIP_TAP = (360, 700)  # 跳过获得动画；x=360 落在货架第 2、3 列之间的空隙，回到相談后误点也不会选中商品
+SKIP_TAP = BTN.SHELF_GAP  # 跳过获得动画；x=360 落在货架第 2、3 列之间的空隙，回到相談后误点也不会选中商品
 IDLE_SAT, IDLE_VAL = (100, 145), (155, 200)  # 相談页没选中商品时「交換する」的灰色（实测 S 119–136 / V 171–186）
 END_PILL = (600, 1062, 90, 46)  # 「終了」白色按钮：相談主画面 S 13 / V 224；获得动画的星星层压暗到 V 181，弹窗提亮到 254
 END_SAT_MAX, END_VAL = 25, (218, 235)
@@ -280,11 +281,11 @@ def _end(r: Run) -> ExecutionResult:
 # 轮间下方标价「10」（P，第十七局 calib 20261102-172120-轮间/01-open，y≈1066）。点了之后有没有确认框、
 # 刷新后货架怎么动画、多次刷新会不会涨价，离线帧里都没有：确认框出现就按 REROLL_CONFIRM 点；出现ジュエル一律点キャンセル。
 REROLL_REGION = (0, 1020, 260, 1140)
-REROLL_TAP = {"consult": (108, 1085), "interval": (108, 1066)}
+REROLL_TAP = BTN.REROLL
 REROLL_CONFIRM = ("リフレッシュする", "リフレッシュ", "更新する", "決定", "はい", "OK")
 REROLL_DIALOG_BUTTONS = (300, 1080, 720, 1240)  # 确认框右下按钮（避开左下的「リフレッシュ」本身）
-REROLL_CANCEL_TAP = (220, 1160)
-REROLL_OK_TAP = (520, 1160)  # 确认框右下（左キャンセル、右确认，与其他确认框同版式）
+REROLL_CANCEL_TAP = BTN.DIALOG_CANCEL
+REROLL_OK_TAP = BTN.DIALOG_OK  # 确认框右下（左キャンセル、右确认，与其他确认框同版式）
 # 确认框标题（总控 2026-11-02 设置页确认，两个确认都开着）：轮间「リフレッシュ実行確認」、相談「相談リフレッシュ確認」
 REROLL_TITLES = ("リフレッシュ実行確認", "相談リフレッシュ確認", "リフレッシュ確認")
 JEWEL_WORDS = ("ジュエル",)
@@ -312,7 +313,11 @@ def cancel_reroll_dialog(r: Run) -> bool | None:
     """残留的刷新确认框（第十八局本战轮间：刷新的确认框晚弹出来没人处理，挡住之后每一步，IntervalEnd 还把它当成「已不在轮间」）：
     点「キャンセル」。不点「更新する」：没有刷新决策时不花 P、不换掉决策已规划好的货架（要刷新决策会再给 Reroll）。
     返回 None = 没有确认框；True / False = 是否已关掉。"""
+    from hiro.vision.pages import dialog_header
+
     img = r.shoot()
+    if dialog_header(img) is None:  # 没有弹窗标题条（像素）就不用 OCR
+        return None
     boxes = r.ocr(img)
     if not reroll_dialog(boxes):
         return None

@@ -14,18 +14,23 @@ from __future__ import annotations
 import time
 
 from batch_ledger import norm
+from hiro.produce import hif_buttons as BTN
 
-INTERVAL_BTN = (458, 940)
+INTERVAL_BTN = BTN.INTERVAL_CUSTOMIZE
 GRID = (40, 545, 680, 1060)
 GRID_CUSTOMIZE, GRID_BACK = (500, 1160), (215, 1160)
 MENU_X, MENU_Y = (141, 360, 578), 935
 MENU_EXEC, MENU_BACK = (500, 1160), (215, 1160)
-CONFIRM_TAP = (500, 1160)
-TOAST_TAP = (360, 1000)
+CONFIRM_TAP = BTN.DIALOG_OK
+TOAST_TAP = BTN.TOAST
 TICK = 0.3
-CORNER = (12, 12)
+CORNER = BTN.CORNER
 DETAIL_BAND = (60, 200)  # 选卡页上方详情栏（卡名在 y 90–140）
 DETAIL_POLL = 0.2
+SAME = 1.5  # 缩略图平均差小于它 = 同一画面，沿用上次 OCR
+MOVING = 4.0  # 与上一帧差大于它 = 画面还在切换
+MOVING_SKIP_S = 1.0  # 画面在切换时最多这么久不 OCR
+TOAST_BAND = (900, 1150)  # 「〜をカスタマイズしました」提示所在的横带
 STEP_TIMEOUT, DONE_TIMEOUT = 4.0, 10.0
 
 
@@ -70,9 +75,31 @@ class _Ops:
 
         self.d, self.ocr, self.find = device, ocr_boxes, find_text
 
+        self.th = self.boxes = self.prev = None
+        self.read_at = -1e9
+
+    @staticmethod
+    def _thumb(img):
+        import cv2
+
+        return cv2.cvtColor(cv2.resize(img, (36, 64), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY).astype("float32")
+
+    def read(self, img):
+        """整帧 OCR，画面和上次读时几乎一样（缩略图平均差 < SAME）就沿用上次结果。"""
+        th = self._thumb(img)
+        if self.th is not None and self.boxes is not None and float(abs(th - self.th).mean()) < SAME:
+            return self.boxes
+        self.th, self.boxes, self.read_at = th, self.ocr(img), time.monotonic()
+        return self.boxes
+
     def shot(self):
         img = self.d.screenshot()
-        return img, self.ocr(img)
+        return img, self.read(img)
+
+    def moving(self, img):
+        th = self._thumb(img)
+        prev, self.prev = self.prev, th
+        return prev is not None and float(abs(th - prev).mean()) > MOVING
 
     def band(self, y1, y2):
         """只识别 y1–y2 这一条（详情栏卡名约 0.1s，整帧 0.5–1s），坐标换回整帧。"""
@@ -87,7 +114,11 @@ class _Ops:
             if corner:
                 self.d.click(*CORNER)
             time.sleep(TICK)
-            img, boxes = self.shot()
+            img = self.d.screenshot()
+            # 切页 / 提示动画中途（画面还在变）不读，最多 MOVING_SKIP_S 强制读一次
+            if self.moving(img) and time.monotonic() - self.read_at < MOVING_SKIP_S and time.monotonic() < deadline:
+                continue
+            boxes = self.read(img)
         return check(boxes), img, boxes
 
     def has(self, boxes, *words):
@@ -100,6 +131,23 @@ def _on_grid(o, b):
 
 def _on_menu(o, b):
     return o.has(b, "カスタマイズメニュー") and o.has(b, "一覧に戻る")
+
+
+def _back_to_interval(o, device, tries: int = 4) -> bool:
+    """菜单页 →「もどる」→ 选卡页 →「もどる」→ 轮间主画面；每步看画面再点，没变就补点。回到轮间返回 True。"""
+    for _ in range(tries):
+        _, boxes = o.shot()
+        if _on_interval(o, boxes):
+            return True
+        if _toast(o, boxes):
+            device.click(*TOAST_TAP)
+        elif _on_menu(o, boxes):
+            device.click(*MENU_BACK)
+        elif _on_grid(o, boxes):
+            # 选卡页回轮间的按钮：交接提示词记「終了」(643,1052)，代码原来用 (215,1160)，按文字找，找不到才用旧坐标
+            device.click(*(o.find(boxes, ("終了", "もどる", "戻る"), region=(0, 1000, 720, 1230)) or GRID_BACK))
+        o.wait(lambda b: _on_interval(o, b) or _on_grid(o, b) and not _on_menu(o, b), timeout=2.5, corner=False)
+    return _on_interval(o, o.shot()[1])
 
 
 def _on_interval(o, b):
@@ -170,6 +218,7 @@ def _swipe_down(device):
 
     _dialog_swipe(GRID, True, lambda x1, y1, x2, y2: device.swipe(x1, y1, x2, y2, duration=CARD_OP_SWIPE_DURATION))
     time.sleep(CARD_OP_SCROLL_SETTLE)
+    _wait_grid_still(device)
 
 
 def _scroll_top(device):
@@ -177,7 +226,17 @@ def _scroll_top(device):
 
     for _ in range(SCREENS):
         _dialog_swipe(GRID, False, lambda x1, y1, x2, y2: device.swipe(x1, y1, x2, y2, duration=CARD_OP_SWIPE_DURATION))
-    time.sleep(CARD_OP_SCROLL_SETTLE + 0.5)  # 惯性停稳前点格子会被丢
+    time.sleep(CARD_OP_SCROLL_SETTLE)
+    _wait_grid_still(device)  # 惯性停稳前读到的格子坐标会偏（使用者 2026-11-07：第一行点击明显偏移）
+
+
+GRID_STILL_POINTS = ((140, 626), (434, 773), (580, 920))  # 三行格子里的点：列表还在滚动时这几块一定在变
+
+
+def _wait_grid_still(device):
+    from hiro.vision.stable import wait_stable
+
+    wait_stable(device.screenshot, GRID_STILL_POINTS, frames=2, threshold=1.5, timeout=2.5, poll=0.1)
 
 
 def _read_detail_name(o, prev=None, timeout=1.2):
@@ -257,10 +316,21 @@ def _try_screen(o, device, img, card, item, need_maxed, want_base, tried, read_c
         device.click(*MENU_EXEC)
         # 实机（第一局本战轮间，两项）：点「実行する」后直接出「…をカスタマイズしました」，没有「実行確認」框。
         # 以前死等确认框 4s 后报失败（其实已成功），代理每次都要手动核对。现在：确认框出现才点，看到提示就算成功。
+        from hiro.vision.pages import dialog_header
+
         deadline, seen_toast, confirmed = time.monotonic() + DONE_TIMEOUT, False, False
         while time.monotonic() < deadline:
             time.sleep(TICK)
-            img, boxes = o.shot()
+            img = device.screenshot()
+            if not seen_toast and dialog_header(img) is None:
+                # 还没看到提示、也没有弹窗（像素）：只读提示那一条带（约 0.07s，整帧约 0.27s）
+                toast = [(t, sc, (b[0], b[1] + TOAST_BAND[0], b[2], b[3] + TOAST_BAND[0]))
+                         for t, sc, b in o.ocr(img[TOAST_BAND[0]:TOAST_BAND[1]])]
+                if _toast(o, toast):
+                    seen_toast = True
+                    device.click(*TOAST_TAP)
+                continue
+            boxes = o.read(img)
             if not confirmed and o.has(boxes, "実行確認"):
                 device.click(*(o.find(boxes, ("実行する",), region=(360, 1100, 720, 1220)) or CONFIRM_TAP))
                 confirmed = True
@@ -270,11 +340,12 @@ def _try_screen(o, device, img, card, item, need_maxed, want_base, tried, read_c
                 device.click(*TOAST_TAP)
                 continue
             if seen_toast and (_on_interval(o, boxes) or _on_menu(o, boxes) or _on_grid(o, boxes)):
-                if _on_menu(o, boxes):
-                    device.click(*MENU_BACK)  # 停在菜单页：退回选卡页，下一项直接从选卡页开始
-                    o.wait(lambda b: _on_grid(o, b))
+                # 做完一律退回轮间主画面（文档写的就是「回到轮间」）。以前只从菜单退回选卡页、也不核对：
+                # 实机 codex-20261107-1 第 1 局第二项做完一直停在菜单页，代理手点「もどる」才回轮间
+                back = _back_to_interval(o, device)
                 return {"ok": True, "card": card, "item": target["name"], "toast": True, "confirm_box": confirmed,
-                        "page": "interval" if _on_interval(o, boxes) else "customize"}  # fmt: skip
+                        "page": "interval" if back else "customize",
+                        **({} if back else {"why": "客制化已生效，但没能退回轮间主画面，手动点「もどる」"})}  # fmt: skip
         if seen_toast:
             return {"ok": True, "card": card, "item": target["name"], "toast": True, "confirm_box": confirmed,
                     "page": "unknown", "note": "提示出现过（已成功），但没认出之后的页面"}  # fmt: skip

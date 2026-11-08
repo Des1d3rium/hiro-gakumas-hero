@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace as NS
 
+import numpy as np
 import pytest
 
 pytest.importorskip("kaa")
@@ -124,3 +125,317 @@ def test_auto_decide_taps_real_animation_and_corner():
 def test_auto_decide_fallback_page_holds():
     with pytest.raises(B.HoldPage, match="fallback"):
         _decide(["something"], fallback="SHOP")
+
+
+def test_live_start_page_no_longer_holds():
+    """横屏 LIVE 由 watch 自己处理（切全屏 / TAP TO START），「横画面で開始します」不再停；本戦開始 仍停。"""
+    assert B.hold_reason(["横画面で開始します"]) is None
+    assert B.hold_reason(["本戦開始"]) is not None
+
+
+def test_ocr_gate_reuses_same_frame_and_blind_taps_while_moving():
+    """watch 的 OCR 节流：同一画面不重读；画面在动、上一步是被动页时 1.5s 内不读直接点；停点后不盲点。"""
+    import numpy as np
+
+    t = [0.0]
+    reads = []
+    gate = B.OcrGate(lambda img: reads.append(1) or [], clock=lambda: t[0])
+    frame = lambda v: np.full((1280, 720, 3), v, np.uint8)  # noqa: E731
+    decide = lambda img, ocr: (ocr(img), ("corner", (12, 12)))[1]  # noqa: E731
+    no_dialog = lambda img: None  # noqa: E731
+
+    assert gate.decide(frame(10), decide, no_dialog) == ("corner", (12, 12)) and len(reads) == 1
+    assert gate.decide(frame(10), decide, no_dialog) and len(reads) == 1  # 同一画面：沿用
+    t[0] = 0.5
+    assert gate.decide(frame(200), decide, no_dialog) == ("corner", (12, 12)) and len(reads) == 1  # 在动：盲点
+    t[0] = 2.0
+    gate.decide(frame(20), decide, no_dialog)
+    assert len(reads) == 2  # 超过 BLIND_S：重读
+
+    def hold(img, ocr):
+        ocr(img)
+        raise B.HoldPage("x")
+
+    t[0] = 2.1
+    assert gate.decide(frame(120), hold, no_dialog) == ("corner", (12, 12))  # 停点页在淡入：1.5s 内还会盲点一下
+    t[0] = 3.6
+    with pytest.raises(B.HoldPage):
+        gate.decide(frame(130), hold, no_dialog)  # 到 BLIND_S 必读，认出停点
+    t[0] = 3.7
+    with pytest.raises(B.HoldPage):
+        gate.decide(frame(250), hold, no_dialog)  # 停点之后画面在动也不盲点
+    assert len(reads) == 4
+    # 有弹窗不盲点
+    gate.last = ("corner", (12, 12))
+    t[0] = 2.3
+    with pytest.raises(B.HoldPage):
+        gate.decide(frame(5), hold, lambda img: (500, 540))
+
+
+def test_open_same_frame_guard():
+    """开局点之前重新截帧：画面在 OCR 期间变了（偶像页淡出成开始确认页）就不点。"""
+    import numpy as np
+
+    a = np.full((1280, 720, 3), 40, np.uint8)
+    b = a.copy()
+    assert B.same_frame(a, b)
+    b[600:1280] = 200  # 下半屏换成了另一页
+    assert not B.same_frame(a, b)
+    assert not B.same_frame(a, None)
+
+
+def _b(text, x, y):
+    return (text, 1.0, (x - 60, y - 14, x + 60, y + 14))
+
+
+START_PAGE = [_b("育成情報", 137, 1056), _b("プロデュース開始", 363, 1042), _b("B 32 → 12", 359, 1081), _b("サポート", 432, 636)]
+
+
+def test_open_taps_production_start_on_clean_confirm_page(monkeypatch):
+    monkeypatch.setattr(B, "AUTO_START", True)
+    page, tap = B.flow_page(START_PAGE, "open", dialog=False)
+    assert page == "start" and tap is not None and abs(tap[1] - 1042) < 30
+
+
+@pytest.mark.parametrize("extra", ["別の端末で進行中のプロデュースがあります", "プロデュース再開", "ジュエルを消費"])
+def test_open_never_starts_with_danger_or_dialog(extra, monkeypatch):
+    monkeypatch.setattr(B, "AUTO_START", True)
+    assert B.flow_page(START_PAGE + [_b(extra, 360, 600)], "open", dialog=False)[1] is None
+    assert B.flow_page(START_PAGE, "open", dialog=True)[1] is None
+
+
+def test_acquire_banner_over_receive_button_is_passive():
+    """差し入れ领取后的获得演出：物品条 + 效果行盖在「受け取る」上，点角落；选择页本身照停。"""
+    banner = [_b("初星スーパーソーダ", 364, 872), ("強気2段階目に変更", 1.0, (136, 917, 344, 943)),
+              ("消費体力減少1ターン", 1.0, (136, 954, 365, 979)), _b("受け取る", 353, 1097)]
+    assert B.acquire_banner(banner) and B.hold_reason([t for t, _, _ in banner]).startswith("领取选择")
+    choice = [("受け取るPドリンクを選んでください。", 1.0, (149, 618, 562, 646)), ("初星水", 1.0, (195, 884, 247, 910)),
+              _b("受け取る", 353, 1097)]
+    assert not B.acquire_banner(choice)
+
+
+def test_result_page_taps_next_once_but_retry_dialog_holds():
+    page = [_b("ラウンド1結果", 117, 139), _b("現在順位", 71, 186), _b("再挑戦", 126, 1133), _b("→ 次へ", 335, 1134)]
+    assert B.result_next(page, dialog=False) == (373, 1133)
+    assert B.result_next(page, dialog=True) is None
+    dialog = page + [_b("再挑戦確認", 140, 860), _b("プロデュース終了", 230, 1160)]
+    assert B.result_next(dialog, dialog=False) is None
+
+
+def test_memory_generate_page_holds():
+    assert B.hold_reason(["MEMORY", "秦谷美鈴", "生成", "HIF", "初星アイドル"]).startswith("结算回忆生成")
+
+
+def test_settle_taps_generate_on_memory_confirm():
+    boxes = [_b("メモリー確定確認", 187, 902), _b("再生成前の内容でメモリーを生成します。", 282, 986),
+             _b("キャンセル", 221, 1160), _b("生成する", 480, 1162)]
+    page, tap = B.flow_page(boxes, "settle", dialog=True)
+    assert page == "memory_confirm" and tap is not None and tap[0] > 360
+
+
+def test_auto_start_only_on_repeat_runs(tmp_path, monkeypatch):
+    monkeypatch.delenv("HIRO_BATCH_AUTO_START", raising=False)
+    monkeypatch.setenv("HIRO_BATCH_RULES", str(tmp_path / "missing.json"))  # 默认 repeat
+    assert not B.start_allowed({"completed": []})  # 每批第一局：代理核对后手点
+    assert B.start_allowed({"completed": [{"run": 1}]})
+    monkeypatch.setattr(B, "AUTO_START", False)
+    assert B.flow_page(START_PAGE, "open", dialog=False) == ("opening_confirmation", None) or \
+        B.flow_page(START_PAGE, "open", dialog=False)[1] is None
+
+
+def test_live_skip_always_taps_fixed_skip_then_confirms(monkeypatch):
+    # 使用者 2026-11-07：进 LIVE 后所有点击都点 ⏭ 固定位置（屏幕 (0.9375, 0.10) → 1280x720 (1200,72)），直到确认框 → 「終了する」
+    import batch_hif as B
+
+    img = np.zeros((720, 1280, 3), np.uint8)
+    now = [100.0]
+    monkeypatch.setattr(B.time, "monotonic", lambda: now[0])
+    live = {"started": 99.5}
+    noop = lambda x, y: None  # noqa: E731
+    assert B.live_skip_step(img, [], live, noop) is None  # 刚开始，等曲目页退场
+    now[0] = 103.0
+    assert B.live_skip_step(img, [], live, noop) == ("live_skip", (1200, 72))  # 没控制条也点 ⏭ 位置（第一下唤出）
+    controls = [("00:20/01:32", 1.0, (36, 92, 186, 118))]
+    assert B.live_skip_step(img, controls, live, noop) == ("live_skip", (1200, 72))
+    for _ in range(6):
+        assert B.live_skip_step(img, [], live, noop)[0] == "live_skip"  # 不限次数，直到退出
+    dialog = [("ライブ終了確認", 1.0, (520, 430, 900, 460)), ("Pライブを終了しますか？", 1.0, (340, 520, 620, 550)),
+              ("キャンセル", 1.0, (430, 660, 600, 700)), ("終了する", 1.0, (740, 660, 860, 700))]
+    assert B.live_skip_step(img, dialog, live, noop) == ("live_end", (800, 680)) and not live.get("ended")
+    assert B.live_skip_step(img, dialog, live, noop) == ("live_end", (800, 680))  # 框还在：再点
+    assert B.live_skip_step(img, [], live, noop) is None and live["ended"]  # 框消失才算结束
+    assert B.live_skip_step(img, dialog + [("ジュエル", 1.0, (0, 0, 10, 10))], {}, noop) is None
+
+
+def test_commu_template_needs_ocr_bottom_bar():
+    """清单 4：白字模板在授業分支页淡入帧上误中「剧情」，按 SKIP 点 (225,1200) = 饮料栏第 2 格。要 OCR 也认出底栏才点，且不盲点重复。"""
+    page = {"page": "commu", "dispatch": None, "tap": (225, 1200), "fields": {}}
+    img = np.zeros((1280, 720, 3), np.uint8)
+    real = [("SKIP", 1.0, (190, 1185, 260, 1215)), ("ログ", 1.0, (320, 1185, 380, 1215)),
+            ("AUTO", 1.0, (460, 1185, 530, 1215)), ("早送り", 1.0, (580, 1185, 660, 1215))]
+    assert B.auto_decide(img, ocr=lambda _: real, quick=lambda _: page, fallback=lambda _: None,
+                         header=lambda _: None) == ("commu", (225, 1200))
+    assert "commu" not in B.OcrGate.PASSIVE
+    fake = [("初星ホエイプロテイン", 1.0, (150, 1185, 300, 1215))]
+    assert B.auto_decide(img, ocr=lambda _: fake, quick=lambda _: page, fallback=lambda _: None,
+                         header=lambda _: None) == ("corner", (12, 12))
+    assert B.animation_tap(img, ocr=lambda _: fake, blocked=lambda _: False, header=lambda _: None,
+                           quick=lambda _: page, fallback=lambda _: None, corner=(12, 12)) is None
+
+
+def test_pre_exam_ranking_page_taps_hint():
+    """清单 5：考前「現在順位」页底部是「タップして次へ」（y≈1187），原来只认 y 1090–1180 的「次へ」按钮。"""
+    page = [_b("現在順位", 71, 186), _b("タップして次へ", 360, 1187)]
+    assert B.result_next(page, dialog=False) == (360, 1187)
+    B.RANK_SEEN.update(at=None, last=0.0)
+    assert B.result_next([_b("現在順位", 71, 186), _b("次へ", 360, 1260)], dialog=False) == "wait"
+
+
+def test_ranking_page_waits_before_hold(monkeypatch):
+    """「タップして次へ」淡入前先等 RANK_WAIT_S，之后才落到停点；一直在这页不会再变回 wait（不会误报 resume）。"""
+    now = {"t": 100.0}
+    monkeypatch.setattr(B.time, "monotonic", lambda: now["t"])
+    B.RANK_SEEN.update(at=None, last=0.0)
+    page = [_b("現在順位", 71, 186)]
+    assert B.result_next(page, dialog=False) == "wait"
+    for t in (102.0, 104.0):
+        now["t"] = t
+        assert B.result_next(page, dialog=False) == "wait"
+    for t in (106.0, 108.0, 110.0, 112.0, 114.0, 116.0):
+        now["t"] = t
+        assert B.result_next(page, dialog=False) is None
+    now["t"] = 140.0  # 离开 10s 后再来：重新计时
+    assert B.result_next(page, dialog=False) == "wait"
+    img = np.zeros((1280, 720, 3), np.uint8)
+    now["t"] = 141.0
+    assert B.auto_decide(img, ocr=lambda _: page, quick=lambda _: None, fallback=lambda _: None,
+                         header=lambda _: None) is None
+
+
+def test_deck_list_holds_even_with_tab_row_like_banner():
+    """牌组一览底部「スキルカード(23)」像效果说明行，原来走 BANNER_PASS 点角落。"""
+    img = np.zeros((1280, 720, 3), np.uint8)
+    page = {"page": "DECK_LIST", "dispatch": None, "tap": (360, 1157), "fields": {}}
+    boxes = [_b("所持スキルカード", 160, 55), ("スキルカード(23)", 1.0, (60, 1030, 300, 1065))]
+    with pytest.raises(B.HoldPage, match="DECK_LIST"):
+        B.auto_decide(img, ocr=lambda _: boxes, quick=lambda _: page, fallback=lambda _: None, header=lambda _: None)
+
+
+def test_exam_briefing_waits_then_taps():
+    bonus = [_b("優勝条件", 120, 630), _b("Vo", 300, 700)]
+    assert B.briefing_step(bonus, dialog=False) == "wait"
+    ready = bonus + [_b("タップして次へ", 360, 1200)]
+    assert B.briefing_step(ready, dialog=False) == ("exam_briefing", (360, 300))
+    assert B.briefing_step(ready, dialog=True) is None
+    assert B.briefing_step(ready + [_b("残りターン", 80, 60)], dialog=False) is None
+    img = np.zeros((1280, 720, 3), np.uint8)
+    assert B.auto_decide(img, ocr=lambda _: bonus, quick=lambda _: None, fallback=lambda _: None, header=lambda _: None) is None
+
+
+def test_acquired_drink_logged_once_and_not_after_choice(monkeypatch):
+    """清单 10：事件 / 公開レッスン 直接给的饮料（只有获得演出）记进账本；同一演出多帧只记一次；选择页刚处理完的不记。"""
+    import batch_ledger as L
+
+    now = [100.0]
+    monkeypatch.setattr(B.time, "monotonic", lambda: now[0])
+    B.ACQUIRED.clear()
+    B.CHOICE["at"] = -1e9
+    ledger = {"drinks": ["センブリソーダ", None, None, None], "log": []}
+    active, saved = {"ledger": ledger}, []
+    page = {"page": "ACQUIRE", "dispatch": None, "tap": (12, 12), "fields": {"kind": "drink", "name": "ブーストエキス"}}
+    img = np.zeros((1280, 720, 3), np.uint8)
+    for _ in range(3):
+        assert B.auto_decide(img, ocr=lambda _: [_b("ブーストエキス", 360, 880)], quick=lambda _: page,
+                             fallback=lambda _: None, header=lambda _: None) == ("corner", (12, 12))
+        now[0] += 0.4
+    lines = B.drain_acquired({}, active, lambda: saved.append(1))
+    assert [x["ledger"] for x in lines] == ["added"] and ledger["drinks"][1] == "ブーストエキス"
+    assert B.drain_acquired({}, active, lambda: None) == []
+    # 选择页刚处理完：那一次已由 prep / 代理记账
+    now[0] += 30
+    B.CHOICE["at"] = now[0] - 3
+    ledger["log"].append({"t": "09:59:59", "op": "drink+", "slot": 2, "drink": "センブリソーダ"})  # prep 刚记过
+    B.note_acquire("センブリソーダ")
+    assert [x["ledger"] for x in B.drain_acquired({}, active, lambda: None)] == ["choice"]
+    # 同一窗口里别的名字（1-f：换卡后支援卡事件给的 ティーパーティ+）照记
+    B.note_acquire("ティーパーティ+", kind="card", card_id="p_card-00-sup-3_027")
+    monkeypatch.setattr(L, "acquire_card", lambda *a, **k: "added")
+    assert [x["ledger"] for x in B.drain_acquired({}, active, lambda: None)] == ["added"]
+    # 别的进程刚记过同名（商店 / 选择页命令行）：账本按 log 时间去重
+    monkeypatch.setattr(L, "_now", lambda: "10:00:00")
+    assert L.acquire_drink(ledger, "初星湯", why="x") == "added"
+    assert L.acquire_drink(ledger, "初星湯", why="x", now="10:00:20") == "dup"
+    ledger["drinks"] = ["a", "b", "c", "d"]
+    assert L.acquire_drink(ledger, "初星水", why="x", now="10:05:00") == "full" and ledger["log"][-1]["op"] == "drink?"
+
+
+def test_live_exit_failure_message():
+    assert "退出全屏失败" in B.live_fail_reason("exit", "failed") and "fn+shift+F" in B.live_fail_reason("exit", "failed")
+    assert "进入全屏失败" in B.live_fail_reason("enter", "failed")
+
+
+def test_ocr_gate_never_blind_taps_over_acquire_bar():
+    """验证局（codex-20261107-1-b）：P 道具白送的饮料只有获得演出，盲点连点角落时一帧都没识别 → 账本漏 2 瓶。名称栏在就不盲点。"""
+    t = [0.0]
+    gate = B.OcrGate(lambda img: [], clock=lambda: t[0])
+    decide = lambda img, ocr: (ocr(img), ("corner", (12, 12)))[1]  # noqa: E731
+    gate.decide(np.full((1280, 720, 3), 10, np.uint8), decide, lambda img: None)
+    popup = np.full((1280, 720, 3), 120, np.uint8)
+    popup[870:891, 160:560] = 255  # 名称栏：白色横条 21 行
+    assert B.acquire_bar(popup) and not B.acquire_bar(np.full((1280, 720, 3), 120, np.uint8))
+    t[0] = 0.5
+    assert gate.blind(popup, lambda img: None) is None
+
+
+def test_exam_selected_card_text_holds_without_acquire_bar(monkeypatch):
+    """出牌页选中一张牌：说明行落在 acquire_banner 那一带，但没有获得演出名称栏 → 停，不点角落（验证局 1-c）。"""
+    img = np.zeros((1280, 720, 3), np.uint8)
+    boxes = [_b("残りターン", 80, 60), ("温存に変更スキルカード使用数追加+1", 1.0, (60, 950, 400, 980))]
+    kw = dict(ocr=lambda _: boxes, quick=lambda _: None, fallback=lambda _: None, header=lambda _: None)
+    monkeypatch.setattr(B, "acquire_bar", lambda _img: False)
+    with pytest.raises(B.HoldPage, match="考试中"):
+        B.auto_decide(img, **kw)
+    monkeypatch.setattr(B, "acquire_bar", lambda _img: True)
+    assert B.auto_decide(img, **kw)[0] == "corner"
+
+
+def test_live_end_tap_subtracts_top_white_bar(monkeypatch):
+    """横屏帧顶部白条 35px：「終了する」按 OCR 帧坐标点时减去白条（点击按屏幕坐标）；⏭ 用屏幕固定坐标、不受白条影响。"""
+    import batch_hif as B
+
+    img = np.zeros((720, 1280, 3), np.uint8)
+    img[:35] = 255
+    assert B.top_bar(img) == 35 and B.top_bar(np.zeros((720, 1280, 3), np.uint8)) == 0
+    monkeypatch.setattr(B.time, "monotonic", lambda: 200.0)
+    assert B.live_skip_step(img, [], {"started": 100.0}, None) == ("live_skip", (1200, 72))
+    dialog = [("ライブ終了確認", 1.0, (520, 430, 900, 460)), ("終了する", 1.0, (740, 660, 860, 700))]
+    assert B.live_skip_step(img, dialog, {"started": 100.0}, None) == ("live_end", (800, 645))
+
+def test_deck_sync_reconciles_ledger_from_deck_list(monkeypatch):
+    """第二层：牌组一览整副读全 → 主数据卡名（带「+」）→ 账本对账；读不全不改账本。"""
+    import batch_ledger as L
+    import hiro.produce.deck_review as DR
+    import hiro.state.catalog as C
+    import hiro.state.knowledge as K
+
+    monkeypatch.setattr(L, "_now", lambda: "10:00:00")
+    names = {("a", 1): "巻き返し+", ("b", 1): "ティーパーティ+"}
+    monkeypatch.setattr(C, "catalog", lambda: NS(card=lambda cid, up: {"name": names[(cid, up)]}))
+    monkeypatch.setattr(K, "is_once", lambda cid: cid == "b")
+    import hiro.vision.hif as H
+
+    monkeypatch.setattr(H, "is_hif_exam", lambda img: False)
+    # deck_sync 会把 DR.SAVE_DIR 设成 reports/live/deck-list；不还原的话后面 test_deck_review 的假黑帧都存进实机目录
+    #（1-f 审计以为实机一览截到黑屏，其实是测试存的）
+    monkeypatch.setattr(DR, "SAVE_DIR", None)
+    deck = [{"card_id": "a", "upgrade": 1}, {"card_id": "b", "upgrade": 1}]
+    monkeypatch.setattr(DR, "review_deck", lambda **kw: {"deck": deck, "deck_size": 2, "problems": [], "opened": True, "closed": True})
+    led = L.new_ledger({"memory": "m", "cards": ["巻き返し+"], "once": [], "evidence": "x"})
+    dev = NS(screenshot=lambda: None, click=None, swipe=None)
+    out = B.deck_sync(dev, led, why="测试")
+    assert out["ok"] and out["diff"] == ["补记 ティーパーティ+"] and "ティーパーティ+" in led["once"]
+    monkeypatch.setattr(DR, "review_deck", lambda **kw: {"deck": None, "deck_size": None, "problems": ["没读全"], "opened": True, "closed": True})
+    before = list(led["cards"])
+    assert not B.deck_sync(dev, led, why="测试")["ok"] and led["cards"] == before
+    monkeypatch.setattr(H, "is_hif_exam", lambda img: True)
+    assert "考试页" in B.deck_sync(dev, led, why="测试")["why"]

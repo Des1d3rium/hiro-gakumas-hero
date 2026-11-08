@@ -16,9 +16,10 @@ import numpy as np
 from cv2.typing import MatLike
 
 from hiro.vision.ocr import ocr_boxes
+from hiro.produce import hif_buttons as BTN
 
 REGION = (75, 470, 720, 950)  # 左边界避开行首图标（会被读成「2」并吃掉首字）
-ROW_Y = (698, 799, 901)
+ROW_Y = BTN.OPTION_ROWS
 ROW_HALF = 26  # 选项文字行的半高
 BADGE = (-56, -22)  # 角标相对行中心的 y 范围
 TEXT_X = (70, 560)  # 选项文字的 x 范围（左边是图标，右边是「>>」）

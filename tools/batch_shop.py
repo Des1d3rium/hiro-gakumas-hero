@@ -17,7 +17,10 @@ FAST_SKIP = 0.4  # 获得动画的跳过点击间隔（执行器默认 1s）
 
 
 def high_value(name: str | None) -> bool:
-    return bool(name) and any(norm(name).startswith(h) for h in HIGH_VALUE)
+    import batch_rules
+
+    wanted = batch_rules.get("shop.high_value", list(HIGH_VALUE))
+    return bool(name) and any(norm(name).startswith(norm(h)) for h in wanted)
 
 
 def _page(device):
@@ -158,10 +161,11 @@ def _refresh_price(fields: dict) -> int | None:
     return ref.get("price") if isinstance(ref, dict) else None
 
 
-def auto(device, *, free_slots, on_buy, max_refresh: int = 10) -> dict:
+def auto(device, *, free_slots, on_buy, max_refresh: int = 10, make_room=None) -> dict:
     """一条命令做完补给：读货架 → 买没买过的高价值饮料 → P 够就刷新 → 再读，直到饮料栏满 / P 不够刷新 / 刷新到上限。
     同一进程里循环：识别图库只在第一次加载（约 2s），也省掉代理每步之间的往返。
-    free_slots()：账本还剩几个空格；on_buy(name)：买成功后记账。任何一步失败就停下，带上已做的步骤。"""
+    free_slots()：账本还剩几个空格；on_buy(name)：买成功后记账。任何一步失败就停下，带上已做的步骤。
+    make_room()：栏满、货架上又有要买的高价值饮料时调用，丢一瓶低价值的腾格子；返回丢掉的名字，丢不了返回 None。"""
     from hiro.produce.ops import ocr_boxes
     from hiro.produce.shop import read_p
 
@@ -177,6 +181,12 @@ def auto(device, *, free_slots, on_buy, max_refresh: int = 10) -> dict:
         p = seen if seen is not None else expect
         want = [d for d in drinks if high_value(d.get("name")) and not d.get("purchased")]
         for item in want:
+            if free_slots() <= 0 and make_room is not None:
+                # 验证局 1-c：栏满就停、要代理手动 drink-drop 低价值饮料再买
+                dropped = make_room()
+                steps.append({"op": "drop_low", "drink": dropped, "for": item.get("name")})
+                if dropped:
+                    time.sleep(0.3)
             if free_slots() <= 0:
                 return {"ok": True, "stop": "饮料栏已满", "page": kind, "steps": steps, "p": p}
             res = buy(device, item["index"])
