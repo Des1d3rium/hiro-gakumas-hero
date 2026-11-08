@@ -542,3 +542,22 @@ def test_home_bottom_bar_is_not_dialog():
     img = cv2.imread(str(path))
     assert dialog_header(img) is None
     assert B.flow_page(ocr_boxes(img), "open", dialog=False)[0] == "home"
+
+
+PHOTO_ERROR = ["エラー", "エラーによりフォトを保存できませんでした", "リトライしますか？",
+               "※キャンセルすると撮影した画像を破棄し、テンプレー", "ト画像でメモリーを生成します", "Xキャンセル", "くリトライ"]
+
+
+def test_photo_save_error_cancels_once_in_settle():
+    """验证局 1-i 结算：照片保存失败框（正文含「破棄」= 拍下的照片）。settle 点左边キャンセル，其余动作仍当受保护页面。"""
+    boxes = [(t, 1, b) for t, b in zip(PHOTO_ERROR, [(300, 520, 420, 560), (100, 640, 620, 670), (200, 690, 520, 720),
+                                                     (60, 760, 680, 790), (60, 800, 500, 830), (120, 1145, 330, 1180),
+                                                     (400, 1145, 580, 1180)])]  # fmt: skip
+    kind, tap = B.flow_page(boxes, "settle", dialog=True)
+    assert kind == "photo_error" and tap is not None and tap[0] < 360
+    assert B.flow_page(boxes, "open", dialog=True)[0] in ("protected", "opening_confirmation")
+
+
+def test_photo_error_with_danger_words_stays_protected():
+    texts = PHOTO_ERROR + ["プロデュースデータを破棄"]
+    assert not B.photo_save_error(texts)

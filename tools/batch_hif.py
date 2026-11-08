@@ -280,6 +280,13 @@ def briefing_step(boxes, dialog: bool):
     return "wait"
 
 
+def photo_save_error(texts) -> bool:
+    """结算回忆的照片保存失败框：标题「エラー」+「フォトを保存できませんでした」+「リトライ」，且没有别的危险字样。"""
+    flat = "".join("".join(unicodedata.normalize("NFKC", t).split()) for t in texts)
+    return ("フォトを保存できませんでした" in flat and "リトライ" in flat
+            and not any(w in flat for w in ("リタイア", "通信エラー", "タイトルへ", "ジュエル", "プロデュースデータ", "育成データ")))
+
+
 def hold_reason(texts):
     """OCR 文本里有必须由代理处理的页面特征时返回「理由：命中文字」，否则 None。"""
     labels = ["".join(unicodedata.normalize("NFKC", t).split()) for t in texts]
@@ -599,6 +606,10 @@ def flow_page(boxes, action, *, dialog, keep_memory=False):
         matches = [b for b in boxes if any(button_text(b[0], w) for w in words)]
         return find_text(matches, [b[0] for b in matches], region=region, exact=True)
 
+    if action == "settle" and photo_save_error(texts):
+        # 结算选回忆照片后「エラーによりフォトを保存できませんでした / リトライしますか？」（使用者 2026-11-07）：点一次左边
+        # 「キャンセル」，交还 settle 继续。正文的「破棄」指拍下的照片（改用模板图生成回忆），不是培育数据
+        return "photo_error", button("キャンセル", region=(0, 1100, 360, 1230))
     if has("破棄", "リタイア", "通信エラー", "日付変更", "タイトルへ"):
         return "protected", None
 
