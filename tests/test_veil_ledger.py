@@ -4,6 +4,8 @@
 import json
 from dataclasses import replace
 
+from collections import Counter
+
 import pytest
 
 from hiro.brain.cards import CardView, DrinkView, parse_tags
@@ -539,3 +541,33 @@ def test_swap_pending_waits_until_hand_replaced():
     assert "veil_swap_wait" not in data
     data["veil_swap_wait"] = {"turn": 4, "before": ["達成感+"]}
     assert swap_pending(data, mem, Counter(["達成感+"])) is False
+
+
+# ---------------------------------------------------------------- 洗牌规则（HIRO_VEIL_STRICT_SHUFFLE）
+def _piles(deck, grave, hand):
+    return {"turn": 1, "hand": hand + [None] * (5 - len(hand)), "deck": dict.fromkeys(deck, 1), "grave": dict.fromkeys(grave, 1),
+            "unlocated": {}}
+
+
+@pytest.mark.parametrize("strict", [False, True])
+def test_shuffle_after_deck_drawn_out(monkeypatch, strict):
+    """牌堆只剩 D，新回合抽 3 张：先抽 D，再把弃牌堆（A + 上回合手牌 C）洗进来抽 A、C。开不开严格模式都认。"""
+    from hiro.produce.veil_exam import track_piles
+
+    monkeypatch.setenv("HIRO_VEIL_STRICT_SHUFFLE", "1" if strict else "0")
+    data = {"veil_piles": _piles(["D"], ["A"], ["C"])}
+    out = track_piles(data, 2, ["D", "A", "C", None, None], Counter())
+    assert out == {"deck": [], "grave": [], "unlocated": []}
+
+
+def test_strict_shuffle_rejects_undrawn_deck(monkeypatch):
+    """牌堆还剩 B 没抽到，却抽到了弃牌堆的 A、C：原来照样当洗牌（B 留在牌堆）；严格模式不认，整副记成位置不明。"""
+    from hiro.produce.veil_exam import track_piles
+
+    hand = ["D", "A", "C", None, None]
+    monkeypatch.delenv("HIRO_VEIL_STRICT_SHUFFLE", raising=False)
+    data = {"veil_piles": _piles(["B", "D"], ["A"], ["C"])}
+    assert track_piles(data, 2, hand, Counter({"B": 1})) == {"deck": ["B"], "grave": [], "unlocated": []}
+    monkeypatch.setenv("HIRO_VEIL_STRICT_SHUFFLE", "1")
+    data = {"veil_piles": _piles(["B", "D"], ["A"], ["C"])}
+    assert track_piles(data, 2, hand, Counter({"B": 1})) == {"deck": [], "grave": [], "unlocated": ["B"]}

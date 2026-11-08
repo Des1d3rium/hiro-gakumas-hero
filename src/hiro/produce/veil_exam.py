@@ -320,6 +320,12 @@ def apply_deck_change(base, change):
     return deck
 
 
+def strict_shuffle():
+    """HIRO_VEIL_STRICT_SHUFFLE=1：牌堆记账按洗牌规则收紧（默认关）。原来只看「抽到牌堆里没有的牌、抽牌数大于牌堆剩余」就当洗牌，
+    牌堆没抽完也认；打开后牌堆没抽完就不认，整副记成位置不明（循环判断照样能用，自检 trace_trust 判这步不可信）。"""
+    return os.environ.get("HIRO_VEIL_STRICT_SHUFFLE") == "1"
+
+
 def track_piles(data, turn, slots, outside):
     """Reconcile known piles against the observed hand without reading pile UI."""
     previous = data.get("veil_piles")
@@ -336,7 +342,9 @@ def track_piles(data, turn, slots, outside):
         else:
             grave.update(old_hand - hand)
             drawn = hand - old_hand
-        if drawn - deck and not unknown and deck.total() < drawn.total():
+        # 洗牌：抽牌数大于牌堆剩余时，先把牌堆全部抽完，再把弃牌堆洗进牌堆，剩下的按概率抽（使用者 2026-11-07）。
+        # 严格模式（HIRO_VEIL_STRICT_SHUFFLE=1）还要求牌堆里的牌都在这次抽到的牌里，否则不认洗牌、下面整副记成位置不明
+        if drawn - deck and not unknown and deck.total() < drawn.total() and not (strict_shuffle() and deck - drawn):
             deck.update(grave)
             grave.clear()
         if drawn - deck or deck - drawn + grave + unknown != outside:
