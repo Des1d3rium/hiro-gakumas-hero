@@ -179,10 +179,12 @@ def auto(device, *, free_slots, on_buy, max_refresh: int = 10, make_room=None) -
         if expect is not None and seen is not None and seen != expect:
             steps.append({"op": "p_mismatch", "expected": expect, "screen": seen})  # 以画面为准（价格变了 / 读错）
         p = seen if seen is not None else expect
-        want = [d for d in drinks if high_value(d.get("name")) and not d.get("purchased")]
-        for item in want:
+        want = [d for d in drinks if high_value(d.get("name")) and d.get("purchased") is False
+                and d.get("available", True) is True and d.get("index") is not None]
+        budget = min(seen, expect) if seen is not None and expect is not None else seen
+        item = next((d for d in want if d.get("price") is not None and budget is not None and 0 <= d["price"] <= budget), None)
+        if item is not None:
             if free_slots() <= 0 and make_room is not None:
-                # 验证局 1-c：栏满就停、要代理手动 drink-drop 低价值饮料再买
                 dropped = make_room()
                 steps.append({"op": "drop_low", "drink": dropped, "for": item.get("name")})
                 if dropped:
@@ -194,11 +196,11 @@ def auto(device, *, free_slots, on_buy, max_refresh: int = 10, make_room=None) -
             if not res["ok"]:
                 return {"ok": False, "why": f"买第 {item['index']} 格失败：{res.get('why')}", "steps": steps}
             on_buy(res["drink"] or item.get("name"))
-            known = p is not None and item.get("price") is not None
-            p = expect = p - item["price"] if known else None  # 价格读不到就不推算，下一轮以画面为准
+            expect = budget - item["price"]
             time.sleep(0.3)
+            continue  # 购买前重新核对货架和余额
         if want:
-            continue  # 买过东西：P 变了，重读一次再决定刷不刷
+            return {"ok": True, "stop": "无法确认目标饮料买得起", "page": kind, "steps": steps, "p": p}
         read = _refresh_price(fields)
         if predicted is not None and read is not None and read != predicted:
             steps.append({"op": "refresh_price_mismatch", "expected": predicted, "screen": read})

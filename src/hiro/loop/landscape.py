@@ -29,6 +29,7 @@ MENUS = ("显示", "View", "表示")
 VERIFY_S = 5.0  # 每种方式之后最多等多久核对
 VERIFY_POLL = 0.5
 BLACK_MEAN = 3.0
+SWITCH_FAILURES = ("locked", "nogame", "failed")
 
 logger = logging.getLogger(__name__)
 
@@ -294,7 +295,7 @@ class LandscapeGuard:
         self.prev_front = _front_app()
         self.last_op = "enter"
         self.last_result = switch_fullscreen(True, pid=pid, shoot=self.shoot)
-        ok = self.last_result not in ("locked", "nogame", "failed")
+        ok = self.last_result not in SWITCH_FAILURES
         logger.warning("横屏 LIVE 黑屏 %.0fs：进入全屏让窗口重新布局（%s）", self.BLACK_S, self.last_result)
         if ok:
             self.fullscreen, self.entered_at, self.black_since = True, time.monotonic(), None
@@ -304,27 +305,35 @@ class LandscapeGuard:
         """调用方确认 LIVE 已结束（例如点了「ライブ終了確認」的「終了する」）：不等黑屏计时，马上退出全屏回竖屏。"""
         return self._exit()
 
-    def exit_cleared(self, every: float = 3.0) -> bool:
-        """退出全屏失败后（使用者手动退出了全屏）：隔 every 秒读一次 AXFullScreen，已不是全屏就清掉失败标记、返回 True。
-        进入失败或读不到属性时返回 False（照旧停着）。"""
-        if self.last_op != "exit" or self.last_result not in ("failed", "nogame"):
+    def failure_cleared(self, img, every: float = 3.0) -> bool:
+        """Verify a recovered frame without triggering any window operations."""
+        if self.last_result not in SWITCH_FAILURES or img is None or is_black(img):
             return False
         now = time.monotonic()
         if now - getattr(self, "_recheck_at", -1e9) < every:
             return False
         self._recheck_at = now
-        pid = _game_pid()
-        if pid is None or ax_is_fullscreen(pid) is not False:
+        if screen_locked():
             return False
-        logger.warning("LIVE 结束：窗口已不是全屏（手动退出），继续")
+        height, width = img.shape[:2]
+        if height == width:
+            return False
+        if self.last_op == "exit":
+            pid = _game_pid()
+            if height < width or pid is None or ax_is_fullscreen(pid) is not False:
+                return False
+        self.fullscreen = width > height
+        self.entered_at = now if self.fullscreen else 0.0
+        self.black_since = self.portrait_since = None
         self.last_result = "manual"
+        logger.warning("LIVE 窗口画面已恢复，继续")
         return True
 
     def _exit(self) -> bool:
         pid = _game_pid()
         self.last_op = "exit"
         self.last_result = switch_fullscreen(False, pid=pid, shoot=self.shoot) if pid is not None else "nogame"
-        ok = self.last_result not in ("locked", "nogame", "failed")
+        ok = self.last_result not in SWITCH_FAILURES
         logger.warning("LIVE 结束：退出全屏（%s）", self.last_result)
         self.fullscreen, self.black_since = False, None
         if self.prev_front is not None and int(self.prev_front.processIdentifier()) != pid:

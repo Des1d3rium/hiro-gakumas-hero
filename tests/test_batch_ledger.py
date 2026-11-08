@@ -198,3 +198,47 @@ def test_mark_full_fills_empty_slots_with_placeholder(ledger):
     assert L.mark_full(ledger, why="P道具饮料页") == 2
     assert ledger["drinks"] == ["ブーストエキス", "センブリソーダ", L.UNKNOWN_DRINK, L.UNKNOWN_DRINK]
     assert L.mark_full(ledger, why="再来一次") == 0
+
+
+@pytest.mark.parametrize("with_ledger, explicit, retry", [
+    (True, True, None), (True, False, None), (False, True, None), (True, True, 1),
+])
+def test_exam_sync_with_optional_explicit_deck(monkeypatch, tmp_path, with_ledger, explicit, retry):
+    import json
+    from types import SimpleNamespace
+
+    import batch_hif as batch
+    from hiro.produce import veil_exam
+
+    monkeypatch.setattr(L, "MEMORY_DIR", tmp_path / "memories")
+    ledger = None
+    if with_ledger:
+        L.save_memory(MEMORY["memory"], MEMORY, batch.VEIL_IDOL)
+        ledger = L.new_ledger(MEMORY, ["ブーストエキス", "センブリソーダ"])
+    active = {"run": 1, "phase": "playing", "ledger": ledger}
+    if retry:
+        active["exam_start_drinks"] = {"1": list(ledger["drinks"])}
+        L.after_exam(ledger, [])
+    state = {"active": active, "preflight": {"idol": batch.VEIL_IDOL}}
+    deck = "synthetic.json" if explicit else None
+    args = SimpleNamespace(command="exam", batch="synthetic", run=1, round=1, deck=deck)
+    ability = {"card_id": "synthetic", "card": "synthetic", "kind": "draw", "count": 1}
+    saved = tmp_path / "state.json"
+
+    def run_round(round_no, selected, trace, **kwargs):
+        assert selected == (deck if explicit else L.to_deck(ledger))
+        if retry:
+            assert kwargs["retry_drinks"] == ["ブーストエキス", "センブリソーダ", None, None]
+        return {"ok": True, "retry": retry, "drinks": [{"state": "drink", "name": "センブリソーダ"}],
+                "abilities_source": "screen", "abilities": [ability]}
+
+    monkeypatch.setattr(veil_exam, "run_round", run_round)
+    out = batch.change(state, args, persist=lambda: saved.write_text(json.dumps(state)))
+    assert out["ok"]
+    if with_ledger:
+        persisted = json.loads(saved.read_text())["active"]["ledger"]
+        assert persisted["drinks"] == ["センブリソーダ", None, None, None]
+        assert persisted["abilities"] == L.load_memory(MEMORY["memory"])["abilities"] == [ability]
+        assert any("再挑戦" in (log.get("why") or "") for log in persisted["log"]) == bool(retry)
+    else:
+        assert "ledger_drinks" not in out and not saved.exists()

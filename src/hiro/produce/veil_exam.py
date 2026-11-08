@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from collections import Counter, defaultdict
@@ -16,7 +17,7 @@ from hiro.loop.errors import ResumeBlocked
 from hiro.brain.veil import (
     CORE, DRIVE, IDOL, REBOUND, SODA, STANCES, TEACH, WARM, VeilAdvisor,
     NEUTRAL, STAR, after_play, destination, flower_count, keeps_nonbiri, full_power_count, keep_warm, next_stance, norm,
-    stance, start_turn,
+    stance, stance_level, stance_change_level, start_turn,
 )
 
 
@@ -150,20 +151,24 @@ def apply_customs(hand, customs):
     return out
 
 
-def remap_hand(hand, names_by_base, customs, text_of=None):
-    """Temporary upgrades and OCR of the + badge can change the display name. Match it to the reviewed deck only for
-    unambiguous base names. 账本说强化过、画面角标没认出：牌面文字也按账本那一级（1-f R2：トレーニングの成果 读成没强化，
-    按 +3 记全力値，实际 +4）。换主数据牌面会冲掉客制化补的文字（1-g R2 再挑戦3：インフルエンサー 读成不带「+」，换成主数据后
-    「強気追加」没了，账本当它不切強気，夜空少数一次，之后姿态 / 夜空一路错一格）→ 换完再补客制化（已含的不重复加）。"""
-    text_of = text_of or master_text
+def remap_hand(hand, names_by_base, customs, cards=None):
+    """Fill a missing upgrade badge only when the deck identifies one higher variant."""
+    from hiro.brain.cards import card_view, kaa_cards
+
+    cards = kaa_cards() if cards is None else cards
     out = []
     for card in hand:
         name = norm(card.name)
-        variants = names_by_base.get(name.rstrip("+"), ())
-        if len(variants) == 1 and name != variants[0]:
-            card = replace(card, name=variants[0])
-            if len(variants[0]) > len(name) and (text := text_of(variants[0])):
-                card = replace(card, text=text)
+        base = name.rstrip("+")
+        variants = names_by_base.get(base, ())
+        if len(variants) == 1 and card.card_id:
+            target = variants[0]
+            upgrade = len(target) - len(base)
+            if upgrade > max(card.upgrade, len(name) - len(base)):
+                master = cards.get((card.card_id, upgrade))
+                if master is not None and norm(master.name) == target and master.upgrade_count == upgrade:
+                    rebuilt = card_view(card.slot, master, available=card.available)
+                    card = replace(rebuilt, badge_score=card.badge_score)
         out.append(card)
     return apply_customs(out, customs) if customs else out
 
@@ -237,7 +242,9 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
     pending = data.get("veil_pending_play")
     new_turn = position.get("turn") != memory.turn
     observed = stance(state)
+    observed_level = stance_level(state, observed)
     current = position.get("stance")
+    level = position.get("stance_level")
     flower = position.get("flower")
     delayed = position.get("next_stance")
 
@@ -246,6 +253,7 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
             if hand[pending["card"]] >= pending["count"]:
                 return "veil_play_unverified"
             current, flower = pending["stance"], pending["flower"]
+            level = pending.get("stance_level")
             delayed = pending["next_stance"] or delayed
         else:
             # The next hand may redraw the card. Verify the digit if this
@@ -269,32 +277,38 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
         # 画面读不出姿态（回合开头过渡帧）时按账本接着走：有预约的下回合姿态用它，否则沿用上回合结束时的姿态
         # （验证局 1-e R1 第 2 回合开头读不出就停机）。ledger 里本来就有 next_stance，没有时姿态不会自己变
         if pending and pending["next_stance"]:
-            current = observed  # 上一手没核对上、它又预约了下回合姿态：账本不确定，只能看画面
+            current, level = observed, observed_level  # 上一手没核对上、它又预约了下回合姿态：账本不确定，只能看画面
         else:
             predicted = (current if keeps_nonbiri(current, delayed) else delayed) or current
             # 一番星：回合开始不在温存 / のんびり 就切のんびり（1-h R1 第 2 回合：账本记強気，画面已是のんびり）
             predicted, star = start_turn(predicted, data.get("veil_star"))
             if star != data.get("veil_star"):
                 data["veil_star"] = star
+            level = observed_level if observed else (level if predicted == current and not delayed else None)
             current = observed or predicted
     elif calibrate:
         # On a resumed cycle a verified hand plus the expected flower digit
         # can corroborate the saved position even if the stance icon is hidden.
         current = observed or (current if flower == predicted_flower else None)
+        if observed or current is None:
+            level = observed_level
     elif current is None:
-        current = observed
+        current, level = observed, observed_level
+    elif observed == current and observed_level is not None:
+        level = observed_level
     if new_turn or calibrate:
         if current is None and position:
             return "veil_stance_unreadable"
         if new_turn:
             delayed = None
 
-    data["veil_position"] = {"turn": memory.turn, "stance": current, "flower": flower, "next_stance": delayed}
+    data["veil_position"] = {"turn": memory.turn, "stance": current, "stance_level": level,
+                             "flower": flower, "next_stance": delayed}
     data.pop("veil_pending_play", None)
     state.pitem_charges = flower
     state.statuses = [s for s in state.statuses or [] if norm(s.get("name") or "") not in STANCES]
     if current is not None:
-        state.statuses.append({"name": current})
+        state.statuses.append({"name": current, "value": level})
     if delayed:
         state.statuses.append({"name": f"次のターン開始時、{delayed}に変更"})
     return None
@@ -952,11 +966,14 @@ class VeilBrain(BattleBrain):
         if before is None and memory.turn == 1 and (data.get("veil_position") or {}).get("stance") in (None, NEUTRAL):
             before = NEUTRAL  # 第 1 回合还没切过姿态：切強気照算夜空（原来记成 None、夜空不明）
         current, flower = after_play(before, state.pitem_charges, card)
+        level = stance_change_level(card) if destination(card) == current else None
+        if current == before and destination(card) != current:
+            level = stance_level(state, before)
         if name.startswith(STAR):
             data["veil_star"] = 3
         data["veil_pending_play"] = {
             "turn": memory.turn, "card": name, "count": sum(norm(c.name) == name for c in state.hand),
-            "stance": current, "flower": flower, "next_stance": next_stance(card),
+            "stance": current, "stance_level": level, "flower": flower, "next_stance": next_stance(card),
         }
         if destination(card) == "強気" and stance(state) in WARM:
             memory.actions_left += 1
@@ -1000,6 +1017,50 @@ def wait_exam_page(shoot, ok, *, timeout=OPEN_WAIT_S, every=1.0, clock=time.mono
         sleep(every)
 
 
+def round_attempt(directory, exam, *, first_turn):
+    """Select the current attempt, using a finished checkpoint as retry evidence."""
+    from hiro.exec.exam import MEMORY_FILE, load_exam_memory
+
+    base = directory
+    pattern = re.compile(rf"{re.escape(base.name)}-attempt([1-9]\d*)")
+    attempts = [int(m[1]) for d in directory.parent.glob(f"{directory.name}-attempt*")
+                if d.is_dir() and (m := pattern.fullmatch(d.name))]
+    retry = max(attempts, default=0)
+    if retry:
+        directory = directory.with_name(f"{directory.name}-attempt{retry}")
+
+    checkpoints = []
+    for path in [directory, *directory.parent.glob(f"{directory.name}-r*")]:
+        if path != directory and not re.fullmatch(rf"{re.escape(directory.name)}-r\d+", path.name):
+            continue
+        checkpoint = path / MEMORY_FILE
+        if not checkpoint.exists():
+            continue
+        try:
+            data = json.loads(checkpoint.read_text(encoding="utf-8"))
+            if data["label"] != exam:
+                raise ValueError("考试轮次不符")
+            checkpoints.append((data["saved_at"], path, data["finished"]))
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise ResumeBlocked(f"无法核对考试记忆：{checkpoint}") from e
+    if not checkpoints:
+        return directory, retry or None, None
+
+    _, path, finished = max(checkpoints, key=lambda entry: entry[0])
+    if finished:
+        if not first_turn:
+            raise ResumeBlocked("上一次考试已结束，未确认画面是再挑戦首回合")
+        retry += 1
+        return base.with_name(f"{base.name}-attempt{retry}"), retry, None
+
+    restored = load_exam_memory(directory, exam)
+    if restored is None or restored[1] != path:
+        raise ResumeBlocked("未结束的考试记忆无法续跑，请核对原记录")
+    if first_turn and restored[0].turn > 1 and not restored[0].extra_turns:
+        raise ResumeBlocked("画面回到首回合，但考试记忆未标结束，请核对是否已再挑戦")
+    return directory, retry or None, restored
+
+
 def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retry_drinks=None):
     from kaa.config.const import HifScenario
     from kotonebot import device
@@ -1007,7 +1068,7 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
 
     from hiro.contracts import TraceWriter
     from hiro.device import connect
-    from hiro.exec.exam import load_exam_memory, run_exam
+    from hiro.exec.exam import run_exam
     from hiro.kaa_env import init_kaa
     from hiro.loop import pause_flag
     from hiro.loop.repeat_guard import watchdog
@@ -1034,38 +1095,13 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
         observed = read_hif_exam(img)
         exam = f"r{round_no}"
         directory = Path("traces") / trace_name
-        restored = load_exam_memory(directory, exam)
         # 轮次以状态为准（--round + 同一轮的考试记忆）；画面只用来发现矛盾：明确读成别的轮次才拦，读不出不拦
         # （使用者 2026-11-07：「轮次直接写在状态机里」。验证局 R2 切屏后读不出「本戦 R2」，续跑被拦）
         read_round = observed.get("finals_round") if observed.get("finals") else None
         if read_round is not None and read_round != round_no:
             raise ResumeBlocked(f"实机读到本战 R{read_round}，与要接管的 R{round_no} 不符")
         first_turn = observed.get("remaining_turns") == {1: 9, 2: 12}[round_no]
-        retry = None
-        finished_dir = None
-        if restored is None and first_turn:
-            # 上一次正常打完（敗退）时记忆标了 finished，load_exam_memory 不返回它 → 原来认不出再挑戦：不改名、两次步骤混在
-            # 同一 trace、饮料账本不恢复（1-g R2 再挑戦）。首回合时同目录有这一轮已结束的记忆，也按再挑戦处理
-            import json
-
-            f = directory / "exam_memory.json"
-            try:
-                data = json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None
-            except (OSError, ValueError):
-                data = None
-            if data and data.get("label") == exam and data.get("finished"):
-                finished_dir = directory
-        if first_turn and (finished_dir is not None
-                           or restored is not None and (restored[0].turn > 1 or restored[0].history)):
-            # 再挑戦：画面回到这一轮首回合，记忆却已经打过几回合（1-f R2 敗退后再挑戦续用了上一次的记忆，代理手动改名）。
-            # 把上一次的 trace 目录改名存成 <名>-tryN，这一次从全新的考试记忆开始
-            n = 1
-            while (directory.parent / f"{directory.name}-try{n}").exists():
-                n += 1
-            old_dir = finished_dir if finished_dir is not None else restored[1]
-            old_dir.rename(directory.parent / f"{directory.name}-try{n}")
-            print(f"再挑戦：上一次 R{round_no} 的考试记忆（{old_dir}）已存为 {directory.name}-try{n}，从首回合重新开始", file=sys.stderr)
-            restored, retry = None, n
+        directory, retry, restored = round_attempt(directory, exam, first_turn=first_turn)
         if read_round is None and restored is None and not first_turn:
             raise ResumeBlocked(f"实机轮次读不出、也没有 R{round_no} 的考试记忆，请核对后从首回合接管")
         if read_round is None and restored is None:
@@ -1093,7 +1129,7 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
             session.record(session.observe(scene="HIF_FINALS_RANKING", img=frame, fields=fields, save_frame=True))
             return True
 
-        trace = TraceWriter(name=trace_name, meta={"mode": "main", "idol": IDOL, "advisor": "veil", "round": round_no})
+        trace = TraceWriter(root=directory.parent, name=directory.name, meta={"mode": "main", "idol": IDOL, "advisor": "veil", "round": round_no})
         session = Session(trace)
         watch = pause_flag.Watcher(kvars.flow, session=session).start()
         guard = watchdog(session)

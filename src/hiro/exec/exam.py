@@ -1259,8 +1259,11 @@ def run_exam(
                     session.recover("tap_no_effect", f"{last_action} {why}，本回合禁用")
             if restored is not None:
                 if frame.remaining is not None and memory.last_remaining is not None and frame.remaining > memory.last_remaining:
-                    rec.log("exam_memory_discarded", exam=exam, screen_remaining=frame.remaining, memory_remaining=memory.last_remaining)
-                    memory = brain.new_memory(exam)  # 画面剩余回合比记忆多：不是同一场（再挑戦 / 新开）
+                    if strict and not memory.extra_turns:
+                        raise ResumeBlocked("画面剩余回合多于考试记忆，请核对后续跑")
+                    if not strict:
+                        rec.log("exam_memory_discarded", exam=exam, screen_remaining=frame.remaining, memory_remaining=memory.last_remaining)
+                        memory = brain.new_memory(exam)  # 非严格模式沿用原来的重新初始化逻辑
                 restored = None
             if stable_wait.waited >= STABLE_WAIT_S and session is not None:
                 session.note(f"画面 {stable_wait.waited:.0f}s 不稳定，用单帧出决策")

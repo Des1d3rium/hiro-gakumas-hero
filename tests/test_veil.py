@@ -652,6 +652,7 @@ def test_drive_fp_breaks_zero_fullpower_deadlock(monkeypatch):
 
     ent = replace(card(3, ENTERTAINER, "体力消費5強気に変更パラメータ+12"), hp_cost=5)
     state, mem = case(drive, rebound, idol, ent, status="強気")
+    state.statuses[0]["value"] = 1
     state.hp = 8
     mem.strategy_data["veil_fp"] = 0
     monkeypatch.setenv("HIRO_VEIL_HP_GUARD", "1")
@@ -671,6 +672,7 @@ def test_clear_first_no_warm_jump_with_single_action(monkeypatch):
     breath = card(1, "ひと呼吸+", "好調4ターン集中+5重複不可 レッスン中1回", once=True)
     teach = card(2, TEACH, "強気に変更パラメータ+6熱意追加+2（2ターン）次のターン、スキルカードを2枚引く")
     state, mem = case(breath, teach, status="強気", flower=1)
+    state.statuses[0]["value"] = 1
     state.genki = 33
     assert choose(state, mem) == "play:1"
 
@@ -878,8 +880,15 @@ def test_remap_hand_keeps_customization_after_master_text():
     from hiro.brain.veil import destination
 
     seen = card(0, "インフルエンサー", "メンタルスキルカードの元気値増加+5スキルカード使用数追加+1スキルカードを引く", once=True)
+    from types import SimpleNamespace
+
+    seen.upgrade = 0
+    master = SimpleNamespace(name="インフルエンサー+", _id=seen.card_id, upgrade_count=1,
+                             produce_descriptions=None, play_move_position_type="Lost", cost_type=None,
+                             cost_value=0, stamina=4, force_stamina=0, category="ProduceCardCategory_MentalSkill",
+                             effect_display_text="メンタルスキルカードの元気値増加+6スキルカード使用数追加+1スキルカードを引く")
     out = remap_hand([seen], {"インフルエンサー": ("インフルエンサー+",)}, [{"card": "インフルエンサー+", "item": "強気追加"}],
-                     text_of=lambda n: "メンタルスキルカードの元気値増加+6スキルカード使用数追加+1スキルカードを引く")
+                     cards={(seen.card_id, 1): master})
     assert out[0].name == "インフルエンサー+" and destination(out[0]) == "強気"
 
 
@@ -1024,3 +1033,116 @@ def test_extra_turn_soup_starts_new_turn_at_same_remaining():
     mem3.record_skip()
     assert not mem3.observe_turn(4)
     assert mem3.observe_turn(3)
+
+
+@pytest.mark.parametrize("name, level, hp, cost, expected_loss, expected", [
+    ("強気", 2, 14, 2, 5, "skip"),
+    ("強気", 1, 14, 2, 4, "play:0"),
+    ("強気", None, 14, 2, 5, "skip"),
+    ("温存", 2, 11, 4, 1, "play:0"),
+    ("温存", None, 11, 4, 2, "skip"),
+])
+def test_stance_level_reaches_hp_guard(guard, name, level, hp, cost, expected_loss, expected):
+    from collections import Counter
+
+    from hiro.brain.veil import hp_loss, stance
+    from hiro.produce.veil_exam import read_position
+
+    warm = costly(0, "温存牌+", "温存に変更", cost)
+    state, mem = case(warm, status=name)
+    state.hp = hp
+    state.statuses[0]["value"] = level
+    assert read_position(state, mem, Counter(), lambda: 2) is None
+    assert mem.strategy_data["veil_position"]["stance_level"] == level
+    assert hp_loss(state, warm, stance(state)) == expected_loss
+    assert choose(state, mem) == expected
+
+
+def test_stance_level_updates_after_verified_play(guard):
+    from collections import Counter
+
+    from hiro.brain.rules import Decision
+    from hiro.brain.veil import hp_loss, stance
+    from hiro.produce.veil_exam import VeilBrain, read_position
+
+    change = costly(0, "切换牌+", "強気2段階目に変更", 0)
+    warm = costly(1, "温存牌+", "温存に変更", 2)
+    state, mem = case(change, warm, status="温存")
+    state.statuses[0]["value"] = 1
+    mem.strategy_data["veil_deck"] = {change.name: 1, warm.name: 1}
+    assert read_position(state, mem, Counter({change.name: 1, warm.name: 1}), lambda: 2) is None
+    VeilBrain(None, None).commit(state, mem, Decision("play", 0))
+    state.hand, state.statuses, state.hp = [warm], [], 14
+    mem.actions_left = 1
+    assert read_position(state, mem, Counter({warm.name: 1}), lambda: 1) is None
+    assert (stance(state), state.statuses[0]["value"]) == ("強気", 2)
+    assert hp_loss(state, warm, stance(state)) == 5
+    assert choose(state, mem) == "skip"
+
+
+def test_remap_rebuilds_upgrade_and_action_count_without_guessing():
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    from hiro.brain.rules import Decision
+    from hiro.produce.veil_exam import VeilBrain, remap_hand
+
+    seen = replace(costly(1, "全身全霊", "スキルカード使用数追加+1", 7),
+                   upgrade=0, available=False, badge_score=123)
+    master = SimpleNamespace(name="全身全霊+", _id=seen.card_id, upgrade_count=1,
+                             produce_descriptions=None, play_move_position_type="Lost", cost_type="Focus",
+                             cost_value=2, stamina=4, force_stamina=3, category="ProduceCardCategory_ActiveSkill",
+                             effect_display_text="スキルカード使用数追加+2")
+    cards = {(seen.card_id, 1): master}
+    corrected, = remap_hand([seen], {"全身全霊": ("全身全霊+",)}, [], cards=cards)
+    assert (corrected.name, corrected.upgrade, corrected.cost, corrected.hp_cost) == ("全身全霊+", 1, 4, 3)
+    assert corrected.extra_cost == {"type": "Focus", "value": 2}
+    assert corrected.text == master.effect_display_text and corrected.tags.extra_actions == 2
+    assert (corrected.slot, corrected.available, corrected.badge_score) == (1, False, 123)
+    state, mem = case(replace(corrected, available=True))
+    mem.strategy_data["veil_deck"] = {corrected.name: 1}
+    VeilBrain(None, None).commit(state, mem, Decision("play", 1))
+    assert mem.actions_left == 2 and mem.used_once == [corrected.name]
+    assert remap_hand([seen], {"全身全霊": ("全身全霊", "全身全霊+")}, [], cards=cards) == [seen]
+    temporary = replace(corrected, name="全身全霊++", upgrade=2)
+    assert remap_hand([temporary], {"全身全霊": ("全身全霊+",)}, [], cards=cards) == [temporary]
+
+
+@pytest.mark.parametrize("turn, remaining, action", [(1, 9, "打"), (1, 9, "喝"), (4, 6, "打")])
+def test_round_attempt_resumes_without_resetting_resources(tmp_path, turn, remaining, action):
+    from hiro.exec.exam import save_exam_memory
+    from hiro.produce.veil_exam import round_attempt
+
+    directory = tmp_path / "exam"
+    directory.mkdir()
+    memory = ExamMemory("r1", turn=turn, last_remaining=remaining, history=[f"T{turn} {action} synthetic"],
+                        actions_left=2, used_once=["spent-card"],
+                        strategy_data={"veil_bar": ["remaining-drink"], "veil_deck": {"spent-card": 0}, "veil_fp": 4})
+    save_exam_memory(directory, memory)
+    selected, retry, restored = round_attempt(directory, "r1", first_turn=remaining == 9)
+    assert selected == directory and retry is None
+    assert restored[0].to_dict() == memory.to_dict()
+    assert list(tmp_path.iterdir()) == [directory]
+
+
+def test_round_attempt_starts_once_from_finished_checkpoint(tmp_path):
+    from hiro.exec.exam import save_exam_memory
+    from hiro.produce.veil_exam import round_attempt
+
+    directory = tmp_path / "exam"
+    directory.mkdir()
+    previous = directory.with_name("exam-r1")
+    previous.mkdir()
+    save_exam_memory(directory, ExamMemory("r2", turn=1))
+    save_exam_memory(previous, ExamMemory("r2", turn=12, actions_left=0), finished=True)
+    with pytest.raises(ResumeBlocked):
+        round_attempt(directory, "r2", first_turn=False)
+    attempt, retry, restored = round_attempt(directory, "r2", first_turn=True)
+    assert (attempt.name, retry, restored) == ("exam-attempt1", 1, None)
+    attempt.mkdir()
+    assert round_attempt(directory, "r2", first_turn=True) == (attempt, 1, None)
+    new = ExamMemory("r2", turn=1, last_remaining=12, history=["T1 喝 synthetic"],
+                     strategy_data={"veil_bar": []})
+    save_exam_memory(attempt, new)
+    assert round_attempt(directory, "r2", first_turn=True) == (attempt, 1, (new, attempt))
+    assert directory.is_dir() and previous.is_dir()

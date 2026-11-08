@@ -845,12 +845,15 @@ def device_action(action, *, watch_tick=None, auto_route=False):
             from hiro.loop.controller import live_start_tap
             from hiro.loop.landscape import LandscapeGuard
 
+            g = live["guard"] = live["guard"] or LandscapeGuard(shoot=device.screenshot)
+            if g.last_result in LIVE_FAIL and not g.failure_cleared(img):
+                raise HoldPage(live_fail_reason(g.last_op, g.last_result))
             if img is None:
                 return None
-            g = live["guard"] = live["guard"] or LandscapeGuard(shoot=device.screenshot)
-            if g.last_result in LIVE_FAIL and not g.exit_cleared():
+            switched = g.tick(img)
+            if g.last_result in LIVE_FAIL:
                 raise HoldPage(live_fail_reason(g.last_op, g.last_result))
-            if g.tick(img):
+            if switched:
                 return "live_fullscreen", None
             if live.get("ended") and not live.get("exited") and time.monotonic() - live["ended"] >= LIVE_EXIT_AFTER:
                 # 跳过 LIVE 后直接回竖屏：fn+shift+F（landscape.METHODS 退出时先试它），失败下一帧按 LIVE_FAIL 停下交给使用者
@@ -1224,11 +1227,12 @@ def change(state, args, *, persist=None):
         if state["preflight"]["idol"] != IDOL:
             raise ValueError("此考试入口仅适用于首检记录为 [VEIL] 秦谷美玲的批次")
         deck, ledger = args.deck, active.get("ledger")
-        if deck is None and ledger is not None:
+        if ledger is not None:
             sys.path.insert(0, str(ROOT / "tools"))
             import batch_ledger as L
 
-            deck = L.to_deck(ledger)
+            if deck is None:
+                deck = L.to_deck(ledger)
         if deck is None:
             base, change = state.get("veil_base_deck"), active.get("veil_deck_change")
             if base is None or change is None:
@@ -1248,6 +1252,7 @@ def change(state, args, *, persist=None):
             raise ValueError(str(e)) from e
         if ledger is not None and out.get("retry") and snaps.get(str(args.round)) is not None:
             L.drink_set(ledger, snaps[str(args.round)], why=f"R{args.round} 再挑戦：饮料栏恢复到开考前")
+            persist()
         if ledger is not None and out.get("drinks") is not None:
             L.after_exam(ledger, out["drinks"], why=f"R{args.round} 考完（喝掉的去掉、往左挤）")
             out["ledger_drinks"] = ledger["drinks"]

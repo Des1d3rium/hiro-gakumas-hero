@@ -102,3 +102,33 @@ def test_fn_shift_f_posts_shift_fn_f_to_game(monkeypatch):
     assert L._key_to_pid(42, False)
     flags = Quartz.kCGEventFlagMaskShift | Quartz.kCGEventFlagMaskSecondaryFn
     assert [(p, k) for p, k, _ in sent] == [(42, L.KEY_F)] * 2 and all(f & flags == flags for _, _, f in sent)
+
+
+@pytest.mark.parametrize("operation, failure, recovered", [
+    ("enter", "locked", LIVE), ("enter", "failed", LIVE), ("exit", "failed", PORTRAIT),
+])
+def test_guard_clears_only_after_window_recovers(monkeypatch, operation, failure, recovered):
+    g = L.LandscapeGuard()
+    calls = []
+    locked = failure == "locked"
+    fullscreen = operation == "exit"
+    monkeypatch.setattr(L, "_game_pid", lambda: 42)
+    monkeypatch.setattr(L, "_front_app", lambda: None)
+    monkeypatch.setattr(L, "screen_locked", lambda: locked)
+    monkeypatch.setattr(L, "ax_is_fullscreen", lambda pid: fullscreen)
+
+    def fail_switch(want, **kwargs):
+        calls.append(want)
+        return failure
+
+    monkeypatch.setattr(L, "switch_fullscreen", fail_switch)
+    assert not (g._enter() if operation == "enter" else g.exit_now())
+    for img in (None, BLACK, BLACK):
+        assert not g.failure_cleared(img, every=0)
+    if locked or fullscreen:
+        assert not g.failure_cleared(recovered, every=0)
+    locked, fullscreen = False, False
+    assert g.failure_cleared(recovered, every=0)
+    assert g.last_result == "manual" and g.fullscreen == (operation == "enter")
+    assert not g.tick(recovered)
+    assert calls == [operation == "enter"]

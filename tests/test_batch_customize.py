@@ -216,3 +216,38 @@ def test_shop_auto_makes_room_when_full(monkeypatch):
     r = S.auto(NS(screenshot=None, click=None), free_slots=lambda: 4 - len(held), on_buy=held.append, make_room=make_room)
     assert r["ok"] and held.count("初星ホエイプロテイン") == 2 and "初星湯" not in held
     assert [s["op"] for s in r["steps"]][:2] == ["drop_low", "buy"]
+
+
+@pytest.mark.parametrize("p, price, available, bought", [
+    (0, 100, True, 0), (None, 100, True, 0), (100, None, True, 0),
+    (100, 100, False, 0), (100, 100, True, 1), (150, 100, True, 1),
+])
+def test_shop_checks_funds_and_availability_before_dropping(monkeypatch, p, price, available, bought):
+    import batch_shop as S
+
+    held = ["low-a", "low-b", "keep-c", "keep-d"]
+    original = held.copy()
+    calls = []
+    shelf = [{"index": i, "name": "ブーストエキス", "price": price, "purchased": False, "available": available}
+             for i in (0, 1)]
+    monkeypatch.setattr(S, "_page", lambda d: ("interval", None))
+    monkeypatch.setattr(S, "_shelf", lambda *args: ({"interval": {}}, shelf))
+    # Simulate a lagging balance display after purchase.
+    monkeypatch.setitem(sys.modules, "hiro.produce.shop", NS(read_p=lambda *args: p))
+    monkeypatch.setitem(sys.modules, "hiro.produce.ops", NS(ocr_boxes=None))
+    monkeypatch.setattr(S.time, "sleep", lambda s: None)
+
+    def drop():
+        calls.append("drop")
+        return held.pop(0)
+
+    def buy(device, index):
+        calls.append(("buy", index))
+        shelf[index]["purchased"] = True
+        return {"ok": True, "drink": shelf[index]["name"]}
+
+    monkeypatch.setattr(S, "buy", buy)
+    out = S.auto(None, free_slots=lambda: 4 - len(held), on_buy=held.append, make_room=drop)
+    assert out["ok"]
+    assert calls == (["drop", ("buy", 0)] if bought else [])
+    assert held == (original[1:] + ["ブーストエキス"] if bought else original)

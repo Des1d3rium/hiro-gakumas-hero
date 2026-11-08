@@ -177,12 +177,11 @@ def hp_loss(state, card, current, mods=None):
         mult = 2.0
         # 強気 2 段階：每张另外直接扣 STRONG2_DIRECT。实测 1-e R2 T1：第一印象++（cost 4，強気 1）33→25 = 4×2；
         # モチベ+（cost 2，強気 2）25→18 = 2×2+3；ひと呼吸+（cost 7，強気 2）18→1 = 7×2+3（原来按 +1 估，低估 2）
-        per_card = STRONG2_DIRECT if ((names.get("強気") or {}).get("value") or 1) >= 2 else 0
+        per_card = STRONG2_DIRECT if stance_level(state, current) != 1 else 0
     elif current == "のんびり":
         mult = 0.0
     elif current in WARM:
-        level = (names.get("温存") or {}).get("value") or (2 if current == "温存2段階目" else 1)
-        mult = 0.25 if level >= 2 else 0.5
+        mult = 0.25 if stance_level(state, current) == 2 else 0.5
     if "消費体力増加" in names:
         mult *= 1.5
     if "消費体力減少" in names:
@@ -201,6 +200,15 @@ def stance(state):
     return next((name for name in STANCES if name in names), None)
 
 
+def stance_level(state, current):
+    if current is None:
+        return None
+    if current.endswith(("1段階目", "2段階目")):
+        return int(current[-4])
+    return next((s["value"] for s in state.statuses or []
+                 if norm(s.get("name") or "") == current and s.get("value") in (1, 2)), None)
+
+
 # 「強気2段階目に変更」（心・技・体）也是切強気：原来认不出，当成不改姿态（验证局 R2 剩 11 回合：没算它的温存解除 +1）
 _STANCE_CHANGE = re.compile(r"(強気|温存(?:[12]段階目)?|のんびり|全力)(?:[12]段階目)?に変更|指針を解除")
 _DELAYED = re.compile(r"次のターン|ターン開始|以降")
@@ -210,6 +218,16 @@ def destination(card):
     immediate = _DELAYED.split(norm(card.text), maxsplit=1)[0]
     match = _STANCE_CHANGE.search(immediate)
     return (match[1] or "指針解除") if match else None
+
+
+def stance_change_level(card):
+    immediate = _DELAYED.split(norm(card.text), maxsplit=1)[0]
+    match = _STANCE_CHANGE.search(immediate)
+    if match:
+        for level in (1, 2):
+            if f"{level}段階目" in match[0]:
+                return level
+    return None
 
 
 def next_stance(card):

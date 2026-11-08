@@ -186,11 +186,9 @@ AP_ROW = (200, 880, 720, 1010)  # 「AP回復」框 APドリンク 那一行（�
 
 
 def refill_fast(shoot: Callable, click: Callable[[int, int], None], ocr: Callable, header: Callable, *,
-                sleep: Callable[[float], None] = time.sleep, gap: float = FAST_GAP, log: Callable[[str], None] = print) -> dict:
-    """从「AP不足」弹窗开始，按固定位置隔 gap 秒点三下喝一瓶 APドリンク（+20，本战一局正好够）：
-    1「AP不足」右「回復する」(DIALOG_OK) → 2「AP回復」APドリンク 行「使う」(AP_USE) → 3「APドリンクを消費…」右下「回復する」(DIALOG_OK)，
-    之后直接回到 H.I.F 首页（使用者截图，2026-11-07）。
-    只在第 2 下之前局部 OCR 那一行：必须是 APドリンク、没有ジュエル（APドリンク 用完时这一行可能变成ジュエル回复），否则点「閉じる」返回失败。"""
+                sleep: Callable[[float], None] = time.sleep, gap: float = FAST_GAP, log: Callable[[str], None] = print,
+                clock: Callable[[], float] = time.monotonic) -> dict:
+    """从「AP不足」弹窗补一瓶，最终确认必须核对最上层弹窗和 APドリンク 消耗文字。"""
     out = {"ok": False, "drinks": 0, "error": None}
     click(*BTN.DIALOG_OK)
     sleep(gap)
@@ -203,15 +201,39 @@ def refill_fast(shoot: Callable, click: Callable[[int, int], None], ocr: Callabl
         log(f"AP 补充失败：{out['error']}")
         return out
     click(*BTN.AP_USE)
-    sleep(gap)
-    click(*BTN.DIALOG_OK)
-    deadline = time.monotonic() + 4 * gap + 2
-    while time.monotonic() < deadline:
-        sleep(gap / 2)
+    deadline = clock() + STEP_TIMEOUT
+    while True:
+        img = shoot()
+        band = header(img)
+        if band is not None:
+            texts = _texts(ocr(img))
+            _, bottom = band
+            modal = [(t, x, y) for t, x, y in texts if y >= bottom]
+            if any(JEWEL in t for t, _, _ in texts):
+                if cancel := _lowest(modal, "キャンセル", exact=True, min_y=1000):
+                    click(*cancel)
+                out["error"] = "确认画面含ジュエル"
+                return out
+            confirm = _lowest(modal, "回復する", exact=True, min_y=1000)
+            body = "".join(t for t, _, y in modal if confirm and y < confirm[1])
+            cancel = _lowest(modal, "キャンセル", exact=True, min_y=1000)
+            if ("APドリンクを消費" in body and confirm and cancel
+                    and cancel[0] < confirm[0] and abs(cancel[1] - confirm[1]) <= 30
+                    and use_count(modal) in (None, 1)):
+                click(*confirm)
+                break
+        if clock() >= deadline:
+            out["error"] = "未确认 APドリンク 消耗弹窗"
+            return out
+        sleep(POLL)
+
+    deadline = clock() + 4 * gap + 2
+    while clock() < deadline:
+        sleep(POLL)
         if header(shoot()) is None:
             out.update(ok=True, drinks=1)
             log("AP 补充：喝了 1 瓶 APドリンク")
             return out
-    out["error"] = "点完三下弹窗还在"
+    out["error"] = "确认后弹窗仍在"
     log(f"AP 补充失败：{out['error']}")
     return out
