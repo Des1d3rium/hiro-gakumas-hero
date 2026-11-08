@@ -575,3 +575,14 @@ def test_ap_shortfall_real_frame_win12():
     if not f.exists():
         pytest.skip("需要样例 tests/fixtures/ap_refill/ap-short-win12.png")
     assert ap.shortfall(ap._texts(ocr_boxes(cv2.imread(str(f))))) == 8
+
+
+def test_vote_price_sale_known_prices(monkeypatch):
+    """SALE 格连原价都没读到、实付价 49 读成 40：已知 SALE 价里只差一位的唯一一个是 49。"""
+    import numpy as np
+
+    from hiro.vision import digits, shop
+
+    monkeypatch.setattr(shop, "_cell_price", lambda img, x, band, scale=3: [40])
+    monkeypatch.setattr(digits, "read_dddd", lambda img, box: 40)
+    assert shop._vote_price(np.zeros((1280, 720, 3), np.uint8), 65, (612, 652), [40], sale=True) == 49

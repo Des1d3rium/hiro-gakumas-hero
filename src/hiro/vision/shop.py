@@ -247,6 +247,7 @@ def _cell_price(img: MatLike, x: int, band: tuple[int, int], scale: int = 3) -> 
 
 SALE_RATE = 0.7  # SALE 价 = 原价 × 0.7 取整（75→52、70→49、100→70、105→73）
 PRICE_MIN = 5  # 货架价格不会低于这个数：更小的是「50」漏读首位
+SALE_PRICES_SEEN = (35, 49, 52, 53, 70, 73)  # 实机见过的 SALE 实付价（原价 50 / 70 / 75 / 100 / 105 的七折）
 SALE_PAID_MIN = 20  # SALE 实付价不会低于这个数（见过的最低 49）：更小的是丢了位
 
 
@@ -290,6 +291,12 @@ def _vote_price(img: MatLike, x: int, band: tuple[int, int], region_nums: list[i
         if votes0 < SALE_PAID_MIN and big:
             # 实付价读成了个位数（Windows 第十一局 #103：105→73 读成 5）：按看到的最大原价七折取整
             return int(max(big) * SALE_RATE)
+        if votes0 not in SALE_PRICES_SEEN:
+            # 连原价都没读到（Windows 第十四局 #96：70→49 读成 40，几种读法都只有 40）：已知 SALE 价里只差一位数字的唯一一个
+            near = [v for v in SALE_PRICES_SEEN if len(str(v)) == len(str(votes0)) and sum(x != y for x, y in zip(str(v), str(votes0))) == 1]
+            same_head = [v for v in near if str(v)[0] == str(votes0)[0]]  # 读错多在末位：40 → 49（而不是 70）
+            if len(near) == 1 or len(same_head) == 1:
+                return near[0] if len(near) == 1 else same_head[0]
         for o in sorted(seen, reverse=True):
             fixed = int(o * SALE_RATE)
             a, b = str(votes0), str(fixed)
