@@ -646,10 +646,10 @@ def test_debug_defeat_retries_until_limit_then_ends(debug_retry):
 
 
 def test_debug_defeat_grey_retry_ends(debug_retry):
-    """「再挑戦」变灰（免费 / 券用完）：点「プロデュース終了」；之后的确认框没有危险字样才点右侧。"""
+    """再挑戦次数用完（角标「あと0回」）：点「プロデュース終了」；之后的确认框没有危险字样才点右侧。"""
     B.debug_retry_step(RESULT_R1, dialog=False)
     B.DEBUG_RETRY["pending"] = None
-    assert B.debug_retry_step(DEFEAT, dialog=True, img=_frame((128, 128, 128)))[0] == "debug_defeat_end"
+    assert B.debug_retry_step(DEFEAT + [_b("あと0回", 513, 1250)], dialog=True)[0] == "debug_defeat_end"
     debug_retry["t"] += 3
     confirm = [_b("プロデュース終了確認", 200, 420), _b("キャンセル", 200, 860), _b("終了する", 520, 860)]
     assert B.debug_retry_step(confirm, dialog=True) == ("debug_defeat_end_confirm", (520, 860))
@@ -728,3 +728,17 @@ def test_ticket_confirm_with_end_warning_is_not_defeat(debug_retry):
     # 真的敗退框（按钮「プロデュース終了 / 再挑戦」、没有「消費」）照旧走敗退分支
     B.DEBUG_RETRY["pending"] = None
     assert B.debug_retry_step(DEFEAT, dialog=True, img=_frame((40, 140, 250)))[0] == "debug_defeat_retry"
+
+
+def test_defeat_white_retry_button_is_not_grey(debug_retry):
+    """walkthrough/17-retry-confirm.png 实机 OCR：可点的「再挑戦」是白底灰字（饱和度 0），原来被判成变灰、直接点「プロデュース終了」。
+    现在看角标：「本日あと1回無料」「あと3回」→ 点再挑戦；「本日あと0回無料」只是免费用完，券还在 → 也点。"""
+    real = [_b("再挑戦確認", 132, 860), _b("再挑戦が可能ですが本当に終了しますか？", 288, 960),
+            _b("プロデュース終了を選択した場合は失敗となります", 338, 993), _b("プロデュース", 240, 1138), _b("終了", 239, 1175),
+            _b("本日あと1回無料", 519, 1083), _b("再挑戦", 531, 1157), _b("あと3回", 513, 1207)]
+    B.debug_retry_step(RESULT_R1, dialog=False)
+    B.DEBUG_RETRY["pending"] = None
+    gray = _frame((222, 222, 222))
+    assert B.debug_retry_step(real, dialog=True, img=gray) == ("debug_defeat_retry", (531, 1157))
+    assert not B.retry_exhausted("本日あと0回無料再挑戦あと2回")
+    assert B.retry_exhausted("再挑戦あと0回")

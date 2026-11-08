@@ -312,15 +312,11 @@ def parse_debug_retries(text: str) -> dict | None:
     return plan if any(plan.values()) else None
 
 
-def button_grey(img, xy, half=(70, 18), max_sat=40) -> bool:
-    """按钮变灰（不能点）：中心附近一块的平均饱和度很低。可点的「再挑戦」是彩色按钮。阈值未在实机核对。"""
-    import cv2
-
-    x, y = xy
-    patch = img[max(0, y - half[1]):y + half[1], max(0, x - half[0]):x + half[0]]
-    if patch.size == 0:
-        return False
-    return float(cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)[..., 1].mean()) < max_sat
+def retry_exhausted(flat: str) -> bool:
+    """敗退框里再挑戦次数用完：按钮下的角标是「あと0回」（「本日あと0回無料」只是免费次数用完，券还能用）。
+    原来按按钮颜色饱和度判灰，但可点的「再挑戦」本来就是白底灰字（walkthrough/17-retry-confirm.png 饱和度 0），
+    debug 一敗退就直接点「プロデュース終了」。"""
+    return re.search(r"あと0回(?!無料)", flat) is not None
 
 
 def final_result_page(labels) -> bool:
@@ -360,7 +356,7 @@ def debug_retry_step(boxes, dialog: bool, img=None):
         rnd = DEBUG_RETRY.get("round")
         used = DEBUG_RETRY["used"].get(rnd, 0) if rnd else DEBUG_RETRY_MAX
         retry_at = _learned_xy("defeat_retry", _button(labels, boxes, ("再挑戦",)))
-        if used < DEBUG_RETRY_MAX and retry_at is not None and not (img is not None and button_grey(img, retry_at)):
+        if used < DEBUG_RETRY_MAX and retry_at is not None and not retry_exhausted(flat):
             DEBUG_RETRY["pending"] = {"round": rnd, "at": now, "confirmed": now}  # 之后若有确认框只补点、不重复计数
             return "debug_defeat_retry", retry_at
         found = _button(labels, boxes, ("プロデュース終了",), right=False)
