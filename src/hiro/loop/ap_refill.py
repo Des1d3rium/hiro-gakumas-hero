@@ -227,7 +227,8 @@ def refill_fast(shoot: Callable, click: Callable[[int, int], None], ocr: Callabl
             confirm = _lowest(modal, "回復する", exact=True, min_y=1000)
             cancel = _lowest(modal, "キャンセル", exact=True, min_y=1000)
             body = "".join(t for t, _, y in modal if confirm and y < confirm[1])
-            if ("APドリンクを消費" in body and confirm and cancel
+            title = "".join(t for t, _, y in texts if top <= y < bottom)
+            if ("AP回復" in title and "APドリンクを消費" in body and confirm and cancel
                     and cancel[0] < confirm[0] and abs(cancel[1] - confirm[1]) <= 30
                     and use_count(modal) in (None, 1)):
                 ready = confirm

@@ -846,8 +846,11 @@ def device_action(action, *, watch_tick=None, auto_route=False):
             from hiro.loop.landscape import LandscapeGuard
 
             g = live["guard"] = live["guard"] or LandscapeGuard(shoot=device.screenshot)
-            if g.last_result in LIVE_FAIL and not g.failure_cleared(img):
-                raise HoldPage(live_fail_reason(g.last_op, g.last_result))
+            if g.last_result in LIVE_FAIL:
+                if not g.failure_cleared(img):
+                    raise HoldPage(live_fail_reason(g.last_op, g.last_result))
+                if g.last_op == "exit":
+                    live["exited"] = True
             if img is None:
                 return None
             switched = g.tick(img)
@@ -859,6 +862,8 @@ def device_action(action, *, watch_tick=None, auto_route=False):
                 # 跳过 LIVE 后直接回竖屏：fn+shift+F（landscape.METHODS 退出时先试它），失败下一帧按 LIVE_FAIL 停下交给使用者
                 live["exited"] = True
                 g.exit_now()
+                if g.last_result in LIVE_FAIL:
+                    raise HoldPage(live_fail_reason(g.last_op, g.last_result))
                 return "live_portrait", None
             if not g.in_live(img):
                 return None
@@ -1250,13 +1255,16 @@ def change(state, args, *, persist=None):
                             retry_drinks=snaps.get(str(args.round)))  # fmt: skip
         except ResumeBlocked as e:
             raise ValueError(str(e)) from e
-        if ledger is not None and out.get("retry") and snaps.get(str(args.round)) is not None:
-            L.drink_set(ledger, snaps[str(args.round)], why=f"R{args.round} 再挑戦：饮料栏恢复到开考前")
-            persist()
-        if ledger is not None and out.get("drinks") is not None:
-            L.after_exam(ledger, out["drinks"], why=f"R{args.round} 考完（喝掉的去掉、往左挤）")
-            out["ledger_drinks"] = ledger["drinks"]
-            persist()
+        if ledger is not None:
+            snapshot = snaps.get(str(args.round))
+            restored_drinks = bool(out.get("retry") and snapshot is not None)
+            if restored_drinks:
+                L.drink_set(ledger, snapshot, why=f"R{args.round} 再挑戦：饮料栏恢复到开考前")
+            if out.get("drinks") is not None:
+                L.after_exam(ledger, out["drinks"], why=f"R{args.round} 考完（喝掉的去掉、往左挤）")
+                out["ledger_drinks"] = ledger["drinks"]
+            if restored_drinks or out.get("drinks") is not None:
+                persist()
         if ledger is not None and out.get("abilities_source") == "screen" and out.get("abilities"):
             # 开局状态栏读到的回忆能力：账本和回忆栏都没记过时记下（记过且不同时不覆盖，交代理核对）
             read = L.static_abilities(out["abilities"])

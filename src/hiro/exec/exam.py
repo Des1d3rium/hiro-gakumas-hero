@@ -1188,6 +1188,8 @@ def run_exam(
     hiro.plugins 注册 / 默认的实现）。session 给出时每个决策点写一条 trace Step（观测 → 状态 → 决策 → 执行结果，带分阶段耗时）。
     strict：不在过时帧上点（连续 STRICT_STALE_MAX 次过时就停）、动作连续无效时停下而不是跳过回合（都抛 ResumeBlocked）、
     没确认到结算结果时考试记忆不标完成（便于续跑）。默认关，行为与之前相同。"""
+    from hiro.loop.errors import ResumeBlocked
+
     source = source or _plugin("exam_state_source")
     advisor = advisor or _plugin("exam_advisor")
     if source is None or advisor is None:
@@ -1324,8 +1326,6 @@ def run_exam(
             if stale is not None:
                 stale_streak += 1
                 if strict and stale_streak >= STRICT_STALE_MAX:
-                    from hiro.loop.errors import ResumeBlocked
-
                     rec.log("exam_stale_blocked", exam=exam, action=d.action, reason=stale, streak=stale_streak)
                     raise ResumeBlocked(f"决策帧连续 {stale_streak} 次过时（{stale}），保留实机画面待核对")
                 rec.log("exam_stale_frame", exam=exam, action=d.action, reason=stale, remaining=frame.remaining)
@@ -1371,8 +1371,6 @@ def run_exam(
                 if session is not None:
                     session.recover("tap_no_effect", f"{d.action} {missed}（第 {failures} 次）")
                 if failures >= 3 and strict:
-                    from hiro.loop.errors import ResumeBlocked
-
                     raise ResumeBlocked(f"出牌连续 {failures} 次没打出去（{missed}），保留实机画面待核对")
             elif missed is not None:
                 logger.warning("[%s] %s：%s，回到主循环重读", exam, d.action, missed)
@@ -1398,8 +1396,6 @@ def run_exam(
                 if session is not None:
                     session.recover("tap_no_effect", f"{d.action} 执行后画面 {CHANGE_TIMEOUT:.0f}s 未变（第 {failures} 次）")
                 if failures >= 3 and strict:
-                    from hiro.loop.errors import ResumeBlocked
-
                     raise ResumeBlocked("考试动作连续无效，保留实机画面待核对")
                 if failures >= 3:
                     logger.warning("连续 %d 次动作无效，跳过回合", failures)
@@ -1436,5 +1432,5 @@ def run_exam(
         source.end(result_info or None)
         advisor.on_round_end(result_info or None)
         if session is not None:
-            save_exam_memory(session.trace.dir, memory, finished=bool(result_info) if strict else True)
+            save_exam_memory(session.trace.dir, memory, finished=ended_seen if strict else True)
     return memory

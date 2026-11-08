@@ -17,7 +17,7 @@ from hiro.defaults.exam_state import ScreenExamStateSource
 from hiro.loop.errors import ResumeBlocked
 from hiro.brain.veil import (
     CORE, DRIVE, IDOL, REBOUND, SODA, STANCES, TEACH, WARM, VeilAdvisor,
-    NEUTRAL, STAR, after_play, destination, flower_count, keeps_nonbiri, full_power_count, keep_warm, next_stance, norm,
+    NEUTRAL, STAR, after_play, destination, flower_count, keeps_nonbiri, full_power_count, keep_warm, next_stance_change, norm,
     stance, stance_level, stance_change_level, start_turn,
 )
 
@@ -355,6 +355,7 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
     level = position.get("stance_level")
     flower = position.get("flower")
     delayed = position.get("next_stance")
+    delayed_level = position.get("next_stance_level")
 
     if pending:
         if pending["turn"] == memory.turn:
@@ -362,7 +363,9 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
                 return "veil_play_unverified"
             current, flower = pending["stance"], pending["flower"]
             level = pending.get("stance_level")
-            delayed = pending["next_stance"] or delayed
+            if pending["next_stance"]:
+                delayed = pending["next_stance"]
+                delayed_level = pending.get("next_stance_level")
         else:
             # The next hand may redraw the card. Verify the digit if this
             # unverified play could have changed it.
@@ -387,12 +390,17 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
         if pending and pending["next_stance"]:
             current, level = observed, observed_level  # 上一手没核对上、它又预约了下回合姿态：账本不确定，只能看画面
         else:
-            predicted = (current if keeps_nonbiri(current, delayed) else delayed) or current
+            scheduled = delayed if not keeps_nonbiri(current, delayed) else None
+            predicted = scheduled or current
+            predicted_level = delayed_level if scheduled else level
             # 一番星：回合开始不在温存 / のんびり 就切のんびり（1-h R1 第 2 回合：账本记強気，画面已是のんびり）
             predicted, star = start_turn(predicted, data.get("veil_star"))
             if star != data.get("veil_star"):
                 data["veil_star"] = star
-            level = observed_level if observed else (level if predicted == current and not delayed else None)
+            if observed:
+                level = observed_level
+            else:
+                level = predicted_level if predicted == (scheduled or current) else None
             current = observed or predicted
     elif calibrate:
         # On a resumed cycle a verified hand plus the expected flower digit
@@ -408,10 +416,10 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
         if current is None and position:
             return "veil_stance_unreadable"
         if new_turn:
-            delayed = None
+            delayed = delayed_level = None
 
     data["veil_position"] = {"turn": memory.turn, "stance": current, "stance_level": level,
-                             "flower": flower, "next_stance": delayed}
+                             "flower": flower, "next_stance": delayed, "next_stance_level": delayed_level}
     data.pop("veil_pending_play", None)
     state.pitem_charges = flower
     state.statuses = [s for s in state.statuses or [] if norm(s.get("name") or "") not in STANCES]
@@ -533,17 +541,6 @@ def _fp_record(obj) -> dict:
 
 def _fp_relevant(rec) -> bool:
     return rec is None or bool(rec["gain"] or rec["cost"] or rec["boost"] or rec["per_turn"])
-
-
-def master_text(name):
-    """主数据牌面文字（按带「+」的卡名）；查不到 None。"""
-    try:
-        from hiro.brain.cards import description_text, select
-
-        row = select("SELECT produceDescriptions FROM ProduceCard WHERE name = ?;", name)
-    except Exception:  # noqa: BLE001
-        return None
-    return description_text(row[0]) if row else None
 
 
 def _master_fp(kind, name):
@@ -1079,9 +1076,11 @@ class VeilBrain(BattleBrain):
             level = stance_level(state, before)
         if name.startswith(STAR):
             data["veil_star"] = 3
+        delayed, delayed_level = next_stance_change(card)
         data["veil_pending_play"] = {
             "turn": memory.turn, "card": name, "count": sum(norm(c.name) == name for c in state.hand),
-            "stance": current, "stance_level": level, "flower": flower, "next_stance": next_stance(card),
+            "stance": current, "stance_level": level, "flower": flower,
+            "next_stance": delayed, "next_stance_level": delayed_level,
         }
         if destination(card) == "強気" and stance(state) in WARM:
             memory.actions_left += 1
@@ -1217,15 +1216,13 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
         if retry and restored is None:
             # 再挑戦：上一次的 trace 原样留着，这一次写进 <名>-attemptN（只按「上一次考试记忆已标结束」判，不按有没有出牌历史）
             print(f"再挑戦：R{round_no} 第 {retry} 次重试，记录写到 {directory}", file=sys.stderr)
-        if read_round is None and restored is None and not first_turn:
-            raise ResumeBlocked(f"实机轮次读不出、也没有 R{round_no} 的考试记忆，请核对后从首回合接管")
+        if restored is None and not first_turn:
+            raise ResumeBlocked("缺少同一轮的考试记忆，请从首回合接管")
         if read_round is None and restored is None:
             # 新开一轮（剩余回合正好是这一轮的首回合）：按 --round 接管（验证局 1-f R1 开考读不出轮次被拦，原样重跑才过）
             print(f"实机轮次读不出，剩余回合 {observed.get('remaining_turns')} 是 R{round_no} 首回合，按 --round 接管", file=sys.stderr)
         elif read_round is None:
             print(f"实机轮次读不出，按考试记忆接管 R{round_no}（{directory}）", file=sys.stderr)
-        if restored is None and observed.get("remaining_turns") != {1: 9, 2: 12}[round_no]:
-            raise ResumeBlocked("缺少同一轮的考试记忆，请从首回合接管")
         result = None
 
         def ended():

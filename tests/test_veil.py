@@ -1241,3 +1241,26 @@ def test_custom_master_real_repeatable_levels(monkeypatch):
     assert resolve_customs(records)["巻き返し"] == ["すべてのスキルカードのパラメータ値増加+2"]
     records = [{"card": "トレーニングの成果+", "item": i} for i in ("成長追加", "成長+")]
     assert resolve_customs(records)["トレーニングの成果"] == ["手札のパラメータ値増加+8"]
+
+
+def test_scheduled_stance_level_survives_turn_boundary(guard):
+    from collections import Counter
+
+    from hiro.brain.rules import Decision
+    from hiro.brain.veil import stance
+    from hiro.produce.veil_exam import VeilBrain, read_position
+
+    schedule = costly(0, "予約牌+", "次のターン開始時、強気2段階目に変更", 0)
+    warm = costly(0, "温存牌+", "温存に変更", 2)
+    state, mem = case(schedule, status="温存")
+    mem.strategy_data["veil_deck"] = {schedule.name: 1, warm.name: 1}
+    assert read_position(state, mem, Counter({schedule.name: 1}), lambda: 2) is None
+    VeilBrain(None, None).commit(state, mem, Decision("play:0", "synthetic", "rule"))
+    state.statuses = []
+    assert read_position(state, mem, Counter(), lambda: 2) is None
+    mem.turn += 1
+    mem.actions_left = 1
+    state.statuses, state.hand, state.hp = [], [warm], 14
+    assert read_position(state, mem, Counter({warm.name: 1}), lambda: 2) is None
+    assert (stance(state), state.statuses[0]["value"]) == ("強気", 2)
+    assert choose(state, mem) == "skip"

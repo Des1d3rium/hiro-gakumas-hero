@@ -177,6 +177,7 @@ def hp_loss(state, card, current, mods=None):
         mult = 2.0
         # 強気 2 段階：每张另外直接扣 STRONG2_DIRECT。实测 1-e R2 T1：第一印象++（cost 4，強気 1）33→25 = 4×2；
         # モチベ+（cost 2，強気 2）25→18 = 2×2+3；ひと呼吸+（cost 7，強気 2）18→1 = 7×2+3（原来按 +1 估，低估 2）
+        # 段階不明时按二阶段估计，避免低估扣血。
         per_card = STRONG2_DIRECT if stance_level(state, current) != 1 else 0
     elif current == "のんびり":
         mult = 0.0
@@ -203,8 +204,8 @@ def stance(state):
 def stance_level(state, current):
     if current is None:
         return None
-    if current.endswith(("1段階目", "2段階目")):
-        return int(current[-4])
+    if current in ("温存1段階目", "温存2段階目"):
+        return 2 if current == "温存2段階目" else 1
     return next((s["value"] for s in state.statuses or []
                  if norm(s.get("name") or "") == current and s.get("value") in (1, 2)), None)
 
@@ -230,10 +231,19 @@ def stance_change_level(card):
     return None
 
 
-def next_stance(card):
-    match = re.search(r"(?:次のターン(?:開始時)?|ターン開始時)[、,に：:]*(強気|温存(?:[12]段階目)?|のんびり|全力)に変更",
+def next_stance_change(card):
+    match = re.search(r"(?:次のターン(?:開始時)?|ターン開始時)[、,に：:]*(強気|温存|のんびり|全力)(?:([12])段階目)?に変更",
                       norm(card.text))
-    return match[1] if match else None
+    if match is None:
+        return None, None
+    name, stage = match.groups()
+    if name == "温存" and stage:
+        name = f"温存{stage}段階目"
+    return name, int(stage) if stage else None
+
+
+def next_stance(card):
+    return next_stance_change(card)[0]
 
 
 NEUTRAL = "指針なし"  # 考试第 1 回合还没切过姿态（画面没有姿态图标）：切強気照样算夜空，但没有温存解除

@@ -163,3 +163,28 @@ def test_non_strict_taps_after_stale_max(monkeypatch, env):
     done = iter([False] * (ex.STALE_MAX + 1) + [True])
     ex.run_exam(Brain(), "r1", Rec(), lambda: next(done, True), source=src, advisor=Advisor())
     assert ("executed", "PlayCard", True) in src.calls
+
+
+def test_strict_resume_keeps_memory_on_unexplained_remaining_increase(monkeypatch, env, tmp_path):
+    from hiro.brain.state import ExamMemory
+    from hiro.loop.errors import ResumeBlocked
+
+    memory = ExamMemory("r1", turn=2, last_remaining=4, actions_left=0, used_once=["synthetic"])
+    ex.save_exam_memory(tmp_path, memory)
+    session = NS(trace=NS(dir=tmp_path), state=NS(exam_session=NS()), note=lambda msg: None)
+    source = Source([])
+    monkeypatch.setattr(ex, "_execute", lambda *args: pytest.fail("ambiguous resume must not tap"))
+    with pytest.raises(ResumeBlocked, match="画面剩余回合多于考试记忆"):
+        ex.run_exam(Brain(), "r1", Rec(), lambda: False, source=source, advisor=Advisor(), session=session, strict=True)
+    assert "read" not in source.calls
+    assert ex.load_exam_memory(tmp_path, "r1")[0].to_dict() == memory.to_dict()
+
+
+def test_strict_loop_exit_without_result_is_not_a_finished_attempt(monkeypatch, env, tmp_path):
+    from hiro.brain.battle import BattleBrain
+
+    session = NS(trace=NS(dir=tmp_path), state=NS(exam_session=NS()), note=lambda msg: None)
+    monkeypatch.setattr(ex, "Loop", lambda **kwargs: iter(()))
+    ex.run_exam(BattleBrain(None, None), "r1", Rec(), lambda: False,
+                source=Source([]), advisor=Advisor(), session=session, strict=True)
+    assert ex.load_exam_memory(tmp_path, "r1") is not None
