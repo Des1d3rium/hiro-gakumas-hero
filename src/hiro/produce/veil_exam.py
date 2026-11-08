@@ -1018,7 +1018,11 @@ def wait_exam_page(shoot, ok, *, timeout=OPEN_WAIT_S, every=1.0, clock=time.mono
 
 
 def round_attempt(directory, exam, *, first_turn):
-    """Select the current attempt, using a finished checkpoint as retry evidence."""
+    """选这一轮当前要写的记录目录，返回 (目录, 第几次再挑戦或 None, 续跑用的考试记忆或 None)。
+    再挑戦的唯一证据是最近一份考试记忆标了 finished（strict 模式只在认到结算页时才标）且画面回到首回合：
+    这时开新目录 <名>-attemptN，旧记录原样保留。首回合已出牌 / 喝饮料后中断（剩余回合仍是 9 / 12）是正常续跑，
+    沿用未结束的记忆，不改名、不恢复饮料。证据矛盾（记忆已结束但画面不是首回合、画面回到首回合但记忆停在后面回合
+    且没有追加回合）时抛 ResumeBlocked 交给使用者核对，不重置。"""
     from hiro.exec.exam import MEMORY_FILE, load_exam_memory
 
     base = directory
@@ -1102,6 +1106,9 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
             raise ResumeBlocked(f"实机读到本战 R{read_round}，与要接管的 R{round_no} 不符")
         first_turn = observed.get("remaining_turns") == {1: 9, 2: 12}[round_no]
         directory, retry, restored = round_attempt(directory, exam, first_turn=first_turn)
+        if retry and restored is None:
+            # 再挑戦：上一次的 trace 原样留着，这一次写进 <名>-attemptN（只按「上一次考试记忆已标结束」判，不按有没有出牌历史）
+            print(f"再挑戦：R{round_no} 第 {retry} 次重试，记录写到 {directory}", file=sys.stderr)
         if read_round is None and restored is None and not first_turn:
             raise ResumeBlocked(f"实机轮次读不出、也没有 R{round_no} 的考试记忆，请核对后从首回合接管")
         if read_round is None and restored is None:
