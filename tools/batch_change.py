@@ -102,6 +102,10 @@ def scan(device, batch: str, run: int) -> dict:
     if stage != 2:
         return {"stage": None, "ok": False, "why": "不在换卡阶段 1 / 2 画面"}
     swipe = lambda x1, y1, x2, y2: device.swipe(x1, y1, x2, y2, duration=t["CARD_OP_SWIPE_DURATION"])  # noqa: E731
+    # 先滑到顶部：scan_dialog_deck 从当前位置往下拼，开始时不在顶部，行号整体错位、上面几行漏掉
+    #（2026-11-07 验证局 1-i：第一次扫描从第 2 行开始，r1c0 实际是第 3 行的卡，按它点会点到别的卡）
+    if not to_top(device, t, swipe):
+        return {"stage": 2, "ok": False, "why": "换卡阶段 2 列表滑不回顶部，没扫描"}
     res = t["scan_dialog_deck"](t["CHANGE2_CARD_AREA"], shoot=device.screenshot, swipe=swipe)
     cards = [{k: c.get(k) for k in ("deck_index", "row", "col", "card_id", "name", "upgrade", "customized", "screen")}
              | {"once": t["is_once"](c.get("card_id"))} for c in res["cards"]]  # fmt: skip
@@ -111,6 +115,23 @@ def scan(device, batch: str, run: int) -> dict:
     path = SCAN_DIR / f"change-{batch}-{run}-{time.strftime('%Y%m%d-%H%M%S')}.json"
     path.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     return {**out, "file": str(path), "table": summary(out)}
+
+
+def to_top(device, t, swipe, tries: int = 6) -> bool:
+    """阶段 2 列表滑到顶部（滚动条滑块贴顶，或画面不再变化）。"""
+    area = t["CHANGE2_CARD_AREA"]
+    before = None
+    for _ in range(tries):
+        img = device.screenshot()
+        scroll = t["dialog_scroll"](img, area)
+        if not scroll["scrollable"] or scroll["at_top"]:
+            return True
+        if before is not None and scroll["thumb"] == before:
+            return False
+        before = scroll["thumb"]
+        t["_dialog_swipe"](area, False, swipe)
+        time.sleep(0.8)
+    return False
 
 
 def latest_scan(batch: str, run: int) -> Path | None:
@@ -153,7 +174,7 @@ def pick(device, batch: str, run: int, *, col: int, row: int | None = None, comm
     swipe = lambda x1, y1, x2, y2: device.swipe(x1, y1, x2, y2, duration=t["CARD_OP_SWIPE_DURATION"])  # noqa: E731
     cell = None
     for _ in range(12):
-        visible = t["read_card_grid"](img, area, "dialog")
+        visible = t["read_card_grid"](img, area, "dialog", icons=True)  # 与 change-scan 同一套认卡（HIRO_CARD_ICON），否则补认的格对不上
         offset = screen_offset(visible, rows)
         if offset is None:
             return {"ok": False, "why": "当前屏对不上扫描表（牌组变了？重新 change-scan）", "scan": str(path)}
@@ -168,7 +189,7 @@ def pick(device, batch: str, run: int, *, col: int, row: int | None = None, comm
         return {"ok": False, "why": f"滑动后没找到 r{row} c{col} 的卡格"}
     device.click(*cell["center"])
     time.sleep(SETTLE)
-    sel = t["read_card_dialog"](device.screenshot(), area)
+    sel = t["read_card_dialog"](device.screenshot(), area, icons=True)
     chosen = sel.get("selected_card") or {}
     picked = sel["cards"][sel["selected"]] if sel.get("selected") is not None else None
     same_cell = picked is not None and picked["row"] == cell["row"] and picked["col"] == col
@@ -177,6 +198,11 @@ def pick(device, batch: str, run: int, *, col: int, row: int | None = None, comm
             "selected_detail": chosen.get("name")}  # fmt: skip
     if not (same_cell and same_card):
         return {"ok": False, "stage": 2, "why": "选中框和目标对不上，没点「チェンジ」", "target": info}
+    if commit and (not target.get("card_id") or target.get("customized") or not chosen.get("card_id")):
+        # 认不出的卡 / 客制化过的卡不换（AGENTS：认不出就キャンセル，不猜）；扫描表认不出时选中框读到什么都不算核对
+        #（2026-11-07 验证局 1-i：扫描表 r1c0 是「?」，原来 same_card 直接放行，差点把客制化过的巻き返し+换掉）
+        why = "目标卡认不出" if not target.get("card_id") else ("目标卡客制化过" if target.get("customized") else "选中后详情栏没认出卡名")
+        return {"ok": False, "stage": 2, "why": f"{why}，没点「チェンジ」", "target": info}
     if not commit:
         return {"ok": True, "stage": 2, "selected": info, "next": "核对后加 --commit，或手动点「チェンジ」→「決定」"}
     device.click(*(t["find_text"](t["ocr_boxes"](device.screenshot()), "チェンジ", region=(400, 1100, 720, 1220), exact=True) or CHANGE_TAP))

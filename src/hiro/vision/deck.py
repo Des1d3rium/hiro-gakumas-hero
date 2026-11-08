@@ -169,22 +169,51 @@ def _customized(cell: MatLike) -> bool:
     return green >= CUSTOM_MIN_PX_125 * area
 
 
-def read_card_cell(crop: MatLike) -> dict:
+def _with_icons(card, img: MatLike, rect: tuple[int, int, int, int], icons: bool) -> tuple[str | None, str | None, dict | None]:
+    """KAA 认卡结果（SkillCard 或 None）→ (card_id, name, icon 详情)。icons 且开关开时按 hiro.vision.card_cells.resolve 补 / 核对。"""
+    kaa_id, kaa_name = (card._id, card.name) if card is not None else (None, None)
+    if not icons:
+        return kaa_id, kaa_name, None
+    from hiro.vision import card_cells
+
+    if not card_cells.enabled():
+        return kaa_id, kaa_name, None
+    card_id, m = card_cells.resolve(kaa_id, img, rect)
+    icon = {"source": "kaa" if card_id is not None and card_id == kaa_id else ("icon" if card_id else None),
+            "score": m["score"], "margin": m["margin"], "asset": m["asset"]}  # fmt: skip
+    if "conflict" in m:
+        icon["conflict"] = {"kaa": m["conflict"], "icon": m["ids"]}
+    if card_id is None or card_id == kaa_id:
+        return card_id, kaa_name if card_id else None, icon
+    from hiro.vision.cards import card_version
+
+    hit = card_version(card_id, 0)
+    return card_id, hit.name if hit is not None else None, icon
+
+
+def read_card_cell(crop: MatLike, img: MatLike | None = None, rect: tuple[int, int, int, int] | None = None,
+                   icons: bool = False) -> dict:
+    """一格卡格 → {card_id, name, upgrade, customized, dimmed[, icon]}。icons=True（且 HIRO_CARD_ICON=1）时 KAA 认不出的
+    格子用图片认卡补（hiro.vision.card_cells），需要整帧 img 和格子 rect（认不出时在 ±2 像素内再搜）。"""
     from kaa.game_ui.skill_card_select import match_card_region
 
     v_mean = float(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)[:, :, 2].mean())
     dimmed = v_mean < DIM_V_MAX
     look = cv2.convertScaleAbs(crop, alpha=min(DIM_GAIN_MAX, DIM_TARGET_V / max(v_mean, 1.0))) if dimmed else crop
     card = match_card_region(crop) or (match_card_region(look) if dimmed else None)
-    return {"card_id": card._id if card else None, "name": card.name if card else None,
-            "upgrade": _plus(look) if card else None, "customized": _customized(look) if card else None,
-            "dimmed": dimmed}
+    if img is None or rect is None:
+        img, rect = crop, (0, 0, crop.shape[1], crop.shape[0])
+    card_id, name, icon = _with_icons(card, img, rect, icons)
+    return {"card_id": card_id, "name": name,
+            "upgrade": _plus(look) if card_id else None, "customized": _customized(look) if card_id else None,
+            "dimmed": dimmed, **({"icon": icon} if icon is not None else {})}
 
 
-def read_card_grid(img: MatLike, region: tuple[int, int, int, int], geometry: str | None = None) -> list[dict]:
+def read_card_grid(img: MatLike, region: tuple[int, int, int, int], geometry: str | None = None, icons: bool = False) -> list[dict]:
     """region 内整格可见的卡：[{index, row, col, card_id, name, upgrade, customized, rect, center}]，从左到右、从上到下。
 
     index 是本屏内的顺序；row 从 0 起，是本屏可见的第几行（不是牌组里的绝对行号）。
+    icons=True 且开了 HIRO_CARD_ICON：KAA 认不出的格子用图片认卡补（hiro.vision.card_cells），格子另带 icon 字段（分数 / 领先 / 冲突）。
     """
     marks = _marks(img, region)
     if not marks:
@@ -205,7 +234,8 @@ def read_card_grid(img: MatLike, region: tuple[int, int, int, int], geometry: st
             row_ys.append(y)
         crop = img[y : y + cell, x : x + cell]
         out.append({
-            "index": len(out), "row": len(row_ys) - 1, "col": int(col), **read_card_cell(crop),
+            "index": len(out), "row": len(row_ys) - 1, "col": int(col),
+            **read_card_cell(crop, img, (int(x), int(y), int(cell), int(cell)), icons),
             "rect": (int(x), int(y), int(cell), int(cell)), "center": (int(x + cell // 2), int(y + cell // 2)),
         })  # fmt: skip
     return out
@@ -496,7 +526,7 @@ def merge_deck_list(screens: list) -> dict:
     return out
 
 
-def read_card_dialog(img: MatLike, region: tuple[int, int, int, int] = REMOVAL_GRID) -> dict:
+def read_card_dialog(img: MatLike, region: tuple[int, int, int, int] = REMOVAL_GRID, icons: bool = False) -> dict:
     """相談削除 / 强化、换卡第 2 步等「从牌组里选一张」的弹窗。
 
     返回 {cards, selected, selected_card, detail, agree}：
@@ -507,7 +537,7 @@ def read_card_dialog(img: MatLike, region: tuple[int, int, int, int] = REMOVAL_G
     """
     from hiro.vision.ocr import ocr_boxes
 
-    cards = read_card_grid(img, region)
+    cards = read_card_grid(img, region, icons=icons)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     px = [_cursor_px(hsv, c["rect"]) for c in cards]
     need = CURSOR_MIN_PX_118 * ((cards[0]["rect"][2] / 118) ** 2 if cards else 1)
@@ -699,10 +729,11 @@ def read_change_candidates(img: MatLike) -> dict:
         x, y = mx + CHANGE1_DX, my + CHANGE1_DY
         crop = img[max(0, y) : y + CHANGE1_CELL, max(0, x) : x + CHANGE1_CELL]
         card = match_card_region(crop)
+        card_id, name, icon = _with_icons(card, img, (max(0, x), max(0, y), CHANGE1_CELL, CHANGE1_CELL), True)
         cx = x + CHANGE1_CELL // 2
         rec = any("おすすめ" in t and abs((b[0] + b[2]) // 2 - cx) <= 60 for t, b in boxes)
-        cands.append({"index": i, "slot": i, "card_id": card._id if card else None, "name": card.name if card else None,
-                      "upgrade": _plus(crop) if card else None, "recommended": rec, "center": [int(cx), int(y + CHANGE1_CELL // 2)]})  # fmt: skip
+        cands.append({"index": i, "slot": i, "card_id": card_id, "name": name, "upgrade": _plus(crop) if card_id else None,
+                      "recommended": rec, "center": [int(cx), int(y + CHANGE1_CELL // 2)], **({"icon": icon} if icon is not None else {})})  # fmt: skip
 
     def left_count(xr) -> int | None:
         m = re.search(r"あと(\d+)回", "".join(t for t, b in boxes if xr[0] <= (b[0] + b[2]) // 2 <= xr[1]))

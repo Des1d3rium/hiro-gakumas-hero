@@ -43,7 +43,7 @@ def stage2(monkeypatch):
     monkeypatch.setattr(kp, "protected_card_ids", lambda: set())
     monkeypatch.setattr(kp, "_change_offset_target", lambda *a: (False, None))
     monkeypatch.setattr(kp, "confirm_change_dialog", lambda img, run=None: False)
-    monkeypatch.setattr(deck, "read_card_grid", lambda img, region, geometry=None: [dict(CARD)])
+    monkeypatch.setattr(deck, "read_card_grid", lambda img, region, geometry=None, icons=False: [dict(CARD)])
     monkeypatch.setattr(deck, "dialog_scroll", lambda img, region: {"scrollable": False, "thumb": None, "at_top": True})
     confirm = []
     monkeypatch.setattr(R.InProduce.DialogCardChange2.ButtonConfirm, "try_click", classmethod(lambda cls, *a, **k: confirm.append(1) or False))
