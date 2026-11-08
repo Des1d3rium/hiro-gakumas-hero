@@ -104,6 +104,7 @@ def test_capture_drinks_build_and_check(tmp_path, monkeypatch, capsys):
     sys.path.insert(0, str(ROOT / "tools" / "assets"))
     import capture_drinks as C
 
+    monkeypatch.setattr(C, "art_library", lambda: ({}, {}))  # 只测实机中位图这条路
     monkeypatch.setattr(I, "_library", lambda kind, size: Original())
     import kaa.db.drink
 
@@ -125,8 +126,94 @@ def test_capture_drinks_build_and_check(tmp_path, monkeypatch, capsys):
     assert C.main(["build", str(tmp_path / "traces"), "--out", str(out), "--min-samples", "3"]) == 0
     folder = out / "icons" / I.INSITU_KIND
     assert sorted(p.name for p in folder.glob("*.png")) == [f"{B}.png", f"{A}.png"]
+    assert not (folder / I.RENDER_FILE).exists()  # 没有原画可拟合
     assert json.loads((folder / "index.json").read_text()) == NAMES
     capsys.readouterr()
     assert C.main(["check", str(tmp_path / "traces"), "--holdout", "--min-samples", "3"]) == 0
     report = capsys.readouterr().out
     assert "共 12" in report and "仍然 unknown：0" in report
+
+
+def art(seed: int) -> np.ndarray:
+    """合成「原画」：256×256 RGBA，透明底上一个瓶子形状，里面是 pattern 放大的图案。"""
+    im = np.zeros((256, 256, 4), np.uint8)
+    im[:, :, :3] = cv2.resize(pattern(seed), (256, 256), interpolation=cv2.INTER_NEAREST)
+    im[20:237, 60:197, 3] = 255
+    return im
+
+
+ARTS = {A: art(1), B: art(2), UNSEEN: art(3)}
+
+
+@pytest.fixture
+def unified(monkeypatch, tmp_path):
+    """原画图库 = 合成原画（A、B、UNSEEN）；实机模板目录按需写。识别层走真实的 _insitu_library。"""
+    art_dir, real_dir = tmp_path / "drink", tmp_path / "drink_exam"
+    art_dir.mkdir()
+    for key, im in ARTS.items():
+        cv2.imwrite(str(art_dir / f"{key}.png"), im)
+    (art_dir / "index.json").write_text(json.dumps({**NAMES, UNSEEN: "新饮料"}, ensure_ascii=False))
+    monkeypatch.setattr(I.assets, "icon_dir", lambda kind: {"drink": art_dir, I.INSITU_KIND: real_dir}.get(kind))
+    monkeypatch.setattr(I, "_library", lambda kind, size: Original())
+    I._insitu_library.cache_clear()
+    import kaa.db.drink
+
+    monkeypatch.setattr(kaa.db.drink.Drink, "from_asset_id", staticmethod(lambda asset: None))
+    monkeypatch.setenv("HIRO_DRINK_INSITU", "1")
+    yield real_dir
+    I._insitu_library.cache_clear()
+
+
+def rendered_frame(keys) -> np.ndarray:
+    """按渲染外观贴进饮料栏（模拟实机里的模糊、底色），叠噪声。"""
+    img = np.full((1280, 720, 3), 90, np.uint8)
+    h = I.DRINK_SIZE // 2
+    for (cx, cy), key in zip(I.DRINK_CENTERS, keys):
+        if key is not None:
+            img[cy - h : cy + h, cx - h : cx + h] = I.render_insitu(ARTS[key])
+    noise = np.random.default_rng(3).integers(-5, 6, img.shape)
+    return np.clip(img.astype(int) + noise, 0, 255).astype(np.uint8)
+
+
+@pytest.mark.synthetic
+def test_new_drink_recognized_from_rendered_art_without_samples(unified):
+    """没采到过实机样本的饮料（包括以后新出的），只要原画图库里有，就按渲染模板认。"""
+    slots = I._read_drink_slots(rendered_frame([UNSEEN, A, None, B]))
+    assert [s["name"] for s in slots] == ["新饮料", "初星ホエイプロテイン", None, "ブーストエキス"]
+    assert {s["insitu_source"] for s in slots if s["state"] == "drink"} == {"render"}
+
+
+@pytest.mark.synthetic
+def test_real_median_overrides_render_and_render_params_are_read(unified):
+    unified.mkdir()
+    cv2.imwrite(str(unified / f"{A}.png"), I.render_insitu(ARTS[A]))
+    (unified / "index.json").write_text(json.dumps({A: NAMES[A]}, ensure_ascii=False))
+    lib = I._insitu_library(I.DRINK_SIZE)
+    assert lib.sources == {A: "real", B: "render", UNSEEN: "render"}
+    slots = I._read_drink_slots(rendered_frame([A, B, None, None]))
+    assert [s.get("insitu_source") for s in slots[:2]] == ["real", "render"]
+    # render.json 覆盖默认渲染参数
+    (unified / I.RENDER_FILE).write_text(json.dumps({"sigma": 0.0, "opacity": 1.0}))
+    I._insitu_library.cache_clear()
+    plain = I._insitu_library(I.DRINK_SIZE)
+    assert not np.allclose(plain.templates[plain.keys.index(B)], lib.templates[lib.keys.index(B)])
+
+
+def test_render_keeps_size_and_background():
+    out = I.render_insitu(ARTS[A])
+    assert out.shape == (I.DRINK_SIZE, I.DRINK_SIZE, 3) and out.dtype == np.uint8
+    corner = out[:4, :4].reshape(-1, 3).mean(axis=0)  # 原画透明处 = 底色（模糊后仍接近）
+    assert np.allclose(corner, I.RENDER["bg"], atol=8)
+
+
+@pytest.mark.synthetic
+def test_fit_render_recovers_parameters():
+    sys.path.insert(0, str(ROOT / "tools" / "assets"))
+    import capture_drinks as C
+
+    truth = {"scale": 0.95, "dx": 1, "dy": 0, "sigma": 1.2, "opacity": 0.8, "bg": [240, 230, 200]}
+    real = {k: I.render_insitu(ARTS[k], I.DRINK_SIZE, truth) for k in (A, B)}
+    params, score = C.fit_render(ARTS, real)
+    assert score > 0.99
+    # 不透明度只整体缩放对比度，归一化相关看不出来，不断言；几何和模糊要拟合回来
+    assert {k: params[k] for k in ("scale", "dx", "dy", "sigma")} == {k: truth[k] for k in ("scale", "dx", "dy", "sigma")}
