@@ -65,3 +65,42 @@ def test_jewel_row_is_never_used():
     g = Game(row=("ジュエル", "使う"))
     out = run(g)
     assert not out["ok"] and BTN.AP_USE not in g.clicks and g.clicks[-1] == BTN.AP_CLOSE
+
+
+class LateJewel(Game):
+    """确认框第一帧只有 APドリンク 文案，下一帧才画出ジュエル提示（淡入中途）：不能在第一帧就点确认。"""
+
+    def ocr(self, img):
+        boxes = super().ocr(img)
+        if self.step == 3:
+            self.frames = getattr(self, "frames", 0) + 1
+            if self.frames >= 2:
+                boxes.append(("ジュエルを消費します", 1, (100, 800, 620, 840)))
+        return boxes
+
+
+def test_jewel_drawn_after_first_frame_is_cancelled():
+    g = LateJewel()
+    out = run(g)
+    assert not out["ok"] and out["drinks"] == 0
+    assert g.clicks == [BTN.DIALOG_OK, BTN.AP_USE, (200, 1160)]
+
+
+def test_confirmation_never_appears_times_out_without_clicking():
+    g = Game(delay=A.STEP_TIMEOUT + 5)
+    out = run(g)
+    assert not out["ok"] and out["drinks"] == 0 and "未点确认" in out["error"]
+    assert g.clicks == [BTN.DIALOG_OK, BTN.AP_USE]
+
+
+def test_use_count_other_than_one_is_not_confirmed():
+    class Many(Game):
+        def ocr(self, img):
+            boxes = super().ocr(img)
+            if self.step == 3 and boxes:
+                boxes += [("使用数", 1, (100, 1000, 180, 1020)), ("3", 1, (500, 1000, 520, 1020))]
+            return boxes
+
+    g = Many()
+    out = run(g)
+    assert not out["ok"] and g.clicks == [BTN.DIALOG_OK, BTN.AP_USE]

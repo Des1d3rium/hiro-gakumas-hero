@@ -188,8 +188,18 @@ AP_ROW = (200, 880, 720, 1010)  # 「AP回復」框 APドリンク 那一行（�
 def refill_fast(shoot: Callable, click: Callable[[int, int], None], ocr: Callable, header: Callable, *,
                 sleep: Callable[[float], None] = time.sleep, gap: float = FAST_GAP, log: Callable[[str], None] = print,
                 clock: Callable[[], float] = time.monotonic) -> dict:
-    """从「AP不足」弹窗补一瓶，最终确认必须核对最上层弹窗和 APドリンク 消耗文字。"""
+    """从「AP不足」弹窗开始补一瓶 APドリンク（+20，本战一局正好够）：
+    1「AP不足」右「回復する」(DIALOG_OK) → 2「AP回復」APドリンク 行「使う」(AP_USE) → 3「APドリンクを消費…」右下「回復する」。
+    第 2 下之前局部 OCR 那一行：必须是 APドリンク、没有ジュエル，否则点「閉じる」返回失败。
+    第 3 下不靠固定等待：重新截图，最上层弹窗正文含「APドリンクを消費」、キャンセル / 回復する 并排、使用数不是 1 以外的数、
+    整屏没有ジュエル，且连续两帧一致才点 OCR 读到的「回復する」。出现ジュエル点キャンセル；其他弹窗 / 超时什么都不点，ok=False。"""
     out = {"ok": False, "drinks": 0, "error": None}
+
+    def fail(why):
+        out["error"] = why
+        log(f"AP 补充失败：{why}")
+        return out
+
     click(*BTN.DIALOG_OK)
     sleep(gap)
     img = shoot()
@@ -197,35 +207,36 @@ def refill_fast(shoot: Callable, click: Callable[[int, int], None], ocr: Callabl
     row = "".join(t.replace(" ", "") for t, _, _ in ocr(img[y1:y2, x1:x2]))
     if "APドリンク" not in row or JEWEL in row or "使う" not in row:
         click(*BTN.AP_CLOSE)
-        out["error"] = f"「AP回復」那一行不是 APドリンク（{row[:40]}），没点「使う」"
-        log(f"AP 补充失败：{out['error']}")
-        return out
+        return fail(f"「AP回復」那一行不是 APドリンク（{row[:40]}），没点「使う」")
     click(*BTN.AP_USE)
     deadline = clock() + STEP_TIMEOUT
+    seen = None  # 上一帧核对通过的「回復する」位置：连续两帧一致才点（弹窗淡入 / 文字还没画全时不点）
     while True:
+        sleep(POLL)
         img = shoot()
         band = header(img)
+        ready = None
         if band is not None:
             texts = _texts(ocr(img))
-            _, bottom = band
+            top, bottom = band
             modal = [(t, x, y) for t, x, y in texts if y >= bottom]
             if any(JEWEL in t for t, _, _ in texts):
                 if cancel := _lowest(modal, "キャンセル", exact=True, min_y=1000):
                     click(*cancel)
-                out["error"] = "确认画面含ジュエル"
-                return out
+                return fail("确认画面含ジュエル，已点キャンセル" if cancel else "确认画面含ジュエル，没找到キャンセル，未点任何按钮")
             confirm = _lowest(modal, "回復する", exact=True, min_y=1000)
-            body = "".join(t for t, _, y in modal if confirm and y < confirm[1])
             cancel = _lowest(modal, "キャンセル", exact=True, min_y=1000)
+            body = "".join(t for t, _, y in modal if confirm and y < confirm[1])
             if ("APドリンクを消費" in body and confirm and cancel
                     and cancel[0] < confirm[0] and abs(cancel[1] - confirm[1]) <= 30
                     and use_count(modal) in (None, 1)):
-                click(*confirm)
-                break
+                ready = confirm
+        if ready is not None and seen is not None and abs(ready[0] - seen[0]) <= 10 and abs(ready[1] - seen[1]) <= 10:
+            click(*ready)
+            break
+        seen = ready
         if clock() >= deadline:
-            out["error"] = "未确认 APドリンク 消耗弹窗"
-            return out
-        sleep(POLL)
+            return fail("没认出「APドリンクを消費」确认框（未知弹窗或超时），未点确认")
 
     deadline = clock() + 4 * gap + 2
     while clock() < deadline:
@@ -234,6 +245,4 @@ def refill_fast(shoot: Callable, click: Callable[[int, int], None], ocr: Callabl
             out.update(ok=True, drinks=1)
             log("AP 补充：喝了 1 瓶 APドリンク")
             return out
-    out["error"] = "确认后弹窗仍在"
-    log(f"AP 补充失败：{out['error']}")
-    return out
+    return fail("确认后弹窗仍在")
