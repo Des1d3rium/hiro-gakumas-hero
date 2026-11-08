@@ -349,9 +349,22 @@ def _reset_pool() -> None:
     _POOL = None
 
 
+def sim_workers(asked: int) -> int:
+    """进程池大小上限（HIRO_SIM_WORKERS；0 = 不限）。Windows 默认 1（不开进程池）：spawn 起的子进程会重新导入主模块
+    （python -m hiro.run_hif → KAA、OCR、控制器整套），4 个子进程加上 MuMu 把 16GB 内存吃满，Windows 第十五局
+    MemoryError、MuMu 崩溃（device offline）。Mac / Linux 用 fork，子进程共享内存，不受限。"""
+    import os
+    import sys
+
+    cap = os.environ.get("HIRO_SIM_WORKERS")
+    cap = int(cap) if cap and cap.isdigit() else (1 if sys.platform == "win32" else 0)
+    return max(1, min(asked, cap)) if cap else asked
+
+
 def evaluate(setups: list, seeds, policy: str = "expert", workers: int = 4, **kw) -> list[dict]:
     """多个开局 × 同一批种子（共同随机数，组合之间的差更稳）并行打完，返回每个开局的期望（已乘星星系数）。"""
     seeds = list(seeds)
+    workers = sim_workers(workers)
     # 按种子排：同一种子的各方案落在同一批任务、同一个进程里，开局只生成一次（_episode 缓存）
     tasks = [(st, s, policy, dict(kw, base=setups[0])) for s in seeds for st in setups]
     if workers > 1 and len(tasks) > 1:

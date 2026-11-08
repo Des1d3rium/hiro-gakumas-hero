@@ -586,3 +586,19 @@ def test_vote_price_sale_known_prices(monkeypatch):
     monkeypatch.setattr(shop, "_cell_price", lambda img, x, band, scale=3: [40])
     monkeypatch.setattr(digits, "read_dddd", lambda img, box: 40)
     assert shop._vote_price(np.zeros((1280, 720, 3), np.uint8), 65, (612, 652), [40], sale=True) == 49
+
+
+def test_sim_workers_capped_on_windows(monkeypatch):
+    """Windows 默认不开模拟进程池（spawn 子进程重新导入整套 KAA，第十五局内存吃满、MuMu 崩溃）；HIRO_SIM_WORKERS 可改。"""
+    import sys
+
+    from hiro.sim.interval import sim_workers
+
+    monkeypatch.delenv("HIRO_SIM_WORKERS", raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert sim_workers(4) == 1
+    monkeypatch.setenv("HIRO_SIM_WORKERS", "2")
+    assert sim_workers(4) == 2
+    monkeypatch.delenv("HIRO_SIM_WORKERS")
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert sim_workers(4) == 4
