@@ -1,0 +1,1074 @@
+{
+ "policy": "expert",
+ "policy_kw": {
+  "worlds": 3,
+  "depth": 1,
+  "drink_rule": "R1",
+  "drink_se": true
+ },
+ "hit_line": 600000,
+ "engine": {
+  "digital_hiro": "eb0ebfa",
+  "gakumas_sim": "a448e07"
+ },
+ "seeds": [
+  0,
+  200
+ ],
+ "sources": {
+  "main26": {
+   "trace": "lead35-main26-20261104-042324",
+   "deck_size": 23,
+   "drinks": [],
+   "hp": 17,
+   "max_hp": 33,
+   "base_mean": 218346,
+   "base_se": 5963,
+   "base_hit": 0.0
+  },
+  "main27": {
+   "trace": "lead35-main27-20261104-052248",
+   "deck_size": 23,
+   "drinks": [],
+   "hp": 17,
+   "max_hp": 33,
+   "base_mean": 185560,
+   "base_se": 4760,
+   "base_hit": 0.0
+  },
+  "main28": {
+   "trace": "lead35-main28-20261104-060903",
+   "deck_size": 23,
+   "drinks": [],
+   "hp": 17,
+   "max_hp": 33,
+   "base_mean": 186666,
+   "base_se": 4909,
+   "base_hit": 0.0
+  },
+  "main29": {
+   "trace": "lead35-main29-20261104-064331",
+   "deck_size": 23,
+   "drinks": [],
+   "hp": 17,
+   "max_hp": 33,
+   "base_mean": 233184,
+   "base_se": 6068,
+   "base_hit": 0.0
+  },
+  "main30": {
+   "trace": "lead35-main30-20261104-072854",
+   "deck_size": 23,
+   "drinks": [],
+   "hp": 17,
+   "max_hp": 33,
+   "base_mean": 228827,
+   "base_se": 5871,
+   "base_hit": 0.0
+  },
+  "main31": {
+   "trace": "lead35-main31-20261104-080956",
+   "deck_size": 23,
+   "drinks": [],
+   "hp": 17,
+   "max_hp": 33,
+   "base_mean": 194899,
+   "base_se": 4537,
+   "base_hit": 0.0
+  }
+ },
+ "entries": {
+  "drink:pdrink_02-3-010": {
+   "main26": {
+    "d_mean": 63934,
+    "d_se": 8919,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 60338,
+    "d_se": 7534,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 44368,
+    "d_se": 7883,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 58975,
+    "d_se": 9241,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 66408,
+    "d_se": 9587,
+    "d_hit": 0.03,
+    "d_hit_se": 0.0121,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 66663,
+    "d_se": 7952,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "drink:pdrink_00-2-008": {
+   "main26": {
+    "d_mean": 37602,
+    "d_se": 7464,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 29817,
+    "d_se": 5818,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 44306,
+    "d_se": 5518,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 44619,
+    "d_se": 7134,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 33041,
+    "d_se": 7534,
+    "d_hit": 0.01,
+    "d_hit_se": 0.0071,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 38379,
+    "d_se": 5703,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "drink:pdrink_00-2-010": {
+   "main26": {
+    "d_mean": 58296,
+    "d_se": 8563,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 52625,
+    "d_se": 6244,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 74596,
+    "d_se": 6841,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 59055,
+    "d_se": 8492,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 57565,
+    "d_se": 7913,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 69834,
+    "d_se": 6500,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "drink:pdrink_00-3-001": {
+   "main26": {
+    "d_mean": 23650,
+    "d_se": 7213,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 28029,
+    "d_se": 6753,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 25441,
+    "d_se": 6868,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 31684,
+    "d_se": 7310,
+    "d_hit": 0.005,
+    "d_hit_se": 0.005,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 22298,
+    "d_se": 7749,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 29679,
+    "d_se": 6716,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "drink:pdrink_00-2-001": {
+   "main26": {
+    "d_mean": 20281,
+    "d_se": 8214,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 31028,
+    "d_se": 6647,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 24730,
+    "d_se": 6542,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 17993,
+    "d_se": 7721,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 11307,
+    "d_se": 8306,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 28633,
+    "d_se": 6167,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "drink:pdrink_00-2-009": {
+   "main26": {
+    "d_mean": 29630,
+    "d_se": 8294,
+    "d_hit": 0.005,
+    "d_hit_se": 0.005,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 33007,
+    "d_se": 6347,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 20493,
+    "d_se": 7191,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 19139,
+    "d_se": 7903,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 34254,
+    "d_se": 8001,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 38522,
+    "d_se": 7501,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "drink:pdrink_02-3-007": {
+   "main26": {
+    "d_mean": 28121,
+    "d_se": 6063,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 20092,
+    "d_se": 4795,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 17203,
+    "d_se": 4725,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 21933,
+    "d_se": 6047,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 11296,
+    "d_se": 5845,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 26668,
+    "d_se": 5248,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "drink:pdrink_00-2-004": {
+   "main26": {
+    "d_mean": 9962,
+    "d_se": 6859,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 16533,
+    "d_se": 6309,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 18753,
+    "d_se": 6224,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 20443,
+    "d_se": 7158,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 12861,
+    "d_se": 7147,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 14579,
+    "d_se": 6037,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "drink:pdrink_00-2-003": {
+   "main26": {
+    "d_mean": 17234,
+    "d_se": 7420,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 31167,
+    "d_se": 6129,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 12783,
+    "d_se": 6448,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 15290,
+    "d_se": 7458,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 6947,
+    "d_se": 6803,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 24270,
+    "d_se": 6653,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "drink:pdrink_02-2-006": {
+   "main26": {
+    "d_mean": 15451,
+    "d_se": 6449,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 12283,
+    "d_se": 5923,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 12971,
+    "d_se": 4680,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 13420,
+    "d_se": 6280,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 5567,
+    "d_se": 5940,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 23765,
+    "d_se": 5288,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "upgrade:p_card-02-act-2_062": {
+   "main26": {
+    "d_mean": 17252,
+    "d_se": 8116,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 12954,
+    "d_se": 6200,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 23975,
+    "d_se": 6491,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 19970,
+    "d_se": 7578,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 7301,
+    "d_se": 7055,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 26057,
+    "d_se": 6115,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "upgrade:p_card-02-men-2_004": {
+   "main26": {
+    "d_mean": 2297,
+    "d_se": 5023,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 7735,
+    "d_se": 4999,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 10887,
+    "d_se": 4825,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 8089,
+    "d_se": 5014,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 14180,
+    "d_se": 5203,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 3260,
+    "d_se": 4973,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "upgrade:p_card-02-men-2_111": {
+   "main26": {
+    "d_mean": -370,
+    "d_se": 4530,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 6239,
+    "d_se": 3602,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 8677,
+    "d_se": 4459,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "hp:19": {
+   "main26": {
+    "d_mean": -1806,
+    "d_se": 7007,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 11062,
+    "d_se": 6069,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 1584,
+    "d_se": 6085,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 5588,
+    "d_se": 7515,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 3985,
+    "d_se": 6773,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 11322,
+    "d_se": 6127,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "hp:24": {
+   "main26": {
+    "d_mean": 21698,
+    "d_se": 7749,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 28457,
+    "d_se": 5934,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 21597,
+    "d_se": 6704,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 19946,
+    "d_se": 7748,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 18370,
+    "d_se": 7848,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 28548,
+    "d_se": 6812,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "hp:33": {
+   "main26": {
+    "d_mean": 33753,
+    "d_se": 8001,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main27": {
+    "d_mean": 38770,
+    "d_se": 6651,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 28516,
+    "d_se": 6389,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 31718,
+    "d_se": 7700,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 30570,
+    "d_se": 8477,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main31": {
+    "d_mean": 36200,
+    "d_se": 6745,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "delete:p_card-02-act-1_071+0": {
+   "main26": {
+    "d_mean": 16071,
+    "d_se": 8102,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main28": {
+    "d_mean": 16741,
+    "d_se": 6297,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 11642,
+    "d_se": 7151,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "delete:p_card-02-men-2_111+0": {
+   "main26": {
+    "d_mean": 33771,
+    "d_se": 7802,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 21667,
+    "d_se": 8393,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "delete:p_card-02-act-2_047+1": {
+   "main27": {
+    "d_mean": 7902,
+    "d_se": 6005,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main29": {
+    "d_mean": 10498,
+    "d_se": 8003,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   },
+   "main30": {
+    "d_mean": 17253,
+    "d_se": 7777,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "delete:p_card-02-act-1_028+1": {
+   "main27": {
+    "d_mean": 22191,
+    "d_se": 6581,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "delete:p_card-02-act-3_052+0": {
+   "main28": {
+    "d_mean": 29610,
+    "d_se": 6568,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "upgrade:p_card-02-men-2_100": {
+   "main29": {
+    "d_mean": -3903,
+    "d_se": 4348,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "upgrade:p_card-02-men-3_040": {
+   "main30": {
+    "d_mean": 19988,
+    "d_se": 5082,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "upgrade:p_card-02-men-3_043": {
+   "main31": {
+    "d_mean": 7137,
+    "d_se": 5049,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "delete:p_card-02-men-3_043+0": {
+   "main31": {
+    "d_mean": 21759,
+    "d_se": 6427,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  },
+  "delete:p_card-02-act-2_047+0": {
+   "main31": {
+    "d_mean": 14354,
+    "d_se": 6472,
+    "d_hit": 0.0,
+    "d_hit_se": 0.0,
+    "n": 200
+   }
+  }
+ },
+ "summary": {
+  "drink:pdrink_02-3-010": {
+   "d_mean": 60114,
+   "d_se": 3492,
+   "between_sd": 8323,
+   "d_hit": 0.005,
+   "sources": 6
+  },
+  "drink:pdrink_00-2-008": {
+   "d_mean": 37961,
+   "d_se": 2688,
+   "between_sd": 5923,
+   "d_hit": 0.0017,
+   "sources": 6
+  },
+  "drink:pdrink_00-2-010": {
+   "d_mean": 61995,
+   "d_se": 3055,
+   "between_sd": 8366,
+   "d_hit": 0.0,
+   "sources": 6
+  },
+  "drink:pdrink_00-3-001": {
+   "d_mean": 26797,
+   "d_se": 2903,
+   "between_sd": 3625,
+   "d_hit": 0.0008,
+   "sources": 6
+  },
+  "drink:pdrink_00-2-001": {
+   "d_mean": 22329,
+   "d_se": 2986,
+   "between_sd": 7289,
+   "d_hit": 0.0,
+   "sources": 6
+  },
+  "drink:pdrink_00-2-009": {
+   "d_mean": 29174,
+   "d_se": 3089,
+   "between_sd": 7799,
+   "d_hit": 0.0008,
+   "sources": 6
+  },
+  "drink:pdrink_02-3-007": {
+   "d_mean": 20886,
+   "d_se": 2238,
+   "between_sd": 6213,
+   "d_hit": 0.0,
+   "sources": 6
+  },
+  "drink:pdrink_00-2-004": {
+   "d_mean": 15522,
+   "d_se": 2710,
+   "between_sd": 3862,
+   "d_hit": 0.0,
+   "sources": 6
+  },
+  "drink:pdrink_00-2-003": {
+   "d_mean": 17948,
+   "d_se": 2791,
+   "between_sd": 8602,
+   "d_hit": 0.0,
+   "sources": 6
+  },
+  "drink:pdrink_02-2-006": {
+   "d_mean": 13910,
+   "d_se": 2364,
+   "between_sd": 5880,
+   "d_hit": 0.0,
+   "sources": 6
+  },
+  "upgrade:p_card-02-act-2_062": {
+   "d_mean": 17918,
+   "d_se": 2843,
+   "between_sd": 6999,
+   "d_hit": 0.0,
+   "sources": 6
+  },
+  "upgrade:p_card-02-men-2_004": {
+   "d_mean": 7741,
+   "d_se": 2044,
+   "between_sd": 4499,
+   "d_hit": 0.0,
+   "sources": 6
+  },
+  "upgrade:p_card-02-men-2_111": {
+   "d_mean": 4849,
+   "d_se": 2435,
+   "between_sd": 4681,
+   "d_hit": 0.0,
+   "sources": 3
+  },
+  "hp:19": {
+   "d_mean": 5289,
+   "d_se": 2702,
+   "between_sd": 5207,
+   "d_hit": 0.0,
+   "sources": 6
+  },
+  "hp:24": {
+   "d_mean": 23103,
+   "d_se": 2926,
+   "between_sd": 4357,
+   "d_hit": 0.0,
+   "sources": 6
+  },
+  "hp:33": {
+   "d_mean": 33254,
+   "d_se": 3008,
+   "between_sd": 3778,
+   "d_hit": 0.0,
+   "sources": 6
+  },
+  "delete:p_card-02-act-1_071+0": {
+   "d_mean": 14818,
+   "d_se": 4169,
+   "between_sd": 2771,
+   "d_hit": 0.0,
+   "sources": 3
+  },
+  "delete:p_card-02-men-2_111+0": {
+   "d_mean": 27719,
+   "d_se": 5730,
+   "between_sd": 8559,
+   "d_hit": 0.0,
+   "sources": 2
+  },
+  "delete:p_card-02-act-2_047+1": {
+   "d_mean": 11884,
+   "d_se": 4224,
+   "between_sd": 4827,
+   "d_hit": 0.0,
+   "sources": 3
+  },
+  "delete:p_card-02-act-1_028+1": {
+   "d_mean": 22191,
+   "d_se": 6581,
+   "between_sd": 0,
+   "d_hit": 0.0,
+   "sources": 1
+  },
+  "delete:p_card-02-act-3_052+0": {
+   "d_mean": 29610,
+   "d_se": 6568,
+   "between_sd": 0,
+   "d_hit": 0.0,
+   "sources": 1
+  },
+  "upgrade:p_card-02-men-2_100": {
+   "d_mean": -3903,
+   "d_se": 4348,
+   "between_sd": 0,
+   "d_hit": 0.0,
+   "sources": 1
+  },
+  "upgrade:p_card-02-men-3_040": {
+   "d_mean": 19988,
+   "d_se": 5082,
+   "between_sd": 0,
+   "d_hit": 0.0,
+   "sources": 1
+  },
+  "upgrade:p_card-02-men-3_043": {
+   "d_mean": 7137,
+   "d_se": 5049,
+   "between_sd": 0,
+   "d_hit": 0.0,
+   "sources": 1
+  },
+  "delete:p_card-02-men-3_043+0": {
+   "d_mean": 21759,
+   "d_se": 6427,
+   "between_sd": 0,
+   "d_hit": 0.0,
+   "sources": 1
+  },
+  "delete:p_card-02-act-2_047+0": {
+   "d_mean": 14354,
+   "d_se": 6472,
+   "between_sd": 0,
+   "d_hit": 0.0,
+   "sources": 1
+  }
+ }
+}

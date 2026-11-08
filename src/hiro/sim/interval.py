@@ -523,28 +523,27 @@ def plan_actions(best: dict, opts: list[Option]) -> list:
 
 # ---------------------------------------------------------------- 实机接线
 
-CONTEXT: dict = {}  # 考试循环记下的本战信息：{"deck": [(card_id, upgrade)], "drinks": [drink_id], "permil": {Vo, Da, Vi}}
-CONTEXT_FILE = "finals_context.json"
+# 开源版：本战上下文的记账在 hiro.state.finals_context（考试循环调用它的 note_exam），这里是同一个对象
+from hiro.state.finals_context import CONTEXT, CONTEXT_FILE  # noqa: E402
 
 
 def note_exam(label: str, *, deck=None, drinks=None, permil=None, trace_dir=None) -> None:
-    """本战 R1 的考试循环调用：第一次读到存档时记牌组，考试结束时记剩下的饮料和三属性倍率。落盘到 trace 目录（续跑时读回）。"""
+    """同 hiro.state.finals_context.note_exam（记账、落盘），另外记下轮间缓存目录、记下倍率时预热 R2。"""
+    from hiro.state import finals_context
+
+    finals_context.note_exam(label, deck=deck, drinks=drinks, permil=permil, trace_dir=trace_dir)
+    on_context(label, permil=permil, trace_dir=trace_dir)
+
+
+def on_context(label: str, *, permil=None, trace_dir=None) -> None:
+    """finals_context.note_exam 之后调用：轮间缓存落在 trace 目录；R1 记下倍率时让进程池先编译 R2。"""
+    global STATE_DIR
     if label != "r1":
         return
-    if deck is not None:
-        CONTEXT["deck"] = [list(x) for x in deck]
-    if drinks is not None:
-        CONTEXT["drinks"] = list(drinks)
-    if permil:
-        CONTEXT["permil"] = {k: int(v) for k, v in permil.items() if v}
-        _prewarm_r2()
     if trace_dir is not None:
-        global STATE_DIR
         STATE_DIR = trace_dir
-        try:
-            (Path(trace_dir) / CONTEXT_FILE).write_text(json.dumps(CONTEXT, ensure_ascii=False), encoding="utf-8")
-        except OSError:
-            pass
+    if permil:
+        _prewarm_r2()
 
 
 def _prewarm_r2(workers: int = 4) -> None:
@@ -566,11 +565,10 @@ def _prewarm_r2(workers: int = 4) -> None:
 
 def load_context(trace_dir) -> dict:
     global STATE_DIR
-    try:
-        CONTEXT.update(json.loads((Path(trace_dir) / CONTEXT_FILE).read_text(encoding="utf-8")))
-        STATE_DIR = trace_dir
-    except (OSError, ValueError):
-        pass
+    from hiro.state import finals_context
+
+    finals_context.load_context(trace_dir)
+    STATE_DIR = trace_dir
     return CONTEXT
 
 

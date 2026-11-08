@@ -1215,7 +1215,12 @@ def run_exam(
 
             seen = getattr(memory, "attr_permil", None) or {}
             permil = {**{k: v for k, v in seen.items() if v}, **(CONTEXT.get("permil") or {})} if exam == "r1" else seen
-            note_exam(exam, drinks=[x.drink_id for x in last_state.drinks if getattr(x, "drink_id", None)], permil=permil,
+            # 牌组：开源版读不到考试存档，用培育记账的牌组（state.produce.deck）；轮间模拟（hiro.sim.interval）合成 R2 开局要用
+            deck = None
+            if exam == "r1" and session is not None:
+                rows = (getattr(session.state, "produce", None) or {}).get("deck") or []
+                deck = [(c["card_id"], int(c.get("upgrade") or 0)) for c in rows if isinstance(c, dict) and c.get("card_id")] or None
+            note_exam(exam, deck=deck, drinks=[x.drink_id for x in last_state.drinks if getattr(x, "drink_id", None)], permil=permil,
                       trace_dir=session.trace.dir if session is not None else None)  # fmt: skip
         source.end(result_info or None)
         advisor.on_round_end(result_info or None)
