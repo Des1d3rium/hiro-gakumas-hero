@@ -1,0 +1,1437 @@
+{
+  "schema_version": 1,
+  "scope": "public-hif-exam-acquisition",
+  "source": {
+    "client_version": "3.4.1/build90",
+    "master_commit": "c67b88ebfdf0a1654bd30facc746c6bb41f7bf0a"
+  },
+  "scalars": {
+    "examType": 1,
+    "settingId": "p_exam_setting-1",
+    "characterId": "shro",
+    "produceId": "produce-008",
+    "idolCardId": "i_card-shro-3-007",
+    "stepType": 18,
+    "mainEffectType": 42,
+    "displayMainEffectType": 42,
+    "planType": 3,
+    "phase": 6,
+    "currentTurn": 1,
+    "limitTurn": 12,
+    "remainTurn": 12,
+    "extraTurn": 0,
+    "stamina": 19,
+    "maxStamina": 33,
+    "parameter": 0,
+    "block": 0,
+    "producePoint": 8,
+    "isTurnCardPlayEnd": false,
+    "turnCardPlayCount": 0,
+    "examCardPlayCount": 0,
+    "isTurnCardGrave": false,
+    "isTurnCardLost": false,
+    "currentTurnTotalConsumeStamina": 0,
+    "currentTurnTotalAddParameter": 0,
+    "currentTurnTotalBlock": 0,
+    "totalConsumeStamina": 0,
+    "totalDrawCardCount": 0,
+    "vocalBonusPermil": 37510,
+    "danceBonusPermil": 35720,
+    "visualBonusPermil": 22970,
+    "vocalConfigParameter": 1871,
+    "danceConfigParameter": 1392,
+    "visualConfigParameter": 1088
+  },
+  "cards": {
+    "card-17a5b0025d7915ac5dc95aa8": {
+      "instance": "card-17a5b0025d7915ac5dc95aa8",
+      "card_id": "p_card-02-men-2_052",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-1bcdf98a53180ba6a4065d4f": {
+      "instance": "card-1bcdf98a53180ba6a4065d4f",
+      "card_id": "p_card-02-men-2_100",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-1ef07742df34b0391ae36503": {
+      "instance": "card-1ef07742df34b0391ae36503",
+      "card_id": "p_card-02-men-3_043",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-415bfd1d2a1de02c2c0b4827": {
+      "instance": "card-415bfd1d2a1de02c2c0b4827",
+      "card_id": "p_card-00-sup-3_152",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-44007b3a5de3e339b552221b": {
+      "instance": "card-44007b3a5de3e339b552221b",
+      "card_id": "p_card-02-men-1_031",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-4e7fcc87528f566924534e92": {
+      "instance": "card-4e7fcc87528f566924534e92",
+      "card_id": "p_card-02-act-3_039",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        1,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-534b884c21e9e9af2ae259de": {
+      "instance": "card-534b884c21e9e9af2ae259de",
+      "card_id": "p_card-02-men-2_056",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-55eb29dfbaab39e1a255e3be": {
+      "instance": "card-55eb29dfbaab39e1a255e3be",
+      "card_id": "p_card-02-men-3_044",
+      "effective_upgrade": 0,
+      "customize_counts": [],
+      "native": {
+        "_baseUpgradeCount": 0,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-5e948ebe55939e0fa57342b4": {
+      "instance": "card-5e948ebe55939e0fa57342b4",
+      "card_id": "p_card-02-men-2_111",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-73aa5c05f0c86eaf90c91929": {
+      "instance": "card-73aa5c05f0c86eaf90c91929",
+      "card_id": "p_card-00-sup-3_027",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-75926ad0dd2fe5ac18657b68": {
+      "instance": "card-75926ad0dd2fe5ac18657b68",
+      "card_id": "p_card-02-men-2_004",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-840a528b6c7ddb4fc61d323a": {
+      "instance": "card-840a528b6c7ddb4fc61d323a",
+      "card_id": "p_card-02-men-2_101",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-922abf03ac4a2d1f823d8c5a": {
+      "instance": "card-922abf03ac4a2d1f823d8c5a",
+      "card_id": "p_card-02-men-3_002",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-98d6d147a150e3ecf1386810": {
+      "instance": "card-98d6d147a150e3ecf1386810",
+      "card_id": "p_card-02-act-1_037",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0,
+        2
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-9d513d94e8ce7db43a49aceb": {
+      "instance": "card-9d513d94e8ce7db43a49aceb",
+      "card_id": "p_card-02-sup-3_094",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-c6f6c42072048c6a715e48d9": {
+      "instance": "card-c6f6c42072048c6a715e48d9",
+      "card_id": "p_card-02-act-3_045",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-c94ad916f831cc9696c510b1": {
+      "instance": "card-c94ad916f831cc9696c510b1",
+      "card_id": "p_card-02-act-1_004",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-df0ba25d4ed5855cd386fb95": {
+      "instance": "card-df0ba25d4ed5855cd386fb95",
+      "card_id": "p_card-02-ido-3_105",
+      "effective_upgrade": 1,
+      "customize_counts": [],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-e6646fe9dc1351cd7828f69e": {
+      "instance": "card-e6646fe9dc1351cd7828f69e",
+      "card_id": "p_card-02-men-2_057",
+      "effective_upgrade": 2,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [
+          "s_card-3-0010"
+        ],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-eb5d2889e0ca1be30afe954b": {
+      "instance": "card-eb5d2889e0ca1be30afe954b",
+      "card_id": "p_card-02-act-2_062",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        2,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-ef931f0b9e48dbb1f71d4b7a": {
+      "instance": "card-ef931f0b9e48dbb1f71d4b7a",
+      "card_id": "p_card-02-men-3_040",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    },
+    "card-f4a2ab322a0630c31d5494be": {
+      "instance": "card-f4a2ab322a0630c31d5494be",
+      "card_id": "p_card-02-men-1_031",
+      "effective_upgrade": 1,
+      "customize_counts": [
+        0,
+        3,
+        0
+      ],
+      "native": {
+        "_baseUpgradeCount": 1,
+        "_tmpUpgradeCount": 0,
+        "_supportUpgradeIdList": [],
+        "_statusEffect": {
+          "_id": "",
+          "_produceExamTriggerId": "",
+          "_produceCardGrowEffectIdList": [],
+          "_effectGroupIdList": [],
+          "_triggerCount": 0,
+          "_phaseCountDictionary": {
+            "_list": []
+          },
+          "_spendTurn": 0,
+          "_spendCount": 0
+        },
+        "_growEffectExamStartAfterList": [],
+        "_affectGrowEffectIdList": [],
+        "_playCount": 0,
+        "_isMoveProduceExamEffectUseInTurn": false,
+        "_staminaConsumptionSpecifyEffectList": []
+      }
+    }
+  },
+  "zones": {
+    "hand": [
+      "card-75926ad0dd2fe5ac18657b68",
+      "card-e6646fe9dc1351cd7828f69e",
+      "card-415bfd1d2a1de02c2c0b4827"
+    ],
+    "deck": [
+      "card-17a5b0025d7915ac5dc95aa8",
+      "card-1bcdf98a53180ba6a4065d4f",
+      "card-1ef07742df34b0391ae36503",
+      "card-44007b3a5de3e339b552221b",
+      "card-4e7fcc87528f566924534e92",
+      "card-534b884c21e9e9af2ae259de",
+      "card-55eb29dfbaab39e1a255e3be",
+      "card-5e948ebe55939e0fa57342b4",
+      "card-73aa5c05f0c86eaf90c91929",
+      "card-840a528b6c7ddb4fc61d323a",
+      "card-922abf03ac4a2d1f823d8c5a",
+      "card-98d6d147a150e3ecf1386810",
+      "card-9d513d94e8ce7db43a49aceb",
+      "card-c6f6c42072048c6a715e48d9",
+      "card-c94ad916f831cc9696c510b1",
+      "card-df0ba25d4ed5855cd386fb95",
+      "card-eb5d2889e0ca1be30afe954b",
+      "card-ef931f0b9e48dbb1f71d4b7a",
+      "card-f4a2ab322a0630c31d5494be"
+    ],
+    "grave": [],
+    "lost": [],
+    "hold": [],
+    "future": [],
+    "past": [],
+    "removed": [],
+    "playing": []
+  },
+  "active_statuses": [
+    {
+      "type": {
+        "class": "ReviewStatusEffect",
+        "ns": "Campus.InGame.Exam",
+        "asm": "Assembly-CSharp"
+      },
+      "data": {
+        "_isTurnLimited": true,
+        "_turn": 6,
+        "_isPassingTurnStart": true,
+        "_uid": 1
+      }
+    },
+    {
+      "type": {
+        "class": "AggressiveStatusEffect",
+        "ns": "Campus.InGame.Exam",
+        "asm": "Assembly-CSharp"
+      },
+      "data": {
+        "_isTurnLimited": false,
+        "_turn": -1,
+        "_isPassingTurnStart": true,
+        "_uid": 2,
+        "_value": 6
+      }
+    },
+    {
+      "type": {
+        "class": "TriggerEffectStatusEffect",
+        "ns": "Campus.InGame.Exam",
+        "asm": "Assembly-CSharp"
+      },
+      "data": {
+        "_isTurnLimited": false,
+        "_turn": -1,
+        "_isPassingTurnStart": true,
+        "_uid": 4,
+        "_overrideType": 31,
+        "_isItemDirectEnchant": true,
+        "_startEnchantOriginId": "",
+        "_startEnchantOriginLevel": 0,
+        "_startEnchantOwnerId": "",
+        "_startEnchantOriginType": 0,
+        "_trigger": {
+          "_id": "e_trigger-exam_card_play-stamina_up_multiple-500-p_card_search-playing-1-p_card-02-men-1_031-0_1",
+          "_phaseValueList": [],
+          "_phaseTypeList": [
+            2
+          ]
+        },
+        "_effectList": [
+          {
+            "_id": "e_effect-exam_card_play_aggressive-0002",
+            "_effectType": 42,
+            "_effectValue1": 2,
+            "_effectValue2": 0,
+            "_effectCount": 0,
+            "_judgeTargetIndex": 0,
+            "_effectTurn": 0,
+            "_targetProduceCardId": "",
+            "_targetUpgradeCount": 0,
+            "_cardSearchId": "",
+            "_cardSearchId2": "",
+            "_pickCountReferenceProduceCardSearchId": "",
+            "_movePositionType": 0,
+            "_pickRangeType": 0,
+            "_pickCount": 0,
+            "_pickCountMin": 0,
+            "_pickCountMax": 0,
+            "_pickCountType": 0,
+            "_pickCountReferenceProduceCardSearchId2": "",
+            "_pickRangeType2": 0,
+            "_pickCountMin2": 0,
+            "_pickCountMax2": 0,
+            "_pickCountType2": 0,
+            "_chainEffectId": "",
+            "_chainEffectIdList": [],
+            "_statusEnchantId": "",
+            "_targetExamEffectType": 0,
+            "_effectGroupIdList": [
+              "effect_group-visible-exam_card_play_aggressive-000"
+            ],
+            "_cardGrowEffectIdList": []
+          },
+          {
+            "_id": "e_effect-exam_playable_value_add-01",
+            "_effectType": 14,
+            "_effectValue1": 0,
+            "_effectValue2": 0,
+            "_effectCount": 1,
+            "_judgeTargetIndex": 0,
+            "_effectTurn": 0,
+            "_targetProduceCardId": "",
+            "_targetUpgradeCount": 0,
+            "_cardSearchId": "",
+            "_cardSearchId2": "",
+            "_pickCountReferenceProduceCardSearchId": "",
+            "_movePositionType": 0,
+            "_pickRangeType": 0,
+            "_pickCount": 0,
+            "_pickCountMin": 0,
+            "_pickCountMax": 0,
+            "_pickCountType": 0,
+            "_pickCountReferenceProduceCardSearchId2": "",
+            "_pickRangeType2": 0,
+            "_pickCountMin2": 0,
+            "_pickCountMax2": 0,
+            "_pickCountType2": 0,
+            "_chainEffectId": "",
+            "_chainEffectIdList": [],
+            "_statusEnchantId": "",
+            "_targetExamEffectType": 0,
+            "_effectGroupIdList": [
+              "effect_group-visible-exam_playable_value_add-000"
+            ],
+            "_cardGrowEffectIdList": []
+          },
+          {
+            "_id": "e_effect-exam_stamina_reduce-0150",
+            "_effectType": 60,
+            "_effectValue1": 150,
+            "_effectValue2": 0,
+            "_effectCount": 0,
+            "_judgeTargetIndex": 0,
+            "_effectTurn": 0,
+            "_targetProduceCardId": "",
+            "_targetUpgradeCount": 0,
+            "_cardSearchId": "",
+            "_cardSearchId2": "",
+            "_pickCountReferenceProduceCardSearchId": "",
+            "_movePositionType": 0,
+            "_pickRangeType": 0,
+            "_pickCount": 0,
+            "_pickCountMin": 0,
+            "_pickCountMax": 0,
+            "_pickCountType": 0,
+            "_pickCountReferenceProduceCardSearchId2": "",
+            "_pickRangeType2": 0,
+            "_pickCountMin2": 0,
+            "_pickCountMax2": 0,
+            "_pickCountType2": 0,
+            "_chainEffectId": "",
+            "_chainEffectIdList": [],
+            "_statusEnchantId": "",
+            "_targetExamEffectType": 0,
+            "_effectGroupIdList": [
+              "effect_group-visible-stamina_reduce_fix-000",
+              "effect_group-hidden-stamina_reduce_fix-000"
+            ],
+            "_cardGrowEffectIdList": []
+          }
+        ],
+        "_turnCount": 0,
+        "_phaseCountDictionary": {
+          "_list": []
+        },
+        "_limitCount": 5,
+        "_limitCountInTurn": -1,
+        "_limitCountInTurnRemain": -1,
+        "_statusEnchantId": "enchant-p_item_effect_02-3-076-0-enc01",
+        "_fromExamEffectIdList": [],
+        "_descriptionReactiveDataTypeList": [],
+        "_descriptionReactiveDataTextList": [],
+        "_originType": 1,
+        "_isFromEnchantEffect": false,
+        "_isEncoreEnchant": false,
+        "_triggerItem": {
+          "_id": "pitem_02-3-076-0",
+          "_fireCount": 0,
+          "_reactionCount": 0,
+          "_itemType": 1,
+          "_parentCustomItemIds": []
+        },
+        "_triggerDrink": {
+          "_id": ""
+        },
+        "_triggerCard": null,
+        "_triggerGimmickGroup": {
+          "_id": "",
+          "_gimmickEffect": {
+            "_effectId": ""
+          },
+          "_gimmickTrigger": {
+            "_id": "",
+            "_phaseValueList": [],
+            "_phaseTypeList": []
+          },
+          "_priority": 0,
+          "_remainingTurnPermil": 0,
+          "_startTurn": 0,
+          "_remainingTurn": 0,
+          "_isPositive": false
+        }
+      }
+    },
+    {
+      "type": {
+        "class": "TriggerEffectStatusEffect",
+        "ns": "Campus.InGame.Exam",
+        "asm": "Assembly-CSharp"
+      },
+      "data": {
+        "_isTurnLimited": false,
+        "_turn": -1,
+        "_isPassingTurnStart": true,
+        "_uid": 5,
+        "_overrideType": 31,
+        "_isItemDirectEnchant": true,
+        "_startEnchantOriginId": "",
+        "_startEnchantOriginLevel": 0,
+        "_startEnchantOwnerId": "",
+        "_startEnchantOriginType": 0,
+        "_trigger": {
+          "_id": "e_trigger-exam_start_turn-lesson_vocal",
+          "_phaseValueList": [],
+          "_phaseTypeList": [
+            4
+          ]
+        },
+        "_effectList": [
+          {
+            "_id": "e_effect-exam_lesson_value_multiple-0500-01",
+            "_effectType": 39,
+            "_effectValue1": 500,
+            "_effectValue2": 0,
+            "_effectCount": 0,
+            "_judgeTargetIndex": 0,
+            "_effectTurn": 1,
+            "_targetProduceCardId": "",
+            "_targetUpgradeCount": 0,
+            "_cardSearchId": "",
+            "_cardSearchId2": "",
+            "_pickCountReferenceProduceCardSearchId": "",
+            "_movePositionType": 0,
+            "_pickRangeType": 0,
+            "_pickCount": 0,
+            "_pickCountMin": 0,
+            "_pickCountMax": 0,
+            "_pickCountType": 0,
+            "_pickCountReferenceProduceCardSearchId2": "",
+            "_pickRangeType2": 0,
+            "_pickCountMin2": 0,
+            "_pickCountMax2": 0,
+            "_pickCountType2": 0,
+            "_chainEffectId": "",
+            "_chainEffectIdList": [],
+            "_statusEnchantId": "",
+            "_targetExamEffectType": 0,
+            "_effectGroupIdList": [
+              "effect_group-visible-exam_lesson_value_multiple-000"
+            ],
+            "_cardGrowEffectIdList": []
+          }
+        ],
+        "_turnCount": 0,
+        "_phaseCountDictionary": {
+          "_list": []
+        },
+        "_limitCount": 2,
+        "_limitCountInTurn": -1,
+        "_limitCountInTurnRemain": -1,
+        "_statusEnchantId": "enchant-p_item_effect_00-3-059-0-enc01",
+        "_fromExamEffectIdList": [],
+        "_descriptionReactiveDataTypeList": [],
+        "_descriptionReactiveDataTextList": [],
+        "_originType": 1,
+        "_isFromEnchantEffect": false,
+        "_isEncoreEnchant": false,
+        "_triggerItem": {
+          "_id": "pitem_00-3-059-0",
+          "_fireCount": 1,
+          "_reactionCount": 0,
+          "_itemType": 1,
+          "_parentCustomItemIds": []
+        },
+        "_triggerDrink": {
+          "_id": ""
+        },
+        "_triggerCard": null,
+        "_triggerGimmickGroup": {
+          "_id": "",
+          "_gimmickEffect": {
+            "_effectId": ""
+          },
+          "_gimmickTrigger": {
+            "_id": "",
+            "_phaseValueList": [],
+            "_phaseTypeList": []
+          },
+          "_priority": 0,
+          "_remainingTurnPermil": 0,
+          "_startTurn": 0,
+          "_remainingTurn": 0,
+          "_isPositive": false
+        }
+      }
+    },
+    {
+      "type": {
+        "class": "TriggerEffectStatusEffect",
+        "ns": "Campus.InGame.Exam",
+        "asm": "Assembly-CSharp"
+      },
+      "data": {
+        "_isTurnLimited": false,
+        "_turn": -1,
+        "_isPassingTurnStart": true,
+        "_uid": 6,
+        "_overrideType": 31,
+        "_isItemDirectEnchant": true,
+        "_startEnchantOriginId": "",
+        "_startEnchantOriginLevel": 0,
+        "_startEnchantOwnerId": "",
+        "_startEnchantOriginType": 0,
+        "_trigger": {
+          "_id": "e_trigger-exam_start_turn-lesson_dance",
+          "_phaseValueList": [],
+          "_phaseTypeList": [
+            4
+          ]
+        },
+        "_effectList": [
+          {
+            "_id": "e_effect-exam_review-0002",
+            "_effectType": 31,
+            "_effectValue1": 2,
+            "_effectValue2": 0,
+            "_effectCount": 0,
+            "_judgeTargetIndex": 0,
+            "_effectTurn": 0,
+            "_targetProduceCardId": "",
+            "_targetUpgradeCount": 0,
+            "_cardSearchId": "",
+            "_cardSearchId2": "",
+            "_pickCountReferenceProduceCardSearchId": "",
+            "_movePositionType": 0,
+            "_pickRangeType": 0,
+            "_pickCount": 0,
+            "_pickCountMin": 0,
+            "_pickCountMax": 0,
+            "_pickCountType": 0,
+            "_pickCountReferenceProduceCardSearchId2": "",
+            "_pickRangeType2": 0,
+            "_pickCountMin2": 0,
+            "_pickCountMax2": 0,
+            "_pickCountType2": 0,
+            "_chainEffectId": "",
+            "_chainEffectIdList": [],
+            "_statusEnchantId": "",
+            "_targetExamEffectType": 0,
+            "_effectGroupIdList": [
+              "effect_group-visible-exam_review-000"
+            ],
+            "_cardGrowEffectIdList": []
+          },
+          {
+            "_id": "e_effect-exam_stamina_recover_fix-0001",
+            "_effectType": 28,
+            "_effectValue1": 1,
+            "_effectValue2": 0,
+            "_effectCount": 0,
+            "_judgeTargetIndex": 0,
+            "_effectTurn": 0,
+            "_targetProduceCardId": "",
+            "_targetUpgradeCount": 0,
+            "_cardSearchId": "",
+            "_cardSearchId2": "",
+            "_pickCountReferenceProduceCardSearchId": "",
+            "_movePositionType": 0,
+            "_pickRangeType": 0,
+            "_pickCount": 0,
+            "_pickCountMin": 0,
+            "_pickCountMax": 0,
+            "_pickCountType": 0,
+            "_pickCountReferenceProduceCardSearchId2": "",
+            "_pickRangeType2": 0,
+            "_pickCountMin2": 0,
+            "_pickCountMax2": 0,
+            "_pickCountType2": 0,
+            "_chainEffectId": "",
+            "_chainEffectIdList": [],
+            "_statusEnchantId": "",
+            "_targetExamEffectType": 0,
+            "_effectGroupIdList": [
+              "effect_group-visible-stamina_recover_fix-000"
+            ],
+            "_cardGrowEffectIdList": []
+          }
+        ],
+        "_turnCount": 0,
+        "_phaseCountDictionary": {
+          "_list": []
+        },
+        "_limitCount": 2,
+        "_limitCountInTurn": -1,
+        "_limitCountInTurnRemain": -1,
+        "_statusEnchantId": "enchant-p_item_effect_02-3-057-0-enc01",
+        "_fromExamEffectIdList": [],
+        "_descriptionReactiveDataTypeList": [],
+        "_descriptionReactiveDataTextList": [],
+        "_originType": 1,
+        "_isFromEnchantEffect": false,
+        "_isEncoreEnchant": false,
+        "_triggerItem": {
+          "_id": "pitem_02-3-057-0",
+          "_fireCount": 0,
+          "_reactionCount": 0,
+          "_itemType": 1,
+          "_parentCustomItemIds": []
+        },
+        "_triggerDrink": {
+          "_id": ""
+        },
+        "_triggerCard": null,
+        "_triggerGimmickGroup": {
+          "_id": "",
+          "_gimmickEffect": {
+            "_effectId": ""
+          },
+          "_gimmickTrigger": {
+            "_id": "",
+            "_phaseValueList": [],
+            "_phaseTypeList": []
+          },
+          "_priority": 0,
+          "_remainingTurnPermil": 0,
+          "_startTurn": 0,
+          "_remainingTurn": 0,
+          "_isPositive": false
+        }
+      }
+    },
+    {
+      "type": {
+        "class": "LessonParameterMultipleStatusEffect",
+        "ns": "Campus.InGame.Exam",
+        "asm": "Assembly-CSharp"
+      },
+      "data": {
+        "_isTurnLimited": true,
+        "_turn": 1,
+        "_isPassingTurnStart": true,
+        "_uid": 8,
+        "_value": 500
+      }
+    },
+    {
+      "type": {
+        "class": "TriggerEffectStatusEffect",
+        "ns": "Campus.InGame.Exam",
+        "asm": "Assembly-CSharp"
+      },
+      "data": {
+        "_isTurnLimited": false,
+        "_turn": -1,
+        "_isPassingTurnStart": true,
+        "_uid": 9,
+        "_overrideType": 31,
+        "_isItemDirectEnchant": false,
+        "_startEnchantOriginId": "p_memory_skill-common-hatsuboshi_idol_festival-p_trigger-start_audition-for_hif_memory-exam_status_enchant-exam_turn_timer-exam_status_enchant-01-056",
+        "_startEnchantOriginLevel": 1,
+        "_startEnchantOwnerId": "47d73ff7-f2af-4ca5-97a0-7764ac833e39",
+        "_startEnchantOriginType": 4,
+        "_trigger": {
+          "_id": "e_trigger-exam_card_play_after-p_card_search-target-p_card-02-act-2_062-for_hif_memory-0_1",
+          "_phaseValueList": [],
+          "_phaseTypeList": [
+            3
+          ]
+        },
+        "_effectList": [
+          {
+            "_id": "e_effect-exam_playable_value_add-01",
+            "_effectType": 14,
+            "_effectValue1": 0,
+            "_effectValue2": 0,
+            "_effectCount": 1,
+            "_judgeTargetIndex": 0,
+            "_effectTurn": 0,
+            "_targetProduceCardId": "",
+            "_targetUpgradeCount": 0,
+            "_cardSearchId": "",
+            "_cardSearchId2": "",
+            "_pickCountReferenceProduceCardSearchId": "",
+            "_movePositionType": 0,
+            "_pickRangeType": 0,
+            "_pickCount": 0,
+            "_pickCountMin": 0,
+            "_pickCountMax": 0,
+            "_pickCountType": 0,
+            "_pickCountReferenceProduceCardSearchId2": "",
+            "_pickRangeType2": 0,
+            "_pickCountMin2": 0,
+            "_pickCountMax2": 0,
+            "_pickCountType2": 0,
+            "_chainEffectId": "",
+            "_chainEffectIdList": [],
+            "_statusEnchantId": "",
+            "_targetExamEffectType": 0,
+            "_effectGroupIdList": [
+              "effect_group-visible-exam_playable_value_add-000"
+            ],
+            "_cardGrowEffectIdList": []
+          }
+        ],
+        "_turnCount": 0,
+        "_phaseCountDictionary": {
+          "_list": []
+        },
+        "_limitCount": 2,
+        "_limitCountInTurn": -1,
+        "_limitCountInTurnRemain": -1,
+        "_statusEnchantId": "enchant-p_ef-hif_memory-p_card-02-act-2_062-enc01",
+        "_fromExamEffectIdList": [],
+        "_descriptionReactiveDataTypeList": [],
+        "_descriptionReactiveDataTextList": [],
+        "_originType": 1,
+        "_isFromEnchantEffect": true,
+        "_isEncoreEnchant": false,
+        "_triggerItem": {
+          "_id": "",
+          "_fireCount": 0,
+          "_reactionCount": 0,
+          "_itemType": 0,
+          "_parentCustomItemIds": []
+        },
+        "_triggerDrink": {
+          "_id": ""
+        },
+        "_triggerCard": null,
+        "_triggerGimmickGroup": {
+          "_id": "",
+          "_gimmickEffect": {
+            "_effectId": ""
+          },
+          "_gimmickTrigger": {
+            "_id": "",
+            "_phaseValueList": [],
+            "_phaseTypeList": []
+          },
+          "_priority": 0,
+          "_remainingTurnPermil": 0,
+          "_startTurn": 0,
+          "_remainingTurn": 0,
+          "_isPositive": false
+        }
+      }
+    }
+  ],
+  "idol_status": {
+    "_currentType": 0,
+    "_currentStep": 0
+  },
+  "drinks": [
+    {
+      "_id": "pdrink_02-3-010"
+    },
+    {
+      "_id": "pdrink_02-3-007"
+    }
+  ],
+  "items": [
+    {
+      "_id": "customize_pitem-02-04-3-002_00-04-2-002_02-02-1-001_00-04-4-003",
+      "_fireCount": 1,
+      "_reactionCount": 1,
+      "_itemType": 2,
+      "_parentCustomItemIds": [
+        "customize_pitem-02-04-3-002_00-04-2-002_02-02-1-001",
+        "customize_pitem-02-04-3-002"
+      ]
+    },
+    {
+      "_id": "pitem_02-3-076-0",
+      "_fireCount": 0,
+      "_reactionCount": 0,
+      "_itemType": 1,
+      "_parentCustomItemIds": []
+    },
+    {
+      "_id": "pitem_00-3-265-0",
+      "_fireCount": 20,
+      "_reactionCount": 20,
+      "_itemType": 1,
+      "_parentCustomItemIds": []
+    },
+    {
+      "_id": "pitem_00-3-059-0",
+      "_fireCount": 1,
+      "_reactionCount": 0,
+      "_itemType": 1,
+      "_parentCustomItemIds": []
+    },
+    {
+      "_id": "pitem_02-3-057-0",
+      "_fireCount": 0,
+      "_reactionCount": 0,
+      "_itemType": 1,
+      "_parentCustomItemIds": []
+    },
+    {
+      "_id": "pitem_02-3-120-0",
+      "_fireCount": 2,
+      "_reactionCount": 2,
+      "_itemType": 1,
+      "_parentCustomItemIds": []
+    },
+    {
+      "_id": "pitem_02-3-269-0",
+      "_fireCount": 1,
+      "_reactionCount": 0,
+      "_itemType": 1,
+      "_parentCustomItemIds": []
+    }
+  ],
+  "supports": [
+    {
+      "_supportCardId": "s_card-3-0010",
+      "_filterParameterType": 1,
+      "_cardSearchId": "p_card_search-hand",
+      "_produceCardUpgradePermil": 70
+    },
+    {
+      "_supportCardId": "s_card-3-0029",
+      "_filterParameterType": 2,
+      "_cardSearchId": "p_card_search-hand",
+      "_produceCardUpgradePermil": 61
+    },
+    {
+      "_supportCardId": "s_card-3-0050",
+      "_filterParameterType": 2,
+      "_cardSearchId": "p_card_search-hand",
+      "_produceCardUpgradePermil": 61
+    },
+    {
+      "_supportCardId": "s_card-3-0034",
+      "_filterParameterType": 1,
+      "_cardSearchId": "p_card_search-hand",
+      "_produceCardUpgradePermil": 74
+    },
+    {
+      "_supportCardId": "s_card-3-0040",
+      "_filterParameterType": 2,
+      "_cardSearchId": "p_card_search-hand",
+      "_produceCardUpgradePermil": 70
+    },
+    {
+      "_supportCardId": "s_card-3-0069",
+      "_filterParameterType": 2,
+      "_cardSearchId": "p_card_search-hand",
+      "_produceCardUpgradePermil": 74
+    }
+  ],
+  "turn_used_supports": [
+    "s_card-3-0010"
+  ],
+  "current_parameter_type": 1,
+  "engine_admitted": false,
+  "omitted": [
+    "random",
+    "hidden-zone-order",
+    "native-future-attributes",
+    "NPC-future-scores",
+    "private-logs",
+    "current-turn-draw-history",
+    "raw-save-fingerprint"
+  ],
+  "public_sha256": "bfa79187537c6daa5cad4e8dd8adb872ea53c3b501ae32b34150761988cfc8aa"
+}

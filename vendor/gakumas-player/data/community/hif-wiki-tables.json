@@ -1,0 +1,2020 @@
+{
+  "url": "https://seesaawiki.jp/gakumasu/d/H.I.F",
+  "title": "H.I.F - 学園アイドルマスターwiki (学マスwiki)",
+  "tables": [
+    {
+      "index": 10,
+      "rows": [
+        [
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 3
+          },
+          {
+            "text": "スター性重視の公開レッスン",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "通常の公開レッスン",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "非SP",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "SP",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "非SP",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "SP",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "選抜試験2日目",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "選抜試験4日目",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "スター性",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "20",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "30",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "5",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "10",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "選択したパラメータ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "50",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "60",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "60",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "80",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "サブパラメータ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "10",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "20",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "20",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "50",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "Pポイント",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "30",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "30",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "選抜試験9日目",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "選抜試験11日目",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "スター性",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "20",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "30",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "5",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "10",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "選択したパラメータ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "70",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "80",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "80",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "100",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "サブパラメータ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "10",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "20",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "30",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "60",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "Pポイント",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "30",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "30",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "選抜試験15日目",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "選抜試験18日目",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "スター性",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "20",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "30",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "5",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "10",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "選択したパラメータ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "90",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "100",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "100",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "120",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "サブパラメータ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "10",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "20",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "40",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "70",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "Pポイント",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "30",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "30",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "本戦2日目",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "本戦5日目",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "スター性",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "20",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "30",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "5",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "10",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "選択したパラメータ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "110",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "120",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "120",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "140",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "サブパラメータ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "10",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "20",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "50",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "80",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "Pポイント",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "50",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "50",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ]
+      ]
+    },
+    {
+      "index": 12,
+      "rows": [
+        [
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "選抜試験",
+            "colspan": 4,
+            "rowspan": 1
+          },
+          {
+            "text": "本戦",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "日",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "3",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "6",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "10",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "17",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "1",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "4",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "獲得パラメータ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "120",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "150",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "180",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ]
+      ]
+    },
+    {
+      "index": 13,
+      "rows": [
+        [
+          {
+            "text": "",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "選抜試験3,6日目",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "選抜試験10,17日目、本戦1,4日目",
+            "colspan": 3,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "選択コスト",
+            "colspan": 1,
+            "rowspan": 3
+          },
+          {
+            "text": "体力-5",
+            "colspan": 1,
+            "rowspan": 2
+          },
+          {
+            "text": "【おすすめ効果A】関係のスキルカードを",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "選択して獲得",
+            "colspan": 1,
+            "rowspan": 2
+          },
+          {
+            "text": "トラブルカード以外のスキルカードを選択して",
+            "colspan": 1,
+            "rowspan": 2
+          },
+          {
+            "text": "異なる【おすすめ効果A】関係のスキルカードに",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "セレクトチェンジ",
+            "colspan": 1,
+            "rowspan": 2
+          }
+        ],
+        [
+          {
+            "text": "【おすすめ効果B】関係のスキルカードを",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "異なる【おすすめ効果B】関係のスキルカードに",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "トラブル追加（眠気獲得）",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "トラブルカード以外のスキルカードを選択して異なるスキルカードにセレクトチェンジ",
+            "colspan": 5,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "備考",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "※「選択して獲得」の場合、必ず未強化の状態で獲得する。",
+            "colspan": 5,
+            "rowspan": 1
+          }
+        ]
+      ]
+    },
+    {
+      "index": 14,
+      "rows": [
+        [
+          {
+            "text": "選択コスト",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "得られる効果",
+            "colspan": 4,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "Pポイント-50",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "最大体力の60%分回復",
+            "colspan": 1,
+            "rowspan": 3
+          },
+          {
+            "text": "Pドリンクを選択して獲得",
+            "colspan": 1,
+            "rowspan": 3
+          },
+          {
+            "text": "強化済みのスキルカードを選択して獲得",
+            "colspan": 1,
+            "rowspan": 2
+          },
+          {
+            "text": "スキルカードを選択して獲得",
+            "colspan": 1,
+            "rowspan": 3
+          }
+        ],
+        [
+          {
+            "text": "トラブル追加（眠気獲得）",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "なし",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ]
+      ]
+    },
+    {
+      "index": 15,
+      "rows": [
+        [
+          {
+            "text": "スキルカード",
+            "colspan": 1,
+            "rowspan": 2
+          },
+          {
+            "text": "R",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "R+",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "SR",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "SR+",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "SSR",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "SSR+",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "100",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "50",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "110",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "100",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "150",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "Pドリンク",
+            "colspan": 1,
+            "rowspan": 2
+          },
+          {
+            "text": "R",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "SR",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "SSR",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "50",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "75",
+            "colspan": 2,
+            "rowspan": 1
+          },
+          {
+            "text": "100",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "強化＆削除",
+            "colspan": 1,
+            "rowspan": 2
+          },
+          {
+            "text": "1回目",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "2回目",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "3回目",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "4回目",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "5回目",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "6回目",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "100",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "125",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "150",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "175",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "200",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "250",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ]
+      ]
+    },
+    {
+      "index": 16,
+      "rows": [
+        [
+          {
+            "text": "日",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "公開レッスン",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "授業",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "おでかけ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "相談",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "差し入れ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "特別指導",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "1",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "2",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "☆",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "3",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "4",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "5",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "6",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "7",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "選抜試験1",
+            "colspan": 6,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "8",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "9",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "☆",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "10",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "11",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "12",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "13",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "選抜試験2",
+            "colspan": 6,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "14",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "15",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "☆",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "16",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "17",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "18",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "19",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "20",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "選抜試験3",
+            "colspan": 6,
+            "rowspan": 1
+          }
+        ]
+      ]
+    },
+    {
+      "index": 17,
+      "rows": [
+        [
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "ターン数",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "突破ライン(目安)",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "選抜試験1",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "10",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "6,100",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "選抜試験2",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "12",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "50,000",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "選抜試験3",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "12",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "137,000",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ]
+      ]
+    },
+    {
+      "index": 29,
+      "rows": [
+        [
+          {
+            "text": "日",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "公開レッスン",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "授業",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "おでかけ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "相談",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "差し入れ",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "特別指導",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "1",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "2",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "☆",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "3",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "4",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "5",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "6",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "○",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "当日",
+            "colspan": 1,
+            "rowspan": 3
+          },
+          {
+            "text": "ラウンド1",
+            "colspan": 6,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "インターバル",
+            "colspan": 6,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "ラウンド2",
+            "colspan": 6,
+            "rowspan": 1
+          }
+        ]
+      ]
+    },
+    {
+      "index": 31,
+      "rows": [
+        [
+          {
+            "text": "H.I.F応援棒（色）",
+            "colspan": 1,
+            "rowspan": 1
+          },
+          {
+            "text": "試験開始時、・山札にあるスキルカードが22枚になるように、ランダムな名前に「基本」を含むスキルカードを、山札のランダムな位置に生成",
+            "colspan": 1,
+            "rowspan": 1
+          }
+        ],
+        [
+          {
+            "text": "※応援棒の「色」は、Pアイドルのおすすめ効果によって変わる(効果は変わらない)。好調：紫、集中：緑、好印象：黄、やる気：赤、強気：青、全力：桃※生成されるのは先述したカードのみ(『アピールの基本』などは生成されない)。",
+            "colspan": 2,
+            "rowspan": 1
+          }
+        ]
+      ]
+    }
+  ]
+}

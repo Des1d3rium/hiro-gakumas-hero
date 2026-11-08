@@ -1,5 +1,5 @@
 ﻿# 一条命令装好实机游玩环境（Windows，PowerShell 版；步骤与 scripts/setup.sh 一一对应）：
-# KAA 子模块 → .venv（Python 3.10）→ 安装 → 生成 KAA 的 R.py → 下载 KAA 公开游戏数据 + 卡图索引 → 自检。
+# KAA 子模块 → .venv（Python 3.10）→ 安装 → 生成 KAA 的 R.py → 下载 KAA 公开游戏数据 + 卡图索引 → 模拟器主数据 → 自检。
 # 可重复跑，做过的步骤会跳过。需要 uv、git 和网络。
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 [-Regen] [-NoData]
@@ -20,7 +20,7 @@ function Need($cmd, $hint) { if (-not (Get-Command $cmd -ErrorAction SilentlyCon
 Need uv "https://docs.astral.sh/uv/getting-started/installation/"
 Need git "https://git-scm.com/download/win"
 
-Step "1/6 KAA 子模块 vendor/kaa"
+Step "1/7 KAA 子模块 vendor/kaa"
 if (Test-Path .git) {
     git submodule update --init vendor/kaa
     if ($LASTEXITCODE) { throw "拉取 vendor/kaa 失败" }
@@ -30,7 +30,7 @@ if (Test-Path .git) {
     Write-Host "不是 git 仓库，沿用已有的 vendor/kaa"
 }
 
-Step "2/6 虚拟环境 .venv（KAA 要求 Python 3.10）"
+Step "2/7 虚拟环境 .venv（KAA 要求 Python 3.10）"
 $Py = Join-Path $Root ".venv\Scripts\python.exe"
 if (-not (Test-Path $Py)) {
     uv venv --python 3.10 .venv
@@ -39,11 +39,11 @@ if (-not (Test-Path $Py)) {
     Write-Host "已有 .venv（$(& $Py --version)）"
 }
 
-Step "3/6 安装本仓库与 KAA（.[dev,play]）"
+Step "3/7 安装本仓库与 KAA（.[dev,play]）"
 uv pip install --python $Py -e ".[dev,play]"
 if ($LASTEXITCODE) { throw "安装失败" }
 
-Step "4/6 生成 KAA 的 kaa/tasks/R.py（KAA 的生成文件，子模块里没有）"
+Step "4/7 生成 KAA 的 kaa/tasks/R.py（KAA 的生成文件，子模块里没有）"
 if ($Regen -or -not (Test-Path vendor/kaa/kaa/tasks/R.py)) {
     $log = Join-Path $Root ".setup-make-resources.log"
     Push-Location vendor/kaa
@@ -56,7 +56,7 @@ if ($Regen -or -not (Test-Path vendor/kaa/kaa/tasks/R.py)) {
     Write-Host "已有 vendor/kaa/kaa/tasks/R.py（KAA 换版本后用 -Regen 重新生成）"
 }
 
-Step "5/6 KAA 公开游戏数据（game.db + 卡图 → resources/game_data，首次约 2–3 分钟，含卡图索引）"
+Step "5/7 KAA 公开游戏数据（game.db + 卡图 → resources/game_data，首次约 2–3 分钟，含卡图索引）"
 if ($NoData) {
     Write-Host "跳过（-NoData）"
 } else {
@@ -86,7 +86,15 @@ if not has_usable_baseline():
     if ($LASTEXITCODE) { throw "下载游戏数据失败" }
 }
 
-Step "6/6 自检"
+Step "6/7 模拟器主数据（社区公开 master，vertesan/gakumasu-diff 固定提交 → vendor/gakumas-player/data/master，首次约 216 MB / 2 分钟）"
+if ($NoData) {
+    Write-Host "跳过（-NoData）：模拟相关决策（轮间、饮料、考试预演）会退回社区规则"
+} else {
+    & $Py vendor/gakumas-player/scripts/fetch_master.py
+    if ($LASTEXITCODE) { Write-Host "  ⚠ 模拟器主数据没装好（网络？）：可稍后重跑本脚本；没有时模拟相关决策退回社区规则" }
+}
+
+Step "7/7 自检"
 @'
 import os
 import sys
@@ -106,6 +114,8 @@ if not os.environ.get("HIRO_DEVICE"):
     print("  ⚠ 开局前设 HIRO_DEVICE（adb / mumu / leidian / dmm），见 AGENTS.md「设备」。这些后端走 KAA 的设备工厂，作者没有实机验证过")
 from hiro.vision import ocr
 print(f"文字识别后端：{ocr.engine()}")
+import hiro.sim
+print(f"模拟器：引擎 {hiro.sim.ROOT}；主数据 {'已构建' if hiro.sim.master_ready() else '没有（模拟相关决策退回社区规则）'}")
 print("自检通过：入口和 KAA 都能导入")
 '@ | & $Py -
 if ($LASTEXITCODE) { throw "自检失败" }

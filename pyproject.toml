@@ -13,7 +13,7 @@ dependencies = ["numpy", "opencv-python-headless"]
 [project.optional-dependencies]
 dev = ["pytest"]
 # 实机游玩：操作层 / 识别层基于 KAA（kotones-auto-assistant，GPL-3.0），以 git 子模块 vendor/kaa 固定版本引入
-play = ["ksaa"]
+play = ["ksaa", "pyyaml"]  # pyyaml：只在构建模拟器主数据时用（vendor/gakumas-player/scripts/fetch_master.py）
 
 [tool.uv.sources]
 ksaa = { path = "vendor/kaa", editable = true }

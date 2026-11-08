@@ -1,0 +1,166 @@
+{
+  "schema_version": 3,
+  "name": "hif-prima-stella-policy",
+  "goal": "win_then_score",
+  "modules": {
+    "training": "skills/training/SKILL.md",
+    "drinks": "skills/drinks/SKILL.md",
+    "card_pick": "skills/card-pick/SKILL.md",
+    "card_remove": "skills/card-remove/SKILL.md",
+    "play_cards": "skills/play-cards/SKILL.md"
+  },
+  "phase_targets": {
+    "selection_1": {
+      "score": 14000,
+      "stamina_after": 21
+    },
+    "selection_2": {
+      "score": 150000,
+      "stamina_after": 21
+    },
+    "selection_3": {
+      "score": 390000,
+      "stamina_after": 0
+    },
+    "battle_round_1": {
+      "score": 700000,
+      "turns": 9
+    },
+    "battle_round_2": {
+      "score": 1500000
+    }
+  },
+  "deck_gates": {
+    "before_battle_round_1": {
+      "prefer_small_deck": true,
+      "optional_pick_policy": "only_core_or_compression"
+    },
+    "before_battle_round_2": {
+      "minimum_draw_pile": 22,
+      "gate_timing": "exam_start_before_initial_draw",
+      "verify_after_midpoint_swaps": true,
+      "source": "3.4.1 ExamStandBy -> ExamStartExam -> TurnStart -> TurnStartDraw; native/recovered-3.4.1/initialization-evidence.json. The old run2 25-card interpretation is contradicted for this branch.",
+      "avoid_generation_required": false,
+      "strategy": "Compare pollution versus interval resources; only enforce deck preservation if context.avoid_baton_generation is explicitly true."
+    },
+    "loop_target": {
+      "min_core_cards": 3,
+      "max_core_cards": 5
+    }
+  },
+  "drink_priority": [
+    "draw_chain",
+    "extra_action_chain",
+    "burst_window",
+    "stamina_safety",
+    "ordinary_parameter"
+  ],
+  "remove_gates": {
+    "keep_sleepiness_if_finisher_requires": true,
+    "never_remove_without_definition": true,
+    "preserve_draw_pile_22_at_exam_start": "conditional on explicitly chosen avoid_baton_generation plan; before initial draw, no implicit minus-three"
+  },
+  "battle_state_machine": [
+    "setup",
+    "start",
+    "loop",
+    "finish"
+  ],
+  "hard_stop_conditions": [
+    "unknown_card_definition",
+    "unknown_condition_or_effect",
+    "unreadable_hand_or_drink_state",
+    "deck_count_conflicts_with_hif_item_rule",
+    "action_would_submit_twice"
+  ],
+  "state_contract": {
+    "required": [
+      "phase",
+      "day",
+      "turn",
+      "stamina",
+      "p_points",
+      "stats",
+      "deck",
+      "hand",
+      "drinks",
+      "buffs",
+      "target_score"
+    ],
+    "card_identity": [
+      "instance",
+      "card_id",
+      "definition_id",
+      "upgrade",
+      "customization"
+    ],
+    "public_only_for_policy": true,
+    "required_by_event": {
+      "action_choice": [
+        "mode",
+        "position",
+        "offered_actions",
+        "resources"
+      ],
+      "battle_action": [
+        "hand",
+        "legal_actions",
+        "drinks",
+        "remaining_turns",
+        "state",
+        "score"
+      ],
+      "interval": [
+        "round1_settled_scores",
+        "hp",
+        "p_points",
+        "offered_services",
+        "deck"
+      ]
+    },
+    "required_is_legacy_superset": true
+  },
+  "evidence_policy": {
+    "community_guides": "prior_only",
+    "client_native_rules": "hard_rule_when_verified",
+    "synthetic_simulation": "implementation_check_only",
+    "live_observation": "required_for_action_commit"
+  },
+  "simulator_adapter": {
+    "implementation": "gakumas_sim/policies.py",
+    "status": "hand-coded adapter, not trained or globally optimal",
+    "search_depth": 4,
+    "use_public_turn_bonuses": false,
+    "rollout": {
+      "particles": 2,
+      "max_decisions_per_turn": 1,
+      "max_actions": 256,
+      "continuation_search_depth": 1,
+      "continuation_beam_width": 4
+    },
+    "beam_width": 8,
+    "leaf_weights": {
+      "hp": 0.5,
+      "shield": 0.12,
+      "focus": 2.0,
+      "motivation": 2.0,
+      "draw": 12.0,
+      "drink_reserve": 2.0,
+      "limited_action_reserve": 2.0
+    },
+    "drink_buy_values": {
+      "draw": 65,
+      "extra_action": 55,
+      "burst": 50,
+      "recovery": 30,
+      "ordinary": 5
+    },
+    "weights_provenance": "Uncalibrated heuristic defaults for synthetic fixtures; do not interpret as measured game values.",
+    "finisher_reserve": {
+      "horizon_turns": 3,
+      "shield_growth_per_motivation_turn": 1.0,
+      "authority": "Uncalibrated public-state estimate; one future shield gain per projected turn, no hidden deck or seed"
+    }
+  },
+  "phase_targets_authority": "High-rating community reference only; not pass thresholds or a calibrated win policy. Use gakumas_sim.hif for HIF pass/final budget."
+}
