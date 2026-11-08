@@ -161,7 +161,7 @@ def _refresh_price(fields: dict) -> int | None:
     return ref.get("price") if isinstance(ref, dict) else None
 
 
-def auto(device, *, free_slots, on_buy, max_refresh: int = 10, make_room=None) -> dict:
+def auto(device, *, free_slots, on_buy, max_refresh: int = 10, make_room=None, reserve_p: int = 0) -> dict:
     """一条命令做完补给：读货架 → 买没买过的高价值饮料 → P 够就刷新 → 再读，直到饮料栏满 / P 不够刷新 / 刷新到上限。
     同一进程里循环：识别图库只在第一次加载（约 2s），也省掉代理每步之间的往返。
     free_slots()：账本还剩几个空格；on_buy(name)：买成功后记账。任何一步失败就停下，带上已做的步骤。
@@ -169,6 +169,8 @@ def auto(device, *, free_slots, on_buy, max_refresh: int = 10, make_room=None) -
     from hiro.produce.ops import ocr_boxes
     from hiro.produce.shop import read_p
 
+    if type(reserve_p) is not int or reserve_p < 0:
+        raise ValueError("reserve_p 必须是非负整数")
     steps, refreshes, expect, predicted, tens = [], 0, None, None, 0  # expect：按价格记账算出的 P（核对画面读数用）
     while True:
         kind, img = _page(device)
@@ -182,7 +184,7 @@ def auto(device, *, free_slots, on_buy, max_refresh: int = 10, make_room=None) -
         want = [d for d in drinks if high_value(d.get("name")) and d.get("purchased") is False
                 and d.get("available", True) is True and d.get("index") is not None]
         budget = min(seen, expect) if seen is not None and expect is not None else seen
-        item = next((d for d in want if d.get("price") is not None and budget is not None and 0 <= d["price"] <= budget), None)
+        item = next((d for d in want if d.get("price") is not None and budget is not None and 0 <= d["price"] <= budget - reserve_p), None)
         if item is not None:
             if free_slots() <= 0 and make_room is not None:
                 dropped = make_room()
@@ -207,7 +209,7 @@ def auto(device, *, free_slots, on_buy, max_refresh: int = 10, make_room=None) -
         price = read if read is not None else predicted  # 读不到就用价目表推出来的
         if free_slots() <= 0:
             return {"ok": True, "stop": "饮料栏已满", "page": kind, "steps": steps, "p": p}
-        if price is None or p is None or p < price:
+        if price is None or p is None or p - reserve_p < price:
             return {"ok": True, "stop": f"P 不够刷新（P {p}，刷新 {price}）", "page": kind, "steps": steps, "p": p}
         if refreshes >= max_refresh:
             return {"ok": True, "stop": f"已刷新 {refreshes} 次（上限）", "page": kind, "steps": steps, "p": p}

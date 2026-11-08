@@ -187,26 +187,50 @@ SETTLE_POPUP_TAP = (360, 1170)  # 结算后活动弹窗底部按钮（1-e 代理
 INTERVAL_GO = (513, 1160)  # 「インターバル終了確認」右「本戦へ」（hiro.produce.interval 实测）
 
 
-def interval_end(device, timeout: float = 15.0) -> dict:
+def interval_end(device, timeout: float = 15.0, *, guarded: bool = False) -> dict:
     """轮间 → R2（使用者 2026-11-07：「終了」不做 OCR，直接点固定坐标；1-h 读成「X終了」没点上）。
     只在左上是「インターバル」时点；確認框用像素标题条判出现，点「本戦へ」后等标题消失。"""
     from hiro.produce import interval
     from hiro.produce.ops import ocr_boxes
     from hiro.vision.pages import dialog_header
 
+    def r2_transition(img):
+        from hiro.vision.hif import is_hif_exam, read_hif_exam
+        from hiro.vision.pages import classify_page
+        if dialog_header(img) is not None:
+            return False
+        if is_hif_exam(img):
+            fields = read_hif_exam(img)
+            return fields.get("finals_round") == 2 or (
+                fields.get("finals_round") is None and fields.get("remaining_turns") == 12)
+        page = classify_page(img)
+        # Briefing has no round number. Leaving verified interval into finals briefing establishes R2.
+        return bool(page and page[0] == "HIF_EXAM_BRIEFING" and page[1].get("finals") and page[1].get("complete"))
+
     if not interval.on_interval(device.screenshot(), ocr_boxes):
         return {"ok": False, "why": "左上不是「インターバル」，不点"}
     device.click(*BTN.SHOP_END)
     deadline = time.time() + 5
     while dialog_header(device.screenshot()) is None:
+        if guarded:
+            # Opt-in driver accepts only positively recognized R2 transition, not a missing title.
+            img = device.screenshot()
+            if r2_transition(img):
+                return {"ok": True, "direct_r2": True}
         if time.time() >= deadline:
             return {"ok": False, "why": "点了「終了」，5s 内没出确认框"}
         time.sleep(0.3)
+    if guarded:
+        boxes = ocr_boxes(device.screenshot())
+        labels = "".join(t for t, _, _ in boxes)
+        if "インターバル終了確認" not in labels or any(w in labels for w in START_DANGER + ("タイトルへ",)):
+            return {"ok": False, "why": "轮间结束确认框未核验"}
     device.click(*INTERVAL_GO)
     deadline = time.time() + timeout
     while time.time() < deadline:
         time.sleep(0.5)
-        if not interval.on_interval(device.screenshot(), ocr_boxes):
+        img = device.screenshot()
+        if r2_transition(img) if guarded else not interval.on_interval(img, ocr_boxes):
             return {"ok": True}
     return {"ok": False, "why": f"点了「本戦へ」，{timeout:.0f}s 后左上仍是「インターバル」"}
 
@@ -265,7 +289,9 @@ def result_next(boxes, dialog: bool):
 # 快速建可信 trace 库。只用免费 / 再挑戦チケット：确认框里有ジュエル、或是敗退的「プロデュース終了」框都不点。
 # 每轮最多 3 次（同 AGENTS.md 再挑戦上限）。计数存在 active.debug_retries_used，watch 重启不重来。
 DEBUG_RETRY_MAX = 3
-DEBUG_RETRY: dict = {"plan": None, "used": {}, "pending": None, "ending": None, "round": None}  # pending：{"round", "at", "confirmed"}；tick 每步从批次状态填 plan / used
+DEBUG_RETRY: dict = {"plan": None, "used": {}, "pending": None, "ending": None, "round": None,  # pending：{"round", "at", "confirmed"}；tick 每步从批次状态填 plan / used
+               "auto": False, "tickets": False, "auto_used": {}, "saved": None}  # auto：自动模式下普通敗退也点再挑戦（retry.on_defeat=auto）
+RETRY_FRAME_DIR = Path(__file__).resolve().parents[1] / "traces" / "retry-dialogs"  # 不带「無料」的敗退框存帧（校准用券那一行，不进仓库）
 DEBUG_RETRY_WAIT_S = 15.0  # 点了「再挑戦」后这么久内等确认框
 DEBUG_RETRY_RETAP_S = 2.0  # 点了确认框还在：隔这么久再点（不重复计数）
 RETRY_CONFIRM_WORDS = ("再挑戦する", "決定", "はい", "OK")
@@ -333,7 +359,8 @@ def debug_retry_step(boxes, dialog: bool, img=None):
     from hiro.produce import hif_buttons as BTN
 
     plan = DEBUG_RETRY["plan"]
-    if not plan:
+    auto = DEBUG_RETRY.get("auto")
+    if not plan and not auto:
         return None
     labels = ["".join(unicodedata.normalize("NFKC", t).split()) for t, _, _ in boxes]
     flat = "".join(labels)
@@ -353,6 +380,20 @@ def debug_retry_step(boxes, dialog: bool, img=None):
             raise HoldPage("debug 敗退框里有危险字样，不点")
         if (ending is not None and now - ending < DEBUG_RETRY_RETAP_S) or (pend is not None and pend["confirmed"] is not None):
             return "wait"
+        free = re.search(r"あと[1-9]\d*回無料", flat) is not None  # 「本日あと0回無料」是免费用完了
+        if not free:
+            save_retry_frame(img)
+        if not plan:
+            # 自动模式的普通敗退（没有 debug 计划）：免费次数直接用；要用券看 retry.tickets；用完 / 变灰停下，不点「プロデュース終了」
+            rnd = DEBUG_RETRY.get("round")
+            used = DEBUG_RETRY["auto_used"].get(rnd, 0) if rnd else DEBUG_RETRY_MAX
+            if not free and not DEBUG_RETRY.get("tickets"):
+                raise HoldPage("敗退再挑戦：没有免费次数，要用再挑戦チケット（retry.tickets 关），交给代理")
+            retry_at = _learned_xy("defeat_retry", _button(labels, boxes, ("再挑戦",)))
+            if used >= DEBUG_RETRY_MAX or retry_at is None or retry_exhausted(flat):
+                raise HoldPage(f"敗退再挑戦：本轮已用 {used} 次或按钮不可用，不点「プロデュース終了」，交给代理")
+            DEBUG_RETRY["pending"] = {"round": rnd, "at": now, "confirmed": now}
+            return "auto_defeat_retry", retry_at
         rnd = DEBUG_RETRY.get("round")
         used = DEBUG_RETRY["used"].get(rnd, 0) if rnd else DEBUG_RETRY_MAX
         retry_at = _learned_xy("defeat_retry", _button(labels, boxes, ("再挑戦",)))
@@ -404,6 +445,8 @@ def debug_retry_step(boxes, dialog: bool, img=None):
     if pend is not None:
         # 点了「再挑戦」、确认框还没出来，或确认后结果页还没退：别再点、也别点「次へ」
         return "wait" if pend["confirmed"] is None or now - pend["confirmed"] < DEBUG_RETRY_WAIT_S else None
+    if not plan:
+        return None  # 自动模式只在敗退框里再挑戦；结果页照常「次へ」（晋级就进下一步，敗退会弹再挑戦確認）
     if DEBUG_RETRY["used"].get(rnd, 0) >= min(plan.get(rnd, 0), DEBUG_RETRY_MAX):
         return None
     if "ジュエル" in flat:
@@ -414,6 +457,20 @@ def debug_retry_step(boxes, dialog: bool, img=None):
         return None  # 没有再挑戦按钮（免费 / 券都没了？）：照常「次へ」
     DEBUG_RETRY["pending"] = {"round": rnd, "at": now, "confirmed": None}
     return "debug_retry", BTN.RESULT_RETRY
+
+
+def save_retry_frame(img) -> None:
+    """不带「無料」的敗退再挑戦框存一帧（同一个框 30s 内只存一次）：拿来校准「再挑戦チケット 所持 N→N-1」那一行的读法。"""
+    if img is None or (DEBUG_RETRY.get("saved") and time.monotonic() - DEBUG_RETRY["saved"] < 30):
+        return
+    DEBUG_RETRY["saved"] = time.monotonic()
+    try:
+        import cv2
+
+        RETRY_FRAME_DIR.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(RETRY_FRAME_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}.png"), img)
+    except Exception as e:  # noqa: BLE001  存帧失败不影响流程
+        print(f"再挑戦框存帧失败：{e!r}", file=sys.stderr)
 
 
 RANK_WAIT_S = 5.0
@@ -1263,6 +1320,11 @@ def change(state, args, *, persist=None):
             raise ValueError("该局已记账，结果不一致")
     if not active or active["run"] != args.run:
         raise ValueError("局号与当前未结算局不符")
+    if cmd == "auto-resolve":
+        sys.path.insert(0, str(ROOT / "tools"))
+        from batch_driver import resolve
+
+        return resolve(active, args.outcome == "applied", args.note)
     if cmd == "deck-change":
         sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa")]
         from hiro.produce.veil_exam import apply_deck_change
@@ -1306,7 +1368,7 @@ def change(state, args, *, persist=None):
             out["log"] = ledger["log"]
         return out
     elif cmd in {"change-scan", "change-pick", "shop-scan", "shop-buy", "shop-refresh", "interval-end", "shop-auto", "drink-drop", "drink-overflow", "customize",
-                 "memory-abilities", "deck-sync"}:
+                 "memory-abilities", "deck-sync", "interval-recover"}:
         if active["phase"] != "playing":
             raise ValueError(f"{cmd} 只允许在 playing 阶段使用")
         sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa"), str(ROOT / "tools")]
@@ -1317,9 +1379,16 @@ def change(state, args, *, persist=None):
 
         ledger = active.get("ledger")
         device = connect("maatools")
+        if getattr(args, "driver_guarded", False):
+            from batch_runtime import GuardedDevice
+            device = GuardedDevice(device)
         try:
             if cmd == "change-scan":
                 return batch_change.scan(device, args.batch, args.run)
+            if cmd == "interval-recover":
+                from batch_runtime import GuardedDevice, recover
+
+                return recover(device if isinstance(device, GuardedDevice) else GuardedDevice(device), batch_rules.load())
             if cmd == "shop-scan":
                 return batch_shop.scan(device)
             if cmd == "deck-sync":
@@ -1355,7 +1424,7 @@ def change(state, args, *, persist=None):
                     persist()
                 return out
             if cmd == "interval-end":
-                return interval_end(device)
+                return interval_end(device, guarded=getattr(args, "driver_guarded", False))
             if cmd == "shop-refresh":
                 return batch_shop.refresh(device)
             if cmd in {"shop-auto", "shop-buy"} and ledger is not None:
@@ -1386,7 +1455,8 @@ def change(state, args, *, persist=None):
                     return None
 
                 free = (lambda: ledger["drinks"].count(None)) if ledger is not None else (lambda: 4)
-                out = batch_shop.auto(device, free_slots=free, on_buy=on_buy, max_refresh=args.max_refresh, make_room=make_room)
+                out = batch_shop.auto(device, free_slots=free, on_buy=on_buy, max_refresh=args.max_refresh, make_room=make_room,
+                                      reserve_p=getattr(args, "reserve_p", 0))
                 if out.get("ok") and ledger is not None and batch_rules.get("shop.deck_sync", True):
                     # 使用者 2026-11-07：退出商店 / 轮间前记账——补给完、按「終了」前整副牌组对账（相談在 R1 前，轮间在 R2 前）
                     where = {"interval": "R2 前（轮间）"}.get(out.get("page"), "R1 前（相談）")
@@ -1528,6 +1598,9 @@ def change(state, args, *, persist=None):
             if outcome["page"] != "home":
                 return outcome
         record = {"run": args.run, "result": args.result}
+        if active.get("driver") is not None:
+            # 自动模式的进度随本局存档（结算这一步自己的 pending 不带进去）
+            record["driver"] = {k: v for k, v in active["driver"].items() if k not in ("pending", "tries")}
         if active.get("ledger") is not None:
             record["ledger"] = active["ledger"]  # 本局账本（含逐条日志）随结算记录存档，复盘用（验证局 1-i 结算后账本丢了）
         if outcome and outcome.get("memories"):
@@ -1696,32 +1769,77 @@ EMPTY = {"seen": False}
 PREP = _env_flag("HIRO_WATCH_PREP", "prep.enabled")  # 前六周固定流程（使用者 2026-11-07），设 0 关掉
 
 
-def prep_step(path, state):
+def prep_step(path, state, *, guarded=False):
     sys.path[:0] = [str(ROOT / "tools")]
     import batch_prep
     from hiro.device import connect
     from hiro.produce.ops import ocr_boxes
 
     device = connect("maatools")
+    if guarded:
+        from batch_runtime import GuardedDevice
+        device = GuardedDevice(device)
     try:
         return batch_prep.handle(device, ocr_boxes, change, state, path.stem, state["active"]["run"],
                                  persist=lambda: save(path, state), log=lambda m: print(m, file=sys.stderr))
     except Exception as e:  # noqa: BLE001 —— 固定流程出错就按原样停下交给代理
+        if guarded:
+            raise  # 调度器保留 pending，不能在部分执行失败后继续点动画
         print(f"prep 失败：{e!r}", file=sys.stderr)
         return None
     finally:
         device.stop()
 
 
-def watch(path, run):
-    sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa")]
+def watch(path, run, *, auto=False):
+    sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa"), str(ROOT / "tools")]
     from hiro.loop import pause_flag
 
     last_idle = False
     holds: list[str] = []
     streak = {"reason": None, "since": 0.0}
+    todo: list[dict] = []  # 自动模式：锁里决定、锁外执行的命令（命令自己要拿批次锁）
+
+    def emit(line):
+        print(json.dumps({"t": round(time.time(), 2), **line}, ensure_ascii=False), flush=True)
+
+    def auto_rules():
+        rules = batch_rules.load()
+        if auto:
+            rules["driver"]["enabled"] = True
+        return rules
+
+    def run_todo():
+        """锁外跑自动命令（子进程，和代理敲的同一条命令），跑完回锁里核对、记进度；settle 开了下一局就补 playing / memory-load。"""
+        import batch_runtime as RT
+
+        while todo:
+            action = todo.pop(0)
+            out = RT.run_command(path.stem, action["run"], action)
+            with (STATE_DIR / ".lock").open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                state = json.loads(path.read_text(encoding="utf-8"))
+                ok = RT.finish_hold(state, action, out, lambda: save(path, state))
+                err = (state.get("active") or {}).get("driver", {}).get("error")
+                emit({"run": action["run"], "action": "auto", "command": action["command"], "ok": ok,
+                      **({"trust": out.get("trust")} if out.get("trust") else {}),
+                      **({} if ok else {"why": out.get("why"), "blocked": bool(err)})})
+                if not ok:
+                    todo.clear()
+                    return
+                if action["command"] == "settle":
+                    for nxt in RT.next_run(state, out, auto_rules()):
+                        RT.begin(state, nxt, lambda: save(path, state))
+                        todo.append(nxt)
+        HELD["reason"] = None
 
     def tick(advance):
+        alive = locked_tick(advance)
+        if todo:
+            run_todo()
+        return alive
+
+    def locked_tick(advance):
         nonlocal last_idle
         with (STATE_DIR / ".lock").open("a") as lock:
             try:
@@ -1740,6 +1858,11 @@ def watch(path, run):
 
             DEBUG_RETRY["plan"] = state.get("debug_retries")
             DEBUG_RETRY["used"] = dict(active.get("debug_retries_used") or {})
+            rules = auto_rules()
+            auto_on = bool(rules["driver"].get("enabled"))
+            DEBUG_RETRY["auto"] = auto_on and rules.get("retry", {}).get("on_defeat") == "auto"
+            DEBUG_RETRY["tickets"] = bool(rules.get("retry", {}).get("tickets"))
+            DEBUG_RETRY["auto_used"] = dict(active.get("retries_used") or {})
             try:
                 result = advance() if active.get("phase") == "playing" else None
             except MaaToolsEmptyFrame as e:
@@ -1759,6 +1882,12 @@ def watch(path, run):
                     HELD["prep"] = holds[-1]  # 同一停点只试一次固定流程
                     # 前六周固定流程（tools/batch_prep.py）：差し入れ / 相談 / 换卡 / 选饮料选卡，watch 自己做完不唤醒代理
                     done = prep_step(path, state)
+                    if done and "待补" in done and (auto_on or "饮料替换" in done):
+                        # 游戏里已经动了、账本没对上（如饮料替换后实读不符）：停在这里交给代理，不接着往下点。
+                        # 不开自动模式时，换卡的「账本待补」照旧只报不停（和合并 drive 之前一样）
+                        HELD["reason"] = f"账本待补：{done}"
+                        emit({"run": active.get("run"), "action": "hold", "reason": HELD["reason"]})
+                        return True
                     if done:
                         holds.clear()
                         if any(w in done for w in ("饮料", "技能卡", "换卡")):
@@ -1769,6 +1898,17 @@ def watch(path, run):
                 waited = time.monotonic() - streak["since"]
                 if (len(holds) >= HOLD_CONFIRM and len(set(holds[-HOLD_CONFIRM:])) == 1
                         and (not holds[-1].startswith("行动页") or waited >= ACTION_HOLD_S)):
+                    if auto_on and HELD["reason"] != holds[-1]:
+                        import batch_runtime as RT
+
+                        action = RT.plan_hold(state, holds[-1], rules, lambda: save(path, state), hold_reason=hold_reason)
+                        if action is not None and not action.get("blocked"):
+                            todo.append(action)  # 锁外执行（tick 返回前跑完，期间不点屏幕）
+                            holds.clear()
+                            return True
+                        if action is not None:
+                            emit({"run": active.get("run"), "action": "auto", "command": action["command"], "ok": False,
+                                  "why": action["blocked"], "blocked": True})
                     if not STAY:
                         raise
                     if HELD["reason"] != holds[-1]:
@@ -1790,7 +1930,13 @@ def watch(path, run):
             if result is not None:
                 kind, tap = result
                 extra = {}
-                if kind in ("debug_retry_confirm", "debug_defeat_retry") and DEBUG_RETRY["pending"] is not None \
+                if kind == "auto_defeat_retry" and DEBUG_RETRY["pending"] is not None and DEBUG_RETRY["pending"]["round"]:
+                    rnd = DEBUG_RETRY["pending"]["round"]
+                    used = active.setdefault("retries_used", {})
+                    used[rnd] = used.get(rnd, 0) + 1
+                    save(path, state)
+                    extra = {"round": int(rnd), "used": used[rnd]}
+                elif kind in ("debug_retry_confirm", "debug_defeat_retry") and DEBUG_RETRY["pending"] is not None \
                         and DEBUG_RETRY["pending"]["round"]:
                     rnd = DEBUG_RETRY["pending"]["round"]
                     used = active.setdefault("debug_retries_used", {})
@@ -1822,6 +1968,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--batch", required=True, help="当前对话批次 ID")
     sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("auto-resolve", help="watch 自动模式的一步没核验完（pending / error）：核对实机和账本后说明它生效了没有")
+    p.add_argument("run", type=int)
+    p.add_argument("outcome", choices=("applied", "not-applied"), help="applied = 那一步在游戏里已经生效；not-applied = 没发生")
+    p.add_argument("--note", required=True, help="核对依据（帧、账本、日志行）")
+    sub.add_parser("interval-recover", help="轮间：回血到 interval.target_hp（默认 10），核对体力和 P 消耗").add_argument("run", type=int)
     p = sub.add_parser("init")
     p.add_argument("total", type=int)
     p.add_argument("--debug-retries", help="debug：本战每局主动再挑戦几次「R1,R2」（如 2,1 = 打 3 次 R1、2 次 R2，攒 trace）")
@@ -1879,10 +2030,14 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_text in (("shop-scan", "相談 / 轮间：读货架上的饮料，标出高价值三种"),
                             ("shop-refresh", "相談 / 轮间：用 P 刷新货架（要ジュエル会取消）后重读")):  # fmt: skip
         sub.add_parser(name, help=help_text).add_argument("run", type=int)
-    sub.add_parser("interval-end", help="轮间主画面：固定像素点「終了」→「本戦へ」，等左上「インターバル」消失").add_argument("run", type=int)
+    p = sub.add_parser("interval-end", help="轮间主画面：固定像素点「終了」→「本戦へ」，等左上「インターバル」消失")
+    p.add_argument("run", type=int)
+    p.add_argument("--guarded", dest="driver_guarded", action="store_true", help="自动模式：核对确认框文字、只认明确的 R2 画面")
     p = sub.add_parser("shop-auto", help="相談 / 轮间：一条命令补给——买高价值饮料、P 够就刷新，直到饮料栏满 / P 不够（自动记账）")
     p.add_argument("run", type=int)
     p.add_argument("--max-refresh", type=int, default=10)
+    p.add_argument("--reserve-p", type=int, default=0, help="至少留下这么多 P 不花（买和刷新都算）")
+    p.add_argument("--guarded", dest="driver_guarded", action="store_true", help="自动模式：每次点击前查暂停旗标")
     p = sub.add_parser("shop-buy", help="相談 / 轮间：买第 INDEX 格的饮料（固定像素流程，自动记账）")
     p.add_argument("run", type=int)
     p.add_argument("--index", type=int, required=True)
@@ -1895,6 +2050,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--item", required=True, help="菜单项名（部分即可），如 成長追加、強気追加、制限削除")
     p.add_argument("--need-maxed", help="同名多张时：只选这一项已做满的那张，如 制限削除")
     p.add_argument("--where", help="记账时挑同名的哪一张：once=0|1, customized=0|1, origin=…（同 ledger-edit）")
+    p.add_argument("--guarded", dest="driver_guarded", action="store_true", help="自动模式：每次点击前查暂停旗标")
     p = sub.add_parser("deck-sync", help="相談 / 选行动页 / 轮间：打开牌组一览整副读一遍，和账本对账（漏记补上、强化按画面、多出只记）")
     p.add_argument("run", type=int)
     p.add_argument("--why", default="考前对账")
@@ -1908,6 +2064,7 @@ def build_parser() -> argparse.ArgumentParser:
         p = sub.add_parser(cmd)
         if cmd == "watch":
             p.add_argument("run", type=int, nargs="?", help="省略局号时跟随整个批次")
+            p.add_argument("--auto", action="store_true", help="自动模式（同 conf 的 driver.enabled=true）：常规停点自己下命令，不叫代理")
         else:
             p.add_argument("run", type=int)
         if cmd in {"complete", "settle"}:
@@ -1931,7 +2088,7 @@ def main():
     path = STATE_DIR / f"{args.batch}.json"
     try:
         if args.command == "watch":
-            return watch(path, args.run)
+            return watch(path, args.run, auto=args.auto)
         with (STATE_DIR / ".lock").open("a") as lock:
             # watch 每步（含前六周固定流程、几秒到十几秒）都拿着这把锁；原来只等 2s，等不到报 Errno 35，
             # 代理当成命令静默没生效（1-d `ledger-edit --drink-set`）。改成最多等 LOCK_WAIT 秒，等不到明确说是 watch 占着

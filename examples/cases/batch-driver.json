@@ -1,0 +1,41 @@
+[
+  {
+    "name": "R1 再挑戦后晋级：轮间回血、两项客制化、购物、进 R2，考完结算",
+    "state": {"total": 1, "completed": [], "preflight": {"idol": "i_card-skin-hmsz-3-016"},
+              "active": {"run": 1, "phase": "playing", "ledger": {"memory": "synthetic"}}},
+    "steps": [
+      {"hold": "考试中：ターン目", "expected": "exam", "result": {"ok": true, "rank": 2}},
+      {"hold": "考试中：ターン目", "expected": "exam", "result": {"ok": true, "rank": 1}},
+      {"hold": "轮间客制化：インターバル", "expected": "interval-recover", "result": {"ok": true}},
+      {"hold": "轮间客制化：インターバル", "expected": "customize", "result": {"ok": true}},
+      {"hold": "轮间客制化：インターバル", "expected": "customize", "result": {"ok": true}},
+      {"hold": "轮间客制化：インターバル", "expected": "shop-auto", "result": {"ok": true}},
+      {"hold": "轮间客制化：インターバル", "expected": "interval-end", "result": {"ok": true}},
+      {"hold": "考试中：ターン目", "expected": "exam", "result": {"ok": true, "rank": 1}},
+      {"hold": "结算回忆：獲得可能スキルカード", "expected": "settle"}
+    ]
+  },
+  {
+    "name": "购买途中进程退出：重启后不重做，交给代理核对",
+    "state": {"total": 1, "completed": [], "preflight": {"idol": "i_card-skin-hmsz-3-016"},
+              "active": {"run": 1, "phase": "playing", "ledger": {"memory": "synthetic"},
+                         "driver": {"stage": "interval", "recovered": true, "customized": [0, 1], "pending": {"command": "shop-auto", "run": 1}}}},
+    "steps": [{"hold": "轮间客制化：インターバル", "expected": "agent"}]
+  },
+  {
+    "name": "考试途中进程退出：同一停点重跑 exam（考试记忆续跑）",
+    "state": {"total": 1, "completed": [], "preflight": {"idol": "i_card-skin-hmsz-3-016"},
+              "active": {"run": 1, "phase": "playing", "ledger": {"memory": "synthetic"},
+                         "driver": {"stage": "r2", "pending": {"command": "exam", "round": 2, "deck": null, "run": 1}}}},
+    "steps": [{"hold": "考试中：ターン目", "expected": "exam", "result": {"ok": true, "rank": 1}},
+              {"hold": "结算回忆：獲得可能スキルカード", "expected": "settle"}]
+  },
+  {
+    "name": "不认识的停点和没考完 R2 的结算页都交给代理",
+    "state": {"total": 1, "completed": [], "preflight": {"idol": "i_card-skin-hmsz-3-016"},
+              "active": {"run": 1, "phase": "playing", "ledger": {"memory": "synthetic"}}},
+    "steps": [{"hold": "换卡阶段 1：チェンジで獲得するスキルカードを選んでください", "expected": "agent"},
+              {"hold": "确认框：キャンセル", "expected": "agent"},
+              {"hold": "结算回忆：獲得可能スキルカード", "expected": "agent"}]
+  }
+]

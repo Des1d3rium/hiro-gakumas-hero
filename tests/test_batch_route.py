@@ -574,6 +574,9 @@ RETRY_DIALOG = [_b("再挑戦確認", 140, 420), _b("再挑戦チケット", 300
 def debug_retry(monkeypatch, tmp_path):
     clock = {"t": 1000.0}
     monkeypatch.setattr(B, "DEBUG_XY_FILE", tmp_path / "xy.json")  # 学到的坐标不写进实机 reports/
+    monkeypatch.setattr(B, "RETRY_FRAME_DIR", tmp_path / "frames")  # 敗退框存帧不写进 traces/
+    monkeypatch.setitem(B.DEBUG_RETRY, "saved", None)
+    monkeypatch.setitem(B.DEBUG_RETRY, "auto", False)
     monkeypatch.setitem(B.DEBUG_RETRY, "ending", None)
     monkeypatch.setitem(B.DEBUG_RETRY, "round", None)
     monkeypatch.setattr(B.time, "monotonic", lambda: clock["t"])
@@ -646,10 +649,14 @@ def test_debug_defeat_retries_until_limit_then_ends(debug_retry):
 
 
 def test_debug_defeat_grey_retry_ends(debug_retry):
-    """再挑戦次数用完（角标「あと0回」）：点「プロデュース終了」；之后的确认框没有危险字样才点右侧。"""
+    """次数角标「あと0回」（免费 / 券用完）：点「プロデュース終了」；之后的确认框没有危险字样才点右侧。
+    不按按钮颜色判：可点的「再挑戦」本来就是白底（walkthrough/17-retry-confirm.png），灰帧不再算用完。"""
     B.debug_retry_step(RESULT_R1, dialog=False)
     B.DEBUG_RETRY["pending"] = None
-    assert B.debug_retry_step(DEFEAT + [_b("あと0回", 513, 1250)], dialog=True)[0] == "debug_defeat_end"
+    assert B.debug_retry_step(DEFEAT, dialog=True, img=_frame((128, 128, 128)))[0] == "debug_defeat_retry"
+    B.DEBUG_RETRY["pending"] = None
+    debug_retry["t"] += 20
+    assert B.debug_retry_step(DEFEAT + [_b("あと0回", 520, 1210)], dialog=True)[0] == "debug_defeat_end"
     debug_retry["t"] += 3
     confirm = [_b("プロデュース終了確認", 200, 420), _b("キャンセル", 200, 860), _b("終了する", 520, 860)]
     assert B.debug_retry_step(confirm, dialog=True) == ("debug_defeat_end_confirm", (520, 860))

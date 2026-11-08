@@ -14,6 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PATH = ROOT / "conf" / "batch-rules.json"
 
 DEFAULTS: dict = {
+    "driver": {  # watch 自动模式（watch --auto 也能临时打开）：常规停点（考试 / 轮间 / 结算回忆）自己下命令，不叫代理
+        "enabled": False,
+        "max_refresh": 3,  # 轮间 shop-auto 最多刷新几次
+    },
     "watch": {
         "tap_gap": 0.2,  # 连点间隔（秒）；实测 0.2 → 实际约 0.39s/下，0.4 → 约 0.59s/下
         "stay": True,  # 停点不退出，画面变了自动继续
@@ -26,6 +30,7 @@ DEFAULTS: dict = {
         #                         「プロデュース開始」；true = 每局都自动；false = 每局都由代理核对
     },
     "prep": {  # 前六周（R1 之前）固定流程
+        "auto_drink_replace": False,
         "enabled": True,
         "action": "差し入れ",  # 行动页选这个
         "last_day": "相談",  # 只剩这个时（最后一天）选它
@@ -45,6 +50,9 @@ DEFAULTS: dict = {
         "exam_briefing": True,  # 考前说明页（優勝条件）点 (360,300) 进入考试
     },
     "interval": {  # 轮间（代理按这里执行）
+        "recover_enabled": True,  # 只有自动模式会用：轮间先回血再客制化 / 购物（使用者 2026-11-08）
+        "target_hp": 10,  # VEIL 回到这么多体力（使用者 2026-11-08 定 10，和考试体力闸保底线 HIRO_VEIL_HP_FLOOR 一致）
+        "reserve_p": 0,  # 回血后至少留下的 P；先回血再购物，不让刷新吃掉回血钱
         "customize": [
             {"card": "インフルエンサー+", "item": "強気追加"},
             {"card": "巻き返し+", "item": "成長追加", "need_maxed": "制限削除"},
@@ -59,7 +67,8 @@ DEFAULTS: dict = {
         "no_hit": "first",  # 所有版本都没命中优先项：first = 选第一个（再生成前）；hold = 停下
     },
     "retry": {
-        "on_defeat": "hold",  # 敗退后「再挑戦確認」：hold = 停下交给使用者（プロデュース終了 = 失败，不自动点）
+        "on_defeat": "hold",  # 敗退「再挑戦確認」：hold = 停下交给代理；auto = 自动模式下自己点再挑戦（每轮最多 3 次，用尽停下，不点「プロデュース終了」）
+        "tickets": False,  # auto 时是否用再挑戦チケット（没有「無料」字样）。TODO：「再挑戦也赢不了时不用券」还没定，默认交给代理
     },
 }
 

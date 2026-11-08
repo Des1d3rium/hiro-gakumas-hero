@@ -228,6 +228,9 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
     """当前画面属于前六周固定流程就做完并返回说明；否则返回 None。change = batch_hif.change（复用记账）。"""
     import batch_change
 
+    if (state.get("active", {}).get("ledger") or {}).get("pending_drink_replace"):
+        return None
+
     img = device.screenshot()
     boxes = [(_norm(t), c, b) for t, c, b in ocr(img)]
     texts = [t for t, _, _ in boxes]
@@ -316,7 +319,41 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
                 # 手里 4 瓶都认得、都是高价值：没有可丢的，不收（1-e 代理手动做的就是这个）。DECLINE 是勾选框，下一页确认
                 device.click(*DECLINE)
                 return f"{source}饮料：栏满且持有全是高价值（{held}），受け取らない（{names}）"
-            return None  # 栏满但有高价值：要先丢一瓶（drink-overflow），交给代理
+            if batch_rules.get("prep.auto_drink_replace", False):
+                from batch_driver import replacement
+                from hiro.produce.drink_swap import discard_then_receive
+                import batch_shop
+                import batch_ledger as L
+
+                ledger = state["active"].get("ledger")
+                bar = batch_shop.read_bar(device)
+                # 实读和账本两边都按 L.norm 统一写法再比（OCR / 识别名和账本写法不同不算对不上）
+                seen = [L.norm(d["name"]) if d.get("state") == "drink" and d.get("name") else None for d in bar]
+                if ledger is None or seen != [L.norm(n) if n else None for n in ledger.get("drinks") or []]:
+                    return None  # 不用旧账本决定丢哪瓶
+                choice = replacement(seen, names, batch_rules.get("prep.drink_priority", []), rules, norm=L.norm)
+                if choice is None:
+                    return None
+                # Durable intent: a crash after dropping must not drop a second bottle on restart.
+                if ledger.get("pending_drink_replace"):
+                    return None
+                ledger["pending_drink_replace"] = choice
+                persist()
+                physical = [{**d, "index": i} for i, d in enumerate(bar)]
+                result = discard_then_receive(choice["discard"], choice["pick"], held=physical,
+                                              shoot=device.screenshot, click=device.click)
+                after = batch_shop.read_bar(device)
+                expected = list(seen)
+                expected.pop(choice["discard"])
+                expected.append(choice["incoming"])
+                actual = [L.norm(d["name"]) if d.get("state") == "drink" and d.get("name") else None for d in after]
+                if not result.ok or actual != expected:
+                    return "饮料替换后账本待补：保留 pending_drink_replace，请核对"
+                L.drink_set(ledger, actual, why="固定流程：实读核验后替换饮料")
+                ledger.pop("pending_drink_replace")
+                persist()
+                return f"{source}饮料：替换 {choice['held']} → {choice['incoming']}"
+            return None  # 默认仍由代理处理
         i = pick_drink(names)
         if i is None:
             return None
