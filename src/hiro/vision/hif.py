@@ -568,11 +568,31 @@ def _card_from_name(text: str, art_top: list[tuple[str, float]]) -> tuple[SkillC
             if found:  # 前缀对应多张卡：再短只会更多，不猜
                 break
     if not hit:
-        return None, False
+        return _art_one_char_off(base, art_top), False
     if len(hit) > 1:
         art_ids = {c._id for c in (_asset_to_card(k) for k, _ in art_top) if c is not None}
         hit = [c for c in hit if c._id in art_ids] or hit
     return hit[0], exact
+
+
+NAME_FUZZY_MIN = 4  # 卡名与卡面候选只差一个字时，卡名至少这么长才认
+NAME_FUZZY_TOP = 3  # 只看卡面前几名
+
+
+def _art_one_char_off(base: str, art_top: list[tuple[str, float]]) -> SkillCard | None:
+    """卡名精确 / 前缀都对不上时：卡面前几名里有一张卡的基础卡名和 OCR 文字等长、只差一个字（OCR 把一个字读成形近字），
+    就认那张——卡面和卡名两个各自不够格的信号指向同一张卡。验证局 1-i R1：嬉しい誤算+ 卡面 0.484（低于 ART_MIN_SCORE），
+    卡名读成「薅しい誤算」，原来两边都定不了、手牌未读全停机。"""
+    if len(base) < NAME_FUZZY_MIN:
+        return None
+    for key, _ in art_top[:NAME_FUZZY_TOP]:
+        card = _asset_to_card(key)
+        if card is None:
+            continue
+        name = _fold(card.name.rstrip("+"))
+        if len(name) == len(base) and sum(a != b for a, b in zip(name, base)) == 1:
+            return card
+    return None
 
 
 def _overlay_on_hand(img: MatLike, letters: list) -> bool:
