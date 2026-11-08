@@ -116,3 +116,23 @@ def test_trust_rejects_old_or_dirty_runs(tmp_path):
     old = _ctx(1, ["A"], ["B"])
     del old["hand"]
     assert "没有牌面" in trace_trust.check(_trace(tmp_path, [old]))["problems"][0]["why"]
+
+
+def test_trust_last_play_of_turn_left_hand(tmp_path):
+    # 2026-11-07 第 1 局 R1：T8 最后一步打出眠気（打出即除外），T9 从山札抽到另一张眠気、再洗弃牌堆抽 2 张。
+    # context 是出牌前的局面，原来把打出的眠気当成还在手里，T9 的眠気被减掉，误判「牌堆却没抽完」
+    t8 = _ctx(8, ["眠気"], ["眠気"], ["A", "B"])
+    t8["piles"]["deck"] = {"眠気": 1}
+    t8["deck"] = {"眠気": 2, "A": 1, "B": 1}
+    t9 = _ctx(9, ["眠気", "A", "B"], [])
+    t9["deck"] = {"眠気": 1, "A": 1, "B": 1}
+    t9["excluded"] = {"眠気": 1}
+    d = _trace(tmp_path, [t8, t9])
+    lines = (d / "steps.jsonl").read_text().splitlines()
+    first = json.loads(lines[0])
+    first["execution"] = {"action": {"kind": "PlayCard", "args": {"slot": 0}}, "ok": True}
+    (d / "steps.jsonl").write_text("\n".join([json.dumps(first), lines[1]]) + "\n")
+    assert trace_trust.check(d)["trusted"]
+    first["execution"]["ok"] = False  # 没打出去：眠気还在手里，山札的眠気确实没抽到
+    (d / "steps.jsonl").write_text("\n".join([json.dumps(first), lines[1]]) + "\n")
+    assert not trace_trust.check(d)["trusted"]

@@ -27,7 +27,16 @@ def _contexts(trace: Path):
         s = json.loads(line)
         note = next((n for n in s.get("notes") or [] if n.startswith("context ")), None)
         if note and ((s.get("decision") or {}).get("decider") == "veil"):
-            yield s["seq"], json.loads(note[8:])
+            yield s["seq"], json.loads(note[8:]), s.get("execution") or {}
+
+
+def _played(ctx: dict, execution: dict) -> str | None:
+    """这一步成功打出的牌名（context 记的是出牌前的手牌）；不是出牌或没执行成功时 None。"""
+    action = execution.get("action") or {}
+    if action.get("kind") != "PlayCard" or not execution.get("ok"):
+        return None
+    slot = (action.get("args") or {}).get("slot")
+    return next((h[1] for h in ctx.get("hand") or [] if h[0] == slot), None)
 
 
 def check(trace: Path) -> dict:
@@ -42,8 +51,8 @@ def check(trace: Path) -> dict:
     elif len({c.get("commit") for c in configs}) > 1:
         problems.append({"seq": None, "why": "续跑的几段不是同一版代码"})
     steps = 0
-    prev = None  # (turn, piles)
-    for seq, ctx in _contexts(trace):
+    prev = None  # (turn, piles, 这一步做完后的手牌, 账本, 这一步打出的牌, 除外)
+    for seq, ctx, execution in _contexts(trace):
         steps += 1
         why = []
         if "hand" not in ctx or ctx.get("deck") is None:
@@ -66,8 +75,12 @@ def check(trace: Path) -> dict:
                     # 只认眠気：别的生成 / 变换牌会把账本标成不可信（veil_exam._commit），不在这里放行
                     born = Counter({"眠気": (Counter(ctx["deck"]) - prev[3])["眠気"]})
                     pool = Counter(prev[1].get("deck")) + born
+                    # context 是出牌前的局面：上回合最后一步打出的牌已经离手（2026-11-07 第 1 局 R1：
+                    # T8 最后打出眠気，原来把它当成还在手里，T9 从山札抽到的眠気被减掉，误判「牌堆没抽完」）
                     drawn = hand - prev[2]
                     grave = Counter(prev[1].get("grave")) + prev[2]  # 上回合末手牌回合结束进弃牌堆
+                    if prev[4] and (Counter(ctx.get("excluded")) - prev[5])[prev[4]] == 0:
+                        grave[prev[4]] += 1  # 打出后没除外 → 进弃牌堆
                     if drawn - pool:
                         # 洗牌（使用者 2026-11-07）：抽牌数大于牌堆剩余时，先把牌堆全部抽完，再把弃牌堆洗进牌堆，剩下的按概率抽。
                         # 所以牌堆里的牌必须全在新手牌里，多出来的只能来自弃牌堆
@@ -77,7 +90,9 @@ def check(trace: Path) -> dict:
                             why.append(f"洗牌后抽到弃牌堆里也没有的牌：{dict((drawn - pool) - grave)}")
             if ctx.get("undone"):
                 why.append(f"本回合撤回过 {ctx['undone']} 次出牌")
-            prev = (ctx["turn"], piles, Counter() if piles is None else hand, Counter(ctx["deck"]))
+            played = _played(ctx, execution)
+            after = Counter() if piles is None else hand - Counter([played] if played else [])
+            prev = (ctx["turn"], piles, after, Counter(ctx["deck"]), played, Counter(ctx.get("excluded")))
         if why:
             problems.append({"seq": seq, "turn": ctx.get("turn"), "why": "；".join(why)})
     result = {"trusted": steps > 0 and not problems, "steps": steps, "bad_steps": sum(1 for p in problems if p["seq"]),
