@@ -347,7 +347,10 @@ def debug_retry_step(boxes, dialog: bool, img=None):
     ending = DEBUG_RETRY.get("ending")
     if ending is not None and now - ending > DEBUG_RETRY_WAIT_S:
         DEBUG_RETRY["ending"] = ending = None
-    if dialog and "再挑戦確認" in flat and "プロデュース終了" in flat:
+    # 用券的确认框正文也写着「プロデュース終了を選択した場合は失敗となります」，但按钮是「キャンセル / 決定」、正文有「…を消費」：
+    # 不是敗退框（codex-20261108-3-c 第 1 局 R2 最终结果页点了再挑戦后，被当成敗退框找不到按钮，一直 wait）
+    retry_confirm = _button(labels, boxes, RETRY_CONFIRM_WORDS) is not None or "を消費" in flat
+    if dialog and "再挑戦確認" in flat and "プロデュース終了" in flat and not retry_confirm:
         # 敗退（使用者 2026-11-07）：debug 攒 trace 时照样点「再挑戦」，直到「再挑戦」变灰（免费 / 券用完）或这一轮已再挑戦
         # DEBUG_RETRY_MAX 次，才点「プロデュース終了」接着结算开下一局。ジュエル 照样不花
         if any(w in flat for w in DEBUG_DANGER):

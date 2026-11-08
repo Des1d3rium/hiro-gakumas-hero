@@ -700,3 +700,18 @@ def test_debug_retry_on_final_result_page(debug_retry):
     assert B.debug_retry_step(final, dialog=False) is None  # R2 用满：照常「次へ」
     assert not B.final_result_page(["ラウンド1結果", "現在順位", "+1,000"])
     assert not B.final_result_page(["現在順位", "898,094"])  # 没有这一轮的「+分数」：不认
+
+
+def test_ticket_confirm_with_end_warning_is_not_defeat(debug_retry):
+    """codex-20261108-3-c 第 1 局 R2 最终结果页：点「再挑戦」后的用券确认框正文也有「プロデュース終了を選択した場合は失敗となります」，
+    按钮是「キャンセル / 決定」。原来被当成敗退框、找不到「再挑戦 / プロデュース終了」按钮，一直 wait。现在照常点「決定」。"""
+    final = [_b("優勝", 90, 100), _b("現在順位", 70, 186), _b("+620,548", 490, 318)] + RESULT_R1[-2:]
+    B.DEBUG_RETRY["used"] = {"1": 2}
+    assert B.debug_retry_step(final, dialog=False)[0] == "debug_retry"
+    dialog = [_b("再挑戦確認", 140, 843), _b("再挑戦チケットを消費して再挑戦しますか？", 300, 950),
+              _b("プロデュース終了を選択した場合は失敗となります", 330, 990), _b("所持 433 → 432", 360, 1060),
+              _b("キャンセル", 220, 1161), _b("決定", 500, 1161)]
+    assert B.debug_retry_step(dialog, dialog=True) == ("debug_retry_confirm", (500, 1161))
+    # 真的敗退框（按钮「プロデュース終了 / 再挑戦」、没有「消費」）照旧走敗退分支
+    B.DEBUG_RETRY["pending"] = None
+    assert B.debug_retry_step(DEFEAT, dialog=True, img=_frame((40, 140, 250)))[0] == "debug_defeat_retry"
