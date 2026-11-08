@@ -82,7 +82,7 @@ def check(trace: Path) -> dict:
                     pool = Counter(prev[1].get("deck")) + born
                     # context 是出牌前的局面：上回合最后一步打出的牌已经离手（2026-11-07 第 1 局 R1：
                     # T8 最后打出眠気，原来把它当成还在手里，T9 从山札抽到的眠気被减掉，误判「牌堆没抽完」）
-                    drawn = hand - prev[2]
+                    drawn = hand  # 换回合：上回合末手牌整手进弃牌堆（下一行），新手牌全部是新抽的
                     grave = Counter(prev[1].get("grave")) + prev[2]  # 上回合末手牌回合结束进弃牌堆
                     if prev[4] and (Counter(ctx.get("excluded")) - prev[5])[prev[4]] == 0:
                         grave[prev[4]] += 1  # 打出后没除外 → 进弃牌堆

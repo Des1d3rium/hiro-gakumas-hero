@@ -133,9 +133,22 @@ def test_trust_last_play_of_turn_left_hand(tmp_path):
     first["execution"] = {"action": {"kind": "PlayCard", "args": {"slot": 0}}, "ok": True}
     (d / "steps.jsonl").write_text("\n".join([json.dumps(first), lines[1]]) + "\n")
     assert trace_trust.check(d)["trusted"]
-    first["execution"]["ok"] = False  # 没打出去：眠気还在手里，山札的眠気确实没抽到
+    first["execution"]["ok"] = False  # 没打出去：回合结束时这张眠気也进弃牌堆，T9 抽完山札的眠気、洗牌抽回来，照样对得上
     (d / "steps.jsonl").write_text("\n".join([json.dumps(first), lines[1]]) + "\n")
-    assert not trace_trust.check(d)["trusted"]
+    assert trace_trust.check(d)["trusted"]
+
+
+def test_trust_turn_end_hand_is_discarded_not_kept(tmp_path):
+    """codex-20261108-3-c 第 2 局 R1 attempt1：T8 停手，手里剩一张眠気；山札只有 オーバードライブ+ 生成的 1 张眠気。
+    T9 抽 5：山札的眠気 + 洗牌后的 4 张。原来按「新手牌 − 上回合末手牌」算抽牌，把同名眠気当成留在手里，
+    误判「牌堆却没抽完」。换回合时上回合手牌整手进弃牌堆，新手牌全部是新抽的。"""
+    t8 = _ctx(8, ["眠気"], ["眠気"], ["A", "B", "C", "D"])
+    t8["piles"]["deck"] = {"眠気": 1}
+    t8["deck"] = {"眠気": 2, "A": 1, "B": 1, "C": 1, "D": 1}
+    t9 = _ctx(9, ["眠気", "A", "B", "C", "D"], [])
+    t9["piles"]["deck"] = {"眠気": 1}
+    t9["deck"] = dict(t8["deck"])
+    assert trace_trust.check(_trace(tmp_path, [t8, t9]))["trusted"]
 
 
 def test_trust_uses_last_context_of_step(tmp_path):
