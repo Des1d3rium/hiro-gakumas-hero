@@ -27,10 +27,12 @@ def test_new_ledger_pads_slots_and_rejects_gaps(ledger):
 
 
 def test_change_card_moves_once_flag(ledger):
-    L.change_card(ledger, "タフネス+", "忍耐力", True, why="授業")
+    L.change_card(ledger, "タフネス+", "忍耐力", True, why="授業")  # 换入继承换出那张的强化：忍耐力+
     assert ledger["cards"].count("タフネス+") == 1 and "タフネス+" in ledger["once"]  # 还剩一张，仍是一次性
     L.remove_card(ledger, "タフネス+")
-    assert "タフネス+" not in ledger["once"] and "忍耐力" in ledger["once"]
+    assert "タフネス+" not in ledger["once"] and "忍耐力+" in ledger["once"]
+    L.change_card(ledger, "忍耐力+", "アンダンテ", True, inherit=False)
+    assert "アンダンテ" in ledger["cards"]
 
 
 def test_record_change_inherits_upgrade_of_removed_card():
@@ -63,8 +65,8 @@ def test_record_change_failure_keeps_ledger_and_returns_todo():
 
 def test_change_card_is_atomic(ledger):
     with pytest.raises(ValueError):
-        L.change_card(ledger, "巻き返し+", "タフネス+", False)  # 换入一次性状态矛盾：不能只删不加
-    assert ledger["cards"] == MEMORY["cards"]
+        L.change_card(ledger, "巻き返し+", "タフネス+", None)  # 换入没记一次性：不能只删不加
+    assert ledger["cards"] == MEMORY["cards"] and len(ledger["deck"]) == len(MEMORY["cards"])
 
 
 def test_remove_card_is_strict_unless_loose(ledger):
@@ -77,8 +79,8 @@ def test_remove_card_is_strict_unless_loose(ledger):
 def test_add_requires_once_and_consistency(ledger):
     with pytest.raises(ValueError):
         L.add_card(ledger, "忍耐力", None)
-    with pytest.raises(ValueError):
-        L.add_card(ledger, "タフネス+", False)  # 同名卡一次性状态不一致
+    L.add_card(ledger, "タフネス+", False)  # 同名卡一次性状态不一致：逐张记，照收
+    assert "タフネス+" not in ledger["once"] and "タフネス+" in L.summary(ledger)["conflicts"]
 
 
 def test_upgrade_keeps_once(ledger):
@@ -309,3 +311,103 @@ def test_complete_keeps_ledger_in_record(monkeypatch, tmp_path):
     batch.change(state, args, persist=lambda: None)
     rec = state["completed"][-1]
     assert rec["ledger"]["drinks"][0] == "ブーストエキス" and rec["ledger"]["log"]
+
+
+# ------------------------------------------------------------------ 逐张记账（观察流：同名「巻き返し+」一张一次性、一张常驻）
+def _rebound_pair():
+    led = L.new_ledger({"memory": "m", "cards": ["巻き返し+", "立ち回りの基本+"], "once": [], "rebound_repeatable": True,
+                        "evidence": "x"})
+    L.change_card(led, "立ち回りの基本+", "巻き返し", True, why="授業换卡")  # 换入继承「+」，一次性
+    return led
+
+
+def test_same_name_cards_keep_their_own_once_flag():
+    led = _rebound_pair()
+    cards = [c for c in led["deck"] if c["name"] == "巻き返し+"]
+    assert sorted(c["once"] for c in cards) == [False, True]
+    assert led["rebound_repeatable"] is True and "巻き返し+" not in led["once"]  # 旧视图：混着时不列一次性
+    assert "巻き返し+" in L.summary(led)["conflicts"]
+    deck = L.to_deck(led)
+    assert sorted(i["once"] for i in deck["instances"] if i["name"] == "巻き返し+") == [False, True]
+
+
+def test_ambiguous_same_name_needs_id_or_where():
+    led = _rebound_pair()
+    with pytest.raises(L.AmbiguousCard) as e:
+        L.remove_card(led, "巻き返し+")
+    assert "--id" in str(e.value)
+    gone = L.remove_card(led, "巻き返し+", where={"once": True})
+    assert gone["origin"]["kind"] == "change" and led["cards"].count("巻き返し+") == 1 and led["rebound_repeatable"] is True
+
+
+def test_record_change_uses_panel_once_to_pick_copy():
+    led = _rebound_pair()
+    led["pending_add"] = {"name": "形勢逆転", "upgrade": 0, "once": True}
+    out = {"name": "巻き返し", "upgrade": 1, "customized": False, "once": True}
+    assert L.record_change(led, out, led["pending_add"]) is None
+    left = [c for c in led["deck"] if c["name"] == "巻き返し+"]
+    assert len(left) == 1 and left[0]["once"] is False and "形勢逆転+" in led["cards"]
+    new = next(c for c in led["deck"] if c["name"] == "形勢逆転+")
+    assert new["origin"] == {"kind": "change", "from": "巻き返し+", "from_id": next(
+        e["id"] for e in led["log"] if e["op"] == "remove" and e["card"] == "巻き返し+")}
+
+
+def test_record_change_ambiguous_returns_todo_with_id_hint():
+    led = _rebound_pair()
+    todo = L.record_change(led, {"name": "巻き返し", "upgrade": 1}, {"name": "形勢逆転", "upgrade": 0, "once": True})
+    assert todo and "--id" in todo and led["cards"].count("巻き返し+") == 2
+
+
+def test_customize_limit_removal_makes_that_copy_repeatable():
+    led = L.new_ledger({"memory": "m", "cards": ["インフルエンサー+"], "once": [], "evidence": "x"})
+    L.add_card(led, "巻き返し+", True)
+    card = L.customize_card(led, "巻き返し+", "制限削除")
+    assert card["once"] is False and card["customs"] == ["制限削除"] and led["rebound_repeatable"] is True
+    assert L.to_deck(led)["custom"] == [{"card": "巻き返し+", "item": "制限削除"}]
+
+
+def test_legacy_ledger_migrates_and_keeps_customize_log():
+    led = {"memory": "m", "cards": ["インフルエンサー+", "眠気"], "once": [], "rebound_repeatable": None, "drinks": [None] * 4,
+           "log": [{"t": "1", "op": "customize", "card": "インフルエンサー+", "item": "強気追加"}]}
+    deck = L.ensure_deck(led)
+    assert [c["id"] for c in deck] == ["c01", "c02"] and deck[0]["customs"] == ["強気追加"] and deck[1]["customs"] is None
+    led["cards"].append("その他+")  # 有人直接改旧视图：下次取时补齐，原有的卡对象不丢
+    deck = L.ensure_deck(led)
+    assert [c["id"] for c in deck] == ["c01", "c02", "c03"] and deck[0]["customs"] == ["強気追加"]
+
+
+def test_upgrade_keeps_identity():
+    led = _rebound_pair()
+    card = L.upgrade_card(led, "巻き返し+", where={"once": False})
+    assert card["name"] == "巻き返し++" and card["once"] is False and card["origin"]["kind"] == "memory"
+
+
+def _edit_args(**kw):
+    from types import SimpleNamespace
+
+    base = dict(add=None, once=None, remove=None, change=None, upgrade=None, customize=None, set_once=None,
+                rebound_repeatable=None, drink_remove=None, drink_add=None, drink_set=None, id=None, where=None,
+                no_inherit=False, origin=None, why="test")
+    return SimpleNamespace(**{**base, **kw})
+
+
+def test_ledger_edit_reports_diff_and_fails_on_ambiguity():
+    import batch_hif as batch
+
+    led = _rebound_pair()
+    saved = []
+    out = batch.ledger_edit(L, led, _edit_args(change=["巻き返し+", "形勢逆転"], once=True, where="once=1"), lambda: saved.append(1))
+    assert out["ok"] and saved and out["diff"]["cards"]["removed"][0].startswith("c03 巻き返し+（一次性")
+    assert out["diff"]["cards"]["added"][0].startswith("c04 形勢逆転+")
+    with pytest.raises(L.AmbiguousCard):
+        batch.ledger_edit(L, _rebound_pair(), _edit_args(remove="巻き返し+"), lambda: None)
+
+
+def test_ledger_edit_noop_is_not_ok():
+    import batch_hif as batch
+
+    led = L.new_ledger(MEMORY, ["ブーストエキス"])
+    out = batch.ledger_edit(L, led, _edit_args(), lambda: None)
+    assert out["ok"] is False
+    out = batch.ledger_edit(L, led, _edit_args(drink_set="ブーストエキス"), lambda: None)
+    assert out["ok"] and out["diff"] == "账本没变（要的状态本来就是这样）"

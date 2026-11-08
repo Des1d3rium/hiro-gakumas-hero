@@ -370,7 +370,13 @@ class VeilAdvisor:
         if score is not None and score > LIMITS[state.exam]:
             return skip("超过本轮停手阈值")
 
-        observed = {norm(c.name): c for c in state.hand if c.card_id}
+        hand_cards = [c for c in state.hand if c.card_id]
+        slot_keys = memory.strategy_data.get("veil_slot_keys") or {}
+        if any(slot_keys.get(str(c.slot), norm(c.name)) != norm(c.name) for c in hand_cards):
+            # 分版本记账（HIRO_VEIL_SIGNATURE=1）：同名两张（一次性的巻き返し+ 和常驻的核心）都在手里时，
+            # 按名字取常驻的那张（循环要打的是核心）。只在手里有分了版本的牌时重排，其余情况顺序不变
+            hand_cards.sort(key=lambda c: not c.tags.once)
+        observed = {norm(c.name): c for c in hand_cards}
         by_name = {name: c for name, c in observed.items() if f"play:{c.slot}" in actions}
         hand = observed.keys()
         drinks = {d.name: f"drink:{d.slot}" for d in state.drinks if f"drink:{d.slot}" in actions}
@@ -668,8 +674,8 @@ class VeilAdvisor:
         def clears(card):
             """打出后这张牌离开牌库（一次性牌 / 眠気）：清牌阶段真正推进的出牌。"""
             name = norm(card.name)
-            if name == REBOUND:
-                return name in initial_once
+            if name == REBOUND and slot_keys.get(str(card.slot), name) == name:
+                return name in initial_once  # 分了版本的巻き返し+ 按这一张的一次性（apply_variants 已按账本改好）
             return bool(card.tags.once or card.tags.is_sleep or name in once_known)
 
         extra = memory.strategy_data.get("veil_extra") or {}

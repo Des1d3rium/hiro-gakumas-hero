@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+import unicodedata
 from pathlib import Path
 from hiro.produce import hif_buttons as BTN
 
@@ -73,6 +74,27 @@ def summary(scan: dict) -> list[str]:
             cells.append(f"c{c['col']} {name}{up}{'（1回）' if c.get('once') else ''}")
         out.append(f"r{row[0]['row']}: " + " | ".join(cells))
     return out
+
+
+def card_full(c: dict) -> str | None:
+    return (c.get("name") or "").replace(" ", "") + "+" * (c.get("upgrade") or 0) if c.get("name") else None
+
+
+def cells_for(cards: list[dict], name: str, customized: bool | None = None) -> dict:
+    """按卡名（带「+」）和客制化标记在扫描表里找要换出的格（使用者 2026-11-07：代理逐格点开看是哪张太慢）。
+    返回 {"cells": [匹配的格], "unknown": [认不出的格]}。匹配的格都同名同客制化标记 = 同一种卡，点哪格都行。"""
+    want = unicodedata.normalize("NFKC", name).replace(" ", "")
+    hits = [c for c in cards if card_full(c) == want and (customized is None or bool(c.get("customized")) == customized)]
+    return {"cells": hits, "unknown": [c for c in cards if not c.get("card_id")]}
+
+
+def panel_info(boxes: list, name: str | None, top: int) -> dict:
+    """阶段 2 选中后上方详情栏（卡格区上面）的 OCR：卡名对不对、有没有「レッスン中1回」。
+    卡名按去掉「+」的名字包含比（OCR 常把「+」读丢）。详情栏模板认不出时（观察流：Detail empty）靠它核对。"""
+    texts = [t for t, _, (x1, y1, x2, y2) in boxes if (y1 + y2) // 2 < top]
+    flat = unicodedata.normalize("NFKC", "".join(texts)).replace(" ", "")
+    base = unicodedata.normalize("NFKC", name or "").replace(" ", "").rstrip("+")
+    return {"text": flat[:120], "name_ok": bool(base) and base in flat, "once": "レッスン中1回" in flat if flat else None}
 
 
 # ------------------------------------------------------------------ 实机
@@ -147,11 +169,15 @@ def latest_scan(batch: str, run: int) -> Path | None:
     return files[-1] if files else None
 
 
-def pick(device, batch: str, run: int, *, col: int, row: int | None = None, commit: bool = False, scan_file: Path | None = None) -> dict:
+def pick(device, batch: str, run: int, *, col: int | None = None, row: int | None = None, commit: bool = False,
+         scan_file: Path | None = None, name: str | None = None, customized: bool | None = None) -> dict:
+    """阶段 1 按 --col 选候选；阶段 2 按 --row/--col，或按 --name [--customized 0|1] 在扫描表里自己找格。
+    阶段 2 点选后读上方详情栏：卡名对得上（扫描表认错 / 详情栏模板认不出时也能核对）、有没有「レッスン中1回」，
+    结果里带 customized / once，记账时用来挑同名的哪一张。"""
     t = _tools()
     stage, img, boxes = _stage(device, t)
     if stage == 1:
-        if row is not None:
+        if row is not None or col is None:
             return {"ok": False, "why": "阶段 1 只按列选（--col），不带 --row"}
         cands = t["read_change_candidates"](img)["candidates"]
         target = next((c for c in cands if c["index"] == col), None)
@@ -169,12 +195,22 @@ def pick(device, batch: str, run: int, *, col: int, row: int | None = None, comm
         return {"ok": False, "stage": 1, "why": "点了候选和「次へ」，没进入阶段 2", "picked": target["name"]}
     if stage != 2:
         return {"ok": False, "why": "不在换卡阶段 1 / 2 画面"}
-    if row is None:
-        return {"ok": False, "why": "阶段 2 要同时给 --row 和 --col（先 change-scan）"}
     path = scan_file or latest_scan(batch, run)
     if path is None:
         return {"ok": False, "why": "没有本局的 change-scan 结果，先扫描"}
-    rows = deck_rows(json.loads(path.read_text(encoding="utf-8"))["cards"])
+    scanned = json.loads(path.read_text(encoding="utf-8"))["cards"]
+    rows = deck_rows(scanned)
+    if row is None and name:
+        found = cells_for(scanned, name, customized)
+        cells = found["cells"]
+        if not cells:
+            unknown = [f"r{c['row']}c{c['col']}" for c in found["unknown"]]
+            label = {None: "", True: "客制化过的", False: "未客制化的"}[customized]
+            return {"ok": False, "why": f"扫描表里没有{label}「{name}」"
+                    + (f"；认不出的格 {unknown} 可能是它，逐格 --row/--col 点开看（不加 --commit）" if unknown else ""), "scan": str(path)}
+        row, col = cells[0]["row"], cells[0]["col"]
+    if row is None or col is None:
+        return {"ok": False, "why": "阶段 2 要给 --row 和 --col，或 --name [--customized 0|1]（先 change-scan）"}
     if not (0 <= row < len(rows)) or col not in {c["col"] for c in rows[row]}:
         return {"ok": False, "why": f"扫描表里没有 r{row} c{col}", "scan": str(path)}
     target = next(c for c in rows[row] if c["col"] == col)
@@ -197,22 +233,34 @@ def pick(device, batch: str, run: int, *, col: int, row: int | None = None, comm
         return {"ok": False, "why": f"滑动后没找到 r{row} c{col} 的卡格"}
     device.click(*cell["center"])
     time.sleep(SETTLE)
-    sel = t["read_card_dialog"](device.screenshot(), area, icons=True)
+    shot = device.screenshot()
+    sel = t["read_card_dialog"](shot, area, icons=True)
     chosen = sel.get("selected_card") or {}
     picked = sel["cards"][sel["selected"]] if sel.get("selected") is not None else None
     # 按格子中心比，不按屏内行号：点选前后两帧顶上那行算不算整格可见可能不同，行号会差一（验证局 1-i 实机）
     near = picked is not None and all(abs(p - q) <= CELL_TOL for p, q in zip(picked["center"], cell["center"]))
     same_cell = near or (picked is not None and picked.get("card_id") is not None and picked.get("card_id") == cell.get("card_id")
                          and picked.get("upgrade") == cell.get("upgrade") and picked["col"] == col)
-    same_card = not target.get("card_id") or chosen.get("card_id") in (None, target["card_id"])
-    info = {"row": row, "col": col, "name": target.get("name"), "upgrade": target.get("upgrade"), "once": target.get("once"),
-            "selected_detail": chosen.get("name")}  # fmt: skip
+    # 要换出的卡名：--name 给了就以它为准（扫描表会认错，观察流 r3c1 巻き返し+ 认成アイドル宣言+），否则用扫描表
+    expect = name or card_full(target)
+    panel = panel_info(t["ocr_boxes"](shot), expect, area[1])
+    if name:
+        same_card = panel["name_ok"] or chosen.get("card_id") is not None and card_full(chosen) == expect
+    else:
+        same_card = not target.get("card_id") or chosen.get("card_id") in (None, target["card_id"])
+    customized_seen = picked.get("customized") if picked is not None and picked.get("customized") is not None else target.get("customized")
+    info = {"row": row, "col": col, "name": name or target.get("name"), "upgrade": target.get("upgrade") if not name else None,
+            "customized": customized_seen, "once": panel["once"], "selected_detail": chosen.get("name"), "panel": panel["text"]}  # fmt: skip
+    if name:  # 记账用：卡名按 --name（带「+」）拆成名字 + 强化
+        info["name"], info["upgrade"] = name.rstrip("+"), len(name) - len(name.rstrip("+"))
     if not (same_cell and same_card):
         return {"ok": False, "stage": 2, "why": "选中框和目标对不上，没点「チェンジ」", "target": info}
-    if commit and (not target.get("card_id") or target.get("customized") or not chosen.get("card_id")):
-        # 认不出的卡 / 客制化过的卡不换（AGENTS：认不出就キャンセル，不猜）；扫描表认不出时选中框读到什么都不算核对
+    verified = bool(chosen.get("card_id")) or panel["name_ok"]
+    if commit and (not (target.get("card_id") or name) or customized_seen or not verified):
+        # 认不出的卡 / 客制化过的卡不换（AGENTS：认不出就キャンセル，不猜）；扫描表认不出、也没给 --name 时选中框读到什么都不算核对
         #（2026-11-07 验证局 1-i：扫描表 r1c0 是「?」，原来 same_card 直接放行，差点把客制化过的巻き返し+换掉）
-        why = "目标卡认不出" if not target.get("card_id") else ("目标卡客制化过" if target.get("customized") else "选中后详情栏没认出卡名")
+        why = ("目标卡认不出（给 --name 并让详情栏核对）" if not (target.get("card_id") or name) else
+               "目标卡客制化过" if customized_seen else "选中后详情栏模板和 OCR 都没认出卡名")
         return {"ok": False, "stage": 2, "why": f"{why}，没点「チェンジ」", "target": info}
     if not commit:
         return {"ok": True, "stage": 2, "selected": info, "next": "核对后加 --commit，或手动点「チェンジ」→「決定」"}

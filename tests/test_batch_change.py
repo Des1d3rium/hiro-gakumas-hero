@@ -123,7 +123,7 @@ def test_commit_refuses_when_detail_name_unread(tmp_path, monkeypatch):
     monkeypatch.setattr(BC, "SETTLE", 0)
     dev = Dev()
     out = BC.pick(dev, "b", 1, col=0, row=0, commit=True, scan_file=scan)
-    assert not out["ok"] and "详情栏没认出" in out["why"] and dev.clicks == [cell["center"]]
+    assert not out["ok"] and "都没认出卡名" in out["why"] and dev.clicks == [cell["center"]]
 
 
 def test_to_top_swipes_up_until_thumb_at_top(monkeypatch):
@@ -159,6 +159,39 @@ def test_selection_matches_by_position_not_screen_row(tmp_path, monkeypatch):
     monkeypatch.setattr(BC, "SETTLE", 0)
     out = BC.pick(Dev(), "b", 1, col=0, row=1, commit=False, scan_file=scan)
     assert out["ok"], out
+
+
+def test_cells_for_finds_uncustomized_copy():
+    cards = [card(0, 0, "a", "巻き返し", upgrade=1, customized=True), card(0, 1, "b", "巻き返し", upgrade=1),
+             card(0, 2, None, None)]
+    got = BC.cells_for(cards, "巻き返し+", customized=False)
+    assert [(c["row"], c["col"]) for c in got["cells"]] == [(0, 1)] and len(got["unknown"]) == 1
+    assert len(BC.cells_for(cards, "巻き返し+")["cells"]) == 2
+
+
+def test_panel_info_reads_name_and_once():
+    boxes = [("巻き返し", 1, (40, 200, 300, 240)), ("レッスン中1回", 1, (40, 300, 300, 330)), ("巻き返し+", 1, (0, 900, 100, 940))]
+    assert BC.panel_info(boxes, "巻き返し+", 600) | {"text": None} == {"text": None, "name_ok": True, "once": True}
+    assert BC.panel_info(boxes[2:], "巻き返し+", 600)["name_ok"] is False  # 卡格区里的字不算详情栏
+
+
+def test_commit_by_name_trusts_panel_when_scan_misread(tmp_path, monkeypatch):
+    """观察流：扫描表把 r0c1 的巻き返し+ 认成别的卡、详情栏模板也没认出（Detail empty）。给 --name 后按详情栏 OCR 核对，
+    点「チェンジ」，结果里带 once（详情栏有レッスン中1回），记账时挑一次性的那张。"""
+    import json
+
+    scan = tmp_path / "scan.json"
+    scan.write_text(json.dumps({"cards": DECK}))
+    visible = [dict(c) for c in DECK if c["row"] <= 1]
+    cell = next(c for c in visible if (c["row"], c["col"]) == (0, 1))
+    fake = fake_tools(visible, (cell, {}))
+    panel = [("巻き返し+", 1, (40, 200, 300, 240)), ("レッスン中1回", 1, (40, 300, 300, 330))]
+    shots = iter([[("チェンジするスキルカードを選択してください", 1, (0, 580, 720, 610))], panel, panel])
+    fake["ocr_boxes"] = lambda img: next(shots, [("巻き返し+を形勢逆転+にチェンジしました", 1, (0, 600, 720, 640))])
+    monkeypatch.setattr(BC, "_tools", lambda: fake)
+    monkeypatch.setattr(BC, "SETTLE", 0)
+    out = BC.pick(Dev(), "b", 1, col=1, row=0, commit=True, scan_file=scan, name="巻き返し+")
+    assert out["ok"] and out["changed"]["name"] == "巻き返し" and out["changed"]["upgrade"] == 1 and out["changed"]["once"] is True
 
 
 def test_changed_text_split_across_boxes():

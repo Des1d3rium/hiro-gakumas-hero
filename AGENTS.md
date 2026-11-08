@@ -122,6 +122,7 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | `HIRO_DEBUG_RECOG=1` | 把全部识别互验写进 trace，页面变化都存帧 |
 | `HIRO_DRINK_INSITU=0` | 关掉考试饮料栏的统一模板补认（默认开：原画模板没把握的格，用统一模板——全部饮料按原画渲染成饮料栏外观，采到过的用 `tools/assets/capture_drinks.py` 生成的实机中位图——再认一次；已认出的格和空格不改） |
 | `HIRO_CARD_ICON=1` | 换卡页 KAA 认不出的卡格用渲染卡图标再认一次（默认关；要先 `python -m hiro.vision.card_icon_render build`，见 docs/assets.md） |
+| `HIRO_VEIL_SIGNATURE=1` | VEIL 牌库按版本记账（默认关）：批量账本里同名卡一次性 / 客制化不同时，各算一个记账键；手里同名几张分不出时点按一次（只选中、不打出）读效果文字分辨，读完点空白取消选中。效果文字的 OCR 区域 `PROBE_TEXT_BOX` 还没实机校准，每次点按的文字都写进 trace（`veil_probe`） |
 | `HIRO_VEIL_STRICT_SHUFFLE=1` | VEIL 牌堆记账按洗牌规则收紧（默认关）：抽牌数大于牌堆剩余时，牌堆里的牌必须全被抽到才认洗牌，否则整副记成位置不明 |
 
 固定编成时，租借格按 `--main-attr` 挑主属性、等级最高的一张；挑不到就停下（不开局）。

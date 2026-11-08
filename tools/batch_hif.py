@@ -1138,6 +1138,58 @@ def save(path, state):
             temp.unlink(missing_ok=True)
 
 
+def ledger_edit(L, ledger, args, persist) -> dict:
+    """手动记账，一次可做几项。全部做完才写盘（中途出错一项都不记）；返回前后差异（卡按 id、饮料整栏），
+    要求的卡变动没有出现在差异里就 ok=False（退出码 1），不再只给一个笼统的 changes 计数让人猜（观察流：changes=1 其实是那瓶饮料）。"""
+    why = args.why or "代理手动记账"
+    where = L.parse_where(getattr(args, "where", None))
+    cid = getattr(args, "id", None)
+    before = {**L._snapshot(ledger), "drinks": list(ledger["drinks"])}
+    L.ensure_deck(ledger)
+    before["deck"] = json.loads(json.dumps(ledger["deck"]))  # 旧账本第一次补出逐张牌组：不算这次的变动
+    card_ops = []
+    if args.add:
+        L.add_card(ledger, args.add, args.once, origin={"kind": getattr(args, "origin", None) or "lesson"}, why=why)
+        card_ops.append("add")
+    if args.remove:
+        L.remove_card(ledger, args.remove, id=cid, where=where, why=why)
+        card_ops.append("remove")
+    if args.change:
+        L.change_card(ledger, args.change[0], args.change[1], args.once, id=cid, where=where, why=why,
+                      inherit=not getattr(args, "no_inherit", False))
+        card_ops.append("change")
+    if args.upgrade:
+        L.upgrade_card(ledger, args.upgrade, id=cid, where=where, why=why)
+        card_ops.append("upgrade")
+    if getattr(args, "customize", None):
+        L.customize_card(ledger, args.customize[0], args.customize[1], id=cid, where=where, why=why)
+        card_ops.append("customize")
+    if getattr(args, "set_once", None):
+        L.set_once(ledger, args.set_once[0], args.set_once[1] == "true", id=cid, where=where, why=why)
+        card_ops.append("set-once")
+    if args.rebound_repeatable is not None:
+        L.set_once(ledger, L.REBOUND, args.rebound_repeatable != "true", id=cid, where=where, why=why)
+        card_ops.append("rebound-repeatable")
+    drink_ops = []
+    if args.drink_remove:  # 先去掉再收：栏满时换一瓶
+        L.drink_remove(ledger, args.drink_remove - 1, why=why)
+        drink_ops.append("drink-remove")
+    if args.drink_add:
+        L.drink_add(ledger, args.drink_add, why=why)
+        drink_ops.append("drink-add")
+    if args.drink_set is not None:
+        L.drink_set(ledger, [d.strip() or None for d in args.drink_set.split(",")], why=why)
+    diff = L.diff_ledger(before, {"deck": ledger["deck"], "drinks": ledger["drinks"]})
+    missing = [op for op in card_ops if "cards" not in diff and op not in ("set-once", "rebound-repeatable")]
+    missing += [op for op in drink_ops if "drinks" not in diff]
+    if not (card_ops or drink_ops or args.drink_set is not None):
+        return {"ok": False, "why": "没有要记的变动（--add / --remove / --change / --upgrade / --customize / --set-once / 饮料）"}
+    if missing:
+        return {"ok": False, "why": f"{'、'.join(missing)} 没有改动账本，没写盘", "diff": diff, **L.summary(ledger)}
+    persist()
+    return {"ok": True, "diff": diff or "账本没变（要的状态本来就是这样）", **L.summary(ledger)}
+
+
 def change(state, args, *, persist=None):
     global AUTO_START
     AUTO_START = start_allowed(state)
@@ -1226,25 +1278,7 @@ def change(state, args, *, persist=None):
         if ledger is None:
             raise ValueError("本局还没有账本，先 memory-load")
         if cmd == "ledger-edit":
-            why = args.why or "代理手动记账"
-            if args.add:
-                L.add_card(ledger, args.add, args.once, why=why)
-            if args.remove:
-                L.remove_card(ledger, args.remove, why=why)
-            if args.change:
-                L.change_card(ledger, args.change[0], args.change[1], args.once, why=why)
-            if args.upgrade:
-                L.upgrade_card(ledger, args.upgrade, why=why)
-            if args.drink_remove:  # 先去掉再收：栏满时换一瓶
-                L.drink_remove(ledger, args.drink_remove - 1, why=why)
-            if args.drink_add:
-                L.drink_add(ledger, args.drink_add, why=why)
-            if args.drink_set is not None:
-                L.drink_set(ledger, [d.strip() or None for d in args.drink_set.split(",")], why=why)
-            if args.rebound_repeatable is not None:
-                ledger["rebound_repeatable"] = args.rebound_repeatable == "true"
-                L._log(ledger, "rebound", repeatable=ledger["rebound_repeatable"], why=why)
-            persist()
+            return ledger_edit(L, ledger, args, persist)
         out = {"ok": True, **L.summary(ledger)}
         if cmd == "ledger" and args.read_drinks:
             import batch_shop
@@ -1298,9 +1332,13 @@ def change(state, args, *, persist=None):
 
                 out = batch_customize.customize(device, args.card, args.item, need_maxed=args.need_maxed)
                 if out["ok"] and ledger is not None:
-                    L._log(ledger, "customize", card=args.card, item=out["item"])
-                    if "制限削除" in out["item"] and L.norm(args.card).rstrip("+") == "巻き返し":
-                        ledger["rebound_repeatable"] = True
+                    try:
+                        # 记到那一张卡上（制限削除 顺带去掉一次性）；同名几张分不出时只记 log，交代理用 ledger-edit --customize --id 补
+                        card = L.customize_card(ledger, args.card, out["item"], where=L.parse_where(args.where), why="customize")
+                        out["ledger_card"] = L.describe(card)
+                    except ValueError as e:
+                        L._log(ledger, "customize", card=args.card, item=out["item"], why=f"没记到具体哪一张：{e}")
+                        out["ledger_todo"] = f"{e}；用 ledger-edit --customize {args.card} {out['item']} --id <id> 补记到那一张"
                     persist()
                 return out
             if cmd == "interval-end":
@@ -1372,8 +1410,9 @@ def change(state, args, *, persist=None):
                             out["ledger_todo"] = "新饮料没认出，用 ledger-edit --drink-add 补记"
                     persist()
                 return out
+            customized = None if args.customized is None else args.customized == "1"
             out = batch_change.pick(device, args.batch, args.run, col=args.col, row=args.row, commit=args.commit,
-                                    scan_file=args.scan)  # fmt: skip
+                                    scan_file=args.scan, name=args.name, customized=customized)  # fmt: skip
             if ledger is not None and out.get("ok"):
                 if out.get("stage") == 1:
                     ledger["pending_add"] = {"name": out["picked"]["name"], "upgrade": out["picked"].get("upgrade"),
@@ -1784,8 +1823,10 @@ def main():
     p.add_argument("run", type=int)
     p = sub.add_parser("change-pick", help="换卡页：阶段 1 按 --col 选候选并点「次へ」；阶段 2 按 --row/--col 选要换出的卡")
     p.add_argument("run", type=int)
-    p.add_argument("--col", type=int, required=True)
+    p.add_argument("--col", type=int)
     p.add_argument("--row", type=int)
+    p.add_argument("--name", help="阶段 2：要换出的卡名（带 +）。不给 --row/--col 时在扫描表里自己找格；给了时按它核对详情栏（扫描表认错也能换）")
+    p.add_argument("--customized", choices=("0", "1"), help="阶段 2 配 --name：只找未客制化（0）/ 客制化过（1）的那张")
     p.add_argument("--commit", action="store_true", help="阶段 2 核对选中后直接点「チェンジ」→「決定」")
     p.add_argument("--scan", type=Path, help="指定 change-scan 的 JSON，默认本局最新一份")
     p = sub.add_parser("memory-save", help="本战开局：把这份回忆带来的整副牌组存进回忆栏（reports/memories/）")
@@ -1813,7 +1854,13 @@ def main():
     p.add_argument("--drink-add", help="收下一瓶饮料（放进最左空格）")
     p.add_argument("--drink-remove", type=int, metavar="SLOT", help="去掉第 SLOT 格（1–4），剩下的往左挤")
     p.add_argument("--drink-set", help="按实机整栏覆盖，逗号分隔（核对后才用）")
-    p.add_argument("--rebound-repeatable", choices=("true", "false"), help="巻き返し+ 是否已删除一次性限制")
+    p.add_argument("--rebound-repeatable", choices=("true", "false"), help="巻き返し+ 是否已删除一次性限制（同名几张时配 --id）")
+    p.add_argument("--customize", nargs=2, metavar=("CARD", "ITEM"), help="补记客制化到那一张卡（制限削除 会去掉一次性）")
+    p.add_argument("--set-once", nargs=2, metavar=("CARD", "true|false"), help="核对后改一张卡的一次性状态（同名几张时配 --id / --where）")
+    p.add_argument("--id", help="同名几张属性不同时，指定要动的那一张（ledger 的 conflicts 里列出 id）")
+    p.add_argument("--where", help="按属性挑同名的那张：once=0|1, customized=0|1, origin=memory|change|lesson|event，逗号分隔")
+    p.add_argument("--no-inherit", action="store_true", help="--change 时换入的卡不继承换出那张的强化（默认继承，同游戏）")
+    p.add_argument("--origin", choices=("lesson", "event", "change", "sync"), help="--add 的来处（默认 lesson）")
     p.add_argument("--why", help="来由 / 证据路径")
     for name, help_text in (("shop-scan", "相談 / 轮间：读货架上的饮料，标出高价值三种"),
                             ("shop-refresh", "相談 / 轮间：用 P 刷新货架（要ジュエル会取消）后重读")):  # fmt: skip
@@ -1833,6 +1880,7 @@ def main():
     p.add_argument("--card", required=True, help="卡名（带 +），如 巻き返し+")
     p.add_argument("--item", required=True, help="菜单项名（部分即可），如 成長追加、強気追加、制限削除")
     p.add_argument("--need-maxed", help="同名多张时：只选这一项已做满的那张，如 制限削除")
+    p.add_argument("--where", help="记账时挑同名的哪一张：once=0|1, customized=0|1, origin=…（同 ledger-edit）")
     p = sub.add_parser("deck-sync", help="相談 / 选行动页 / 轮间：打开牌组一览整副读一遍，和账本对账（漏记补上、强化按画面、多出只记）")
     p.add_argument("run", type=int)
     p.add_argument("--why", default="考前对账")

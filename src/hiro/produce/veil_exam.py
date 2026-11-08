@@ -57,13 +57,61 @@ def note_extra(data, memory, decision, before):
     ex["left"] = memory.actions_left
 
 
+def signature_mode():
+    """HIRO_VEIL_SIGNATURE=1：牌库按「版本」记账（默认关）。同名卡一次性 / 客制化不同时（账本 instances 里看得出），
+    各算一个记账键（巻き返し+〔一次性〕/ 巻き返し+〔常驻·制限削除〕），手里同名几张分不出时点按一次读效果文字分辨
+    （使用者 2026-11-07：同名的差别只来自客制化，客制化一样就是同一张卡）。同名各张都一样时键就是卡名，和原来完全相同。"""
+    return os.environ.get("HIRO_VEIL_SIGNATURE") == "1"
+
+
+KEY_MARK = "〔"
+
+
+def name_of(key: str) -> str:
+    """记账键 → 卡名（去掉版本后缀）。"""
+    return key.split(KEY_MARK, 1)[0]
+
+
+def instance_keys(instances) -> dict[str, dict]:
+    """逐张牌组（batch_ledger.to_deck 的 instances）→ {记账键: {name, once, customs, count}}。"""
+    by_name = defaultdict(list)
+    for inst in instances:
+        by_name[norm(inst["name"])].append(inst)
+    out = {}
+    for name, same in by_name.items():
+        variants = {(bool(i.get("once")), tuple(norm(c) for c in i.get("customs") or ())) for i in same}
+        for inst in same:
+            once, customs = bool(inst.get("once")), tuple(norm(c) for c in inst.get("customs") or ())
+            key = name if len(variants) == 1 else f"{name}{KEY_MARK}{'·'.join(['一次性' if once else '常驻', *customs])}〕"
+            entry = out.setdefault(key, {"name": name, "once": once, "customs": list(customs), "count": 0})
+            entry["count"] += 1
+    return out
+
+
+def read_variants(source) -> dict[str, dict] | None:
+    """牌组清单里的逐张牌组 → 记账键（开关关着 / 没有 instances / 没有同名不同版本时返回 None，走原来的按卡名记账）。"""
+    if not signature_mode():
+        return None
+    data = source if isinstance(source, dict) else json.loads(Path(source).read_text(encoding="utf-8"))
+    instances = data.get("instances")
+    if not isinstance(instances, list) or not instances:
+        return None
+    keys = instance_keys(instances)
+    return keys if any(k != v["name"] for k, v in keys.items()) else None
+
+
 def validate_deck(data):
     if not isinstance(data, dict) or not isinstance(data.get("evidence"), str) or not data["evidence"].strip():
         raise ValueError("牌组清单须记录证据路径")
     if not isinstance(data.get("cards"), list) or not all(isinstance(c, str) and c.strip() for c in data["cards"]):
         raise ValueError("牌组清单须列出完整卡名及强化，每张单列")
     names = Counter(norm(c) for c in data["cards"])
-    if any(names[c] != 1 for c in CORE) or not isinstance(data.get("rebound_repeatable"), bool):
+    core_ok = all(names[c] == 1 for c in CORE)
+    if not core_ok and signature_mode() and isinstance(data.get("instances"), list):
+        # 分版本记账：多出来的同名巻き返し+ 是一次性的清牌牌，循环核心是那张常驻的（只能有一张）
+        rebounds = [i for i in data["instances"] if norm(i.get("name") or "") == REBOUND]
+        core_ok = all(names[c] == 1 for c in CORE - {REBOUND}) and sum(1 for i in rebounds if i.get("once") is False) == 1
+    if not core_ok or not isinstance(data.get("rebound_repeatable"), bool):
         raise ValueError("须记录四张核心及巻き返し+的一次性限制状态")
     once = data.get("once", [])
     if not isinstance(once, list) or not all(isinstance(c, str) and norm(c) in names for c in once):
@@ -801,7 +849,7 @@ def adopt_added_cards(data, memory, state, hand, deck):
     数量确定；打出后照常从账本扣掉，牌组其余部分不受影响。有常驻牌（会回到捨札、循环里一直在）时不收，维持原来的暂停。"""
     extra = hand - deck
     by_name = {norm(c.name): c for c in state.hand if c.card_id}
-    if not all(by_name[n].tags.once or by_name[n].tags.is_sleep for n in extra):
+    if not all(n in by_name and (by_name[n].tags.once or by_name[n].tags.is_sleep) for n in extra):
         return deck
     renamed = {}
     for name, count in list(extra.items()):
@@ -883,9 +931,75 @@ def _drink_by_name(name):
     return next((d for d in Drink.all() if norm(d.name) == want), None)
 
 
+def variant_texts(info, lookup=None) -> list[str]:
+    """一个版本的客制化应该在牌面上加的文字（主数据 / 关键词，同 apply_customs）。"""
+    if not info.get("customs"):
+        return []
+    extra = resolve_customs([{"card": info["name"], "item": c} for c in info["customs"]], lookup)
+    return list(extra.get(info["name"].rstrip("+"), []))
+
+
+def match_variant(text, keys, variants, lookup=None) -> str | None:
+    """点按一次读到的效果文字 → 是哪个版本：「レッスン中1回」有没有要和一次性对得上，客制化文字要都在。
+    只有一个版本对得上才返回它，否则 None（不猜）。"""
+    flat = norm(text or "")
+    if not flat:
+        return None
+    hits = [k for k in keys if ("レッスン中1回" in flat) == variants[k]["once"]
+            and all(t in flat for t in variant_texts(variants[k], lookup))]
+    return hits[0] if len(hits) == 1 else None
+
+
+PROBE_TEXT_BOX = (0, 560, 720, 1040)  # 选中手牌后效果说明出现的区域（手牌上方）。未实机校准：探测时把 OCR 全文记进 trace
+PROBE_SETTLE = 0.4
+PROBE_RETRIES = 2  # 点按读不出 / 分不出时最多再试几帧，之后按第一个可能的版本记、牌库标不确定
+
+
+def tap_probe(frame, card) -> str | None:
+    """点按一次手牌（只选中，不打出），OCR 效果说明，点舞台空白取消选中。返回读到的文字；任何一步不对返回 None。
+    已有别的牌在选中态时不点（第二下会把它打出去）；取消选中后还在选中态就再点一次空白，仍在就停机。"""
+    from kotonebot import device
+
+    from hiro.exec import exam as X
+    from hiro.produce.ops import ocr_boxes
+
+    cards = getattr(frame, "cards", None) or []
+    rect = getattr(cards[card.slot], "rect", None) if 0 <= card.slot < len(cards) else None
+    if rect is None or X._selects(device.screenshot()):
+        return None
+    x, y = int(rect.center.x), int(rect.center.y)
+    device.click(x, y)
+    deadline = time.monotonic() + X.PLAY_CONFIRM_TIMEOUT
+    selected = False
+    while time.monotonic() < deadline:
+        time.sleep(X.PLAY_POLL)
+        if X._select_at(device.screenshot(), x):
+            selected = True
+            break
+    text = None
+    if selected:
+        time.sleep(PROBE_SETTLE)
+        x1, y1, x2, y2 = PROBE_TEXT_BOX
+        text = "".join(t for t, _, (a, b, c, d) in ocr_boxes(device.screenshot())
+                       if x1 <= (a + c) // 2 <= x2 and y1 <= (b + d) // 2 <= y2)
+    for _ in range(2):
+        device.click(*X.DESELECT_TAP)
+        time.sleep(X.DESELECT_WAIT)
+        if not X._select_at(device.screenshot(), x):
+            return text
+    raise ResumeBlocked("VEIL 点按读效果后取消不了选中，停止考试操作以免误打出")
+
+
 class VeilScreen(ScreenExamStateSource):
-    def __init__(self, deck, once, ledger_drinks=None, abilities=None, customs=None):
+    def __init__(self, deck, once, ledger_drinks=None, abilities=None, customs=None, variants=None, probe=None):
         super().__init__()
+        # 分版本记账（HIRO_VEIL_SIGNATURE=1 且账本里有同名不同版本）：deck / once 的键是记账键（见 instance_keys）
+        self.variants = variants or None
+        self.keys_by_name = defaultdict(list)
+        for key, info in (self.variants or {}).items():
+            self.keys_by_name[info["name"]].append(key)
+        self.probe = probe or tap_probe
+        self.probe_retries = 0
         # 本局客制化（账本 customize 记录）：画面 / 主数据的牌面不含客制化效果，按账本补进手牌文字
         self.customs = list(customs or [])
         self.deck = deck
@@ -905,9 +1019,11 @@ class VeilScreen(ScreenExamStateSource):
         self.names_by_base = defaultdict(list)
         self.copies = Counter()  # 去「+」卡名 → 牌组里几张（同名多张的客制化只补共有项）
         self.custom_uncertain = []
-        for name in deck:
-            self.names_by_base[name.rstrip("+")].append(name)
-            self.copies[name.rstrip("+")] += deck[name]
+        for key in deck:
+            name = name_of(key)
+            if name not in self.names_by_base[name.rstrip("+")]:
+                self.names_by_base[name.rstrip("+")].append(name)
+            self.copies[name.rstrip("+")] += deck[key]
 
     def begin(self, context):
         super().begin(context)
@@ -950,7 +1066,72 @@ class VeilScreen(ScreenExamStateSource):
             "played": [a[2:] for a in memory.this_turn if a.startswith("打 ")],
             "undone": sum(1 for u in data.get("veil_undo_log") or [] if u.get("turn") == memory.turn),
             "flags": {name: _flag(name) for name in STRATEGY_FLAGS},
+            **({"slot_keys": data.get("veil_slot_keys")} if signature_mode() else {}),
         }
+
+    def assign_keys(self, state, memory, frame) -> dict[int, str] | None:
+        """每个手牌槽位的记账键。同名只有一个版本：键就是卡名。同名几个版本：牌库里只剩一个版本有牌就是它；
+        本回合已点按分辨过（缓存按槽位，打出一张后剩下的都是同一版本也直接用）就用缓存；否则逐张点按读效果文字分辨，
+        读完返回 None（这一帧作废，换新帧决策）。分辨不了 PROBE_RETRIES 次后按第一个可能的版本记，牌库标不确定。"""
+        data = memory.strategy_data
+        cache = data.get("veil_hand_keys")
+        if not cache or cache.get("turn") != memory.turn:
+            cache = {"turn": memory.turn, "by_name": {}}
+        deck = Counter(data.get("veil_deck") or {})
+        out = {}
+        for name in sorted({norm(c.name) for c in state.hand if c.card_id}):
+            cards = [c for c in state.hand if c.card_id and norm(c.name) == name]
+            keys = self.keys_by_name.get(name) or [name]
+            possible = [k for k in keys if deck.get(k, 0) > 0] or keys
+            if len(possible) == 1:
+                out.update({c.slot: possible[0] for c in cards})
+                continue
+            cached = cache["by_name"].get(name) or {}
+            if set(cached) == {str(c.slot) for c in cards}:
+                out.update({c.slot: cached[str(c.slot)] for c in cards})
+                continue
+            if len(cached) == len(cards) and len(set(cached.values())) == 1:  # 打出一张后槽位挪了，剩下的都是同一版本
+                key = next(iter(cached.values()))
+                cache["by_name"][name] = {str(c.slot): key for c in cards}
+                out.update({c.slot: key for c in cards})
+                continue
+            got = {}
+            for c in cards:
+                text = self.probe(frame, c)
+                key = match_variant(text, possible, self.variants)
+                self._log("veil_probe", turn=memory.turn, slot=c.slot, name=name, text=text, candidates=possible, key=key)
+                if key is None:
+                    break
+                got[str(c.slot)] = key
+            if len(got) == len(cards):
+                cache["by_name"][name] = got
+                self.probe_retries = 0
+                data["veil_hand_keys"] = cache
+                return None
+            self.probe_retries += 1
+            if self.probe_retries <= PROBE_RETRIES:
+                data["veil_hand_keys"] = cache
+                return None
+            self.probe_retries = 0
+            mark_uncertain(data, memory, f"同名「{name}」几个版本点按后仍分不出（{'、'.join(possible)}）")
+            got = {str(c.slot): got.get(str(c.slot), possible[0]) for c in cards}
+            cache["by_name"][name] = got
+            out.update({int(k): v for k, v in got.items()})
+        data["veil_hand_keys"] = cache
+        return out
+
+    def apply_variants(self, state, slot_keys):
+        """分好版本的手牌：一次性按版本改（タグ），客制化文字按那一张补（不再只补同名共有项）。"""
+        out = []
+        for card in state.hand:
+            info = (self.variants or {}).get(slot_keys.get(card.slot, ""))
+            if info is not None and slot_keys.get(card.slot) != info["name"]:
+                add = [t for t in variant_texts(info) if t not in norm(card.text or "")]
+                if add:
+                    card = replace(card, text="".join(add) + (card.text or ""))
+                card = replace(card, tags=replace(card.tags, once=info["once"]))
+            out.append(card)
+        state.hand = out
 
     def read(self, frame, memory):
         from hiro.vision.hif import read_hif_exam
@@ -1001,22 +1182,30 @@ class VeilScreen(ScreenExamStateSource):
         if uncertain and sorted(set(uncertain)) != self.custom_uncertain:
             self.custom_uncertain = sorted(set(uncertain))
             self._log("veil_custom_uncertain", items=self.custom_uncertain)  # 同名多张、只有部分做过这项：版本不确定，没补
-        hand = Counter(norm(c.name) for c in state.hand if c.card_id)
-        if len(state.hand) != hand.total():
+        names = Counter(norm(c.name) for c in state.hand if c.card_id)
+        if len(state.hand) != names.total():
             raise ResumeBlocked("VEIL 手牌未读全，暂停以免错牌")
-        if swap_pending(data, memory, hand):
+        slot_keys = {c.slot: norm(c.name) for c in state.hand}
+        if self.variants:
+            slot_keys = self.assign_keys(state, memory, frame)
+            if slot_keys is None:
+                return None, "veil_probe"
+            self.apply_variants(state, slot_keys)
+        data["veil_slot_keys"] = {str(k): v for k, v in slot_keys.items()}
+        hand = Counter(slot_keys[c.slot] for c in state.hand if c.card_id)
+        if swap_pending(data, memory, names):
             self.swap_retries += 1
             if self.swap_retries <= SWAP_WAIT:
                 return None, "veil_swap_wait"
-            data.setdefault("veil_swap_log", []).append({"turn": memory.turn, "op": "等不到换手", "hand": sorted(hand.elements())})
+            data.setdefault("veil_swap_log", []).append({"turn": memory.turn, "op": "等不到换手", "hand": sorted(names.elements())})
             data.pop("veil_swap_wait", None)
         self.swap_retries = 0
         if adopt_added() and hand - deck:
             deck = adopt_added_cards(data, memory, state, hand, deck)
         problem = read_position(state, memory, hand, lambda: flower_count(frame.img), calibrate=self.calibrate)
         if problem == "veil_play_unverified" and self.position_retries >= UNDO_AFTER - 1:
-            undone = undo_unlanded_play(memory, hand)
-            self._log("veil_play_undone", turn=memory.turn, card=undone, hand=sorted(hand.elements()))
+            undone = undo_unlanded_play(memory, names)
+            self._log("veil_play_undone", turn=memory.turn, card=undone, hand=sorted(names.elements()))
             if undone is not None:
                 self.position_retries = 0
                 return None, "veil_play_undone"
@@ -1056,7 +1245,7 @@ class VeilScreen(ScreenExamStateSource):
         self.fp_retries = 0
         outside = deck - hand
         if data.get("veil_uncertain") or hand - deck:
-            if CORE <= hand.keys() or data.get("veil_cycle"):
+            if CORE <= names.keys() or data.get("veil_cycle"):
                 why_list = data.get("veil_uncertain_why") or []
                 detail = why_list[-1]["why"] if why_list else (f"手牌里有牌组账本外的牌：{sorted((hand - deck).elements())}"
                                                                if hand - deck else "旧记忆没记原因")
@@ -1067,15 +1256,20 @@ class VeilScreen(ScreenExamStateSource):
         next_draw = 3 + 2 * (TEACH in played) + int(memory.turn < data.get("veil_soda_until", 0))
         # Only the combined multiset is known, so don't expose a guessed draw order.
         known_once = set(data.get("veil_known_once", [])) | self.once
-        known_once.update(norm(c.name) for c in state.hand if c.tags.once and norm(c.name) != REBOUND)
+        known_once.update(slot_keys[c.slot] for c in state.hand if c.tags.once and norm(c.name) != REBOUND)
         data["veil_known_once"] = sorted(known_once)
         slots = [None] * 5
         for card in state.hand:
             if not 0 <= card.slot < 5 or slots[card.slot] is not None:
                 raise ResumeBlocked("VEIL 手牌槽位无法核对")
-            slots[card.slot] = norm(card.name)
-        state.piles = {**track_piles(data, memory.turn, slots, outside),
-                       "next_draw": next_draw, "once": data["veil_known_once"]}
+            slots[card.slot] = slot_keys[card.slot]
+        piles = track_piles(data, memory.turn, slots, outside)
+        once_view = data["veil_known_once"]
+        if self.variants:
+            # 决策层只认卡名：牌堆按卡名给；once 列出牌堆里还有一次性版本的卡名（small_deck 等按「有没有一次性的」判）
+            piles = {k: [name_of(n) for n in v] for k, v in piles.items()}
+            once_view = sorted({name_of(k) for k in known_once})
+        state.piles = {**piles, "next_draw": next_draw, "once": once_view}
         return state, why
 
 
@@ -1108,7 +1302,9 @@ class VeilBrain(BattleBrain):
         if decision.kind != "play":
             return
         card = next(c for c in state.hand if c.slot == decision.slot)
-        name = norm(card.name)
+        slot_keys = data.get("veil_slot_keys") or {}
+        name = slot_keys.get(str(decision.slot)) or norm(card.name)  # 记账键（分版本记账时带版本后缀，否则就是卡名）
+        variant = name != norm(card.name)
         before = stance(state)
         if before is None and memory.turn == 1 and (data.get("veil_position") or {}).get("stance") in (None, NEUTRAL):
             before = NEUTRAL  # 第 1 回合还没切过姿态：切強気照算夜空（原来记成 None、夜空不明）
@@ -1116,11 +1312,12 @@ class VeilBrain(BattleBrain):
         level = stance_change_level(card) if destination(card) == current else None
         if current == before and destination(card) != current:
             level = stance_level(state, before)
-        if name.startswith(STAR):
+        if norm(card.name).startswith(STAR):
             data["veil_star"] = 3
         delayed, delayed_level = next_stance_change(card)
         data["veil_pending_play"] = {
-            "turn": memory.turn, "card": name, "count": sum(norm(c.name) == name for c in state.hand),
+            "turn": memory.turn, "card": name,
+            "count": sum((slot_keys.get(str(c.slot)) or norm(c.name)) == name for c in state.hand),
             "stance": current, "stance_level": level, "flower": flower,
             "next_stance": delayed, "next_stance_level": delayed_level,
         }
@@ -1128,8 +1325,14 @@ class VeilBrain(BattleBrain):
             memory.actions_left += 1
         commit_full_power(data, memory, card)
         deck = data["veil_deck"]
-        lost = (name in data.get("veil_initial_once", ()) if name == REBOUND else
-                card.tags.once or name == "眠気" or name in data.get("veil_known_once", ()))
+        if variant:  # 分版本：一次性按这一张的版本（账本记的），不按同名
+            lost = name in data.get("veil_initial_once", ())
+        else:
+            lost = (name in data.get("veil_initial_once", ()) if name == REBOUND else
+                    card.tags.once or name == "眠気" or name in data.get("veil_known_once", ()))
+        cache = (data.get("veil_hand_keys") or {}).get("by_name", {}).get(norm(card.name))
+        if cache is not None:
+            cache.pop(str(decision.slot), None)  # 打出去的那张不再在手里
         if lost:
             if deck.get(name, 0) == 0:
                 mark_uncertain(data, memory, f"打出的一次性牌不在牌组账本里：{name}")
@@ -1140,14 +1343,14 @@ class VeilBrain(BattleBrain):
             piles["hand"][decision.slot] = None
             if not lost:
                 piles["grave"][name] = piles["grave"].get(name, 0) + 1
-        if name in SLEEP_GENERATORS:
+        if norm(card.name) in SLEEP_GENERATORS:
             deck["眠気"] = deck.get("眠気", 0) + 1
             if piles is not None:
                 piles["deck"]["眠気"] = piles["deck"].get("眠気", 0) + 1
         elif card.tags.makes_sleep or "生成" in card.text or "変換" in card.text:
             mark_uncertain(data, memory, f"打出会生成 / 变换牌的牌，牌组账本跟不上：{name}")
         # 回忆能力在牌的效果之后结算（「〜使用後」）：再动 / 抽牌 / 删眠気，每项按次数触发后取否
-        apply_ability(data, memory, name)
+        apply_ability(data, memory, norm(card.name))
 
 
 OPEN_WAIT_S = 30.0  # 开场演出（回忆能力发动、ターン開始）期间不是出牌页，等它播完再接管
@@ -1233,6 +1436,10 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
 
     deck, once = read_deck(deck_path)
     customs = read_customs(deck_path)
+    variants = read_variants(deck_path)
+    if variants:
+        deck = {k: v["count"] for k, v in variants.items()}
+        once = {k for k, v in variants.items() if v["once"]}
     init_kaa(HifScenario.MAIN, idol=IDOL, require_sets=False)
     pause_flag.wait_until_recording()
     connection = connect("maatools")
@@ -1292,7 +1499,7 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
         rec = Recorder(trace.dir / "battle")
         if retry and retry_drinks is not None:
             drinks = retry_drinks  # 再挑戦：游戏把饮料栏恢复到这一轮开考前，账本也用开考前的快照
-        source = VeilScreen(deck, once, drinks, abilities, customs=customs)
+        source = VeilScreen(deck, once, drinks, abilities, customs=customs, variants=variants)
         try:
             run_exam(VeilBrain(None, None), exam, rec, ended, session=session, source=source,
                      advisor=VeilAdvisor(), round_no=round_no, strict=True)
