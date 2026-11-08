@@ -252,7 +252,7 @@ def read_deck_list(img: MatLike) -> dict:
     - problems：deck 为 None 的原因。
     """
     size = read_deck_size(img)
-    cards = read_card_grid(img, LIST_VIEW, "list")  # 一览页固定 list 几何：标签栏 / 卡面图案上的误检字母会把自动推断带偏成 dialog（第二十局实机一屏只认出 4 张）
+    cards = read_card_grid(img, LIST_VIEW, "list", icons=True)  # KAA 认不出的格子用图片认卡补（HIRO_CARD_ICON；验证局 1-i 一览首屏 3 格认不出，对账作废）。一览页固定 list 几何：标签栏 / 卡面图案上的误检字母会把自动推断带偏成 dialog（第二十局实机一屏只认出 4 张）
     out = {"deck_size": size, "cards": cards, "rows_visible": (cards[-1]["row"] + 1) if cards else 0}
     out.update(_finish(cards, size, []))
     return out
@@ -522,7 +522,9 @@ def merge_deck_list(screens: list) -> dict:
     if not out["complete"] and len(screens) >= 2:
         alt = merge_deck_pages(screens[0], screens[-1])
         if alt.get("complete"):
-            return {**alt, "screens": len(screens), "problems": [f"重叠拼接不成立（{'；'.join(out['problems'])}），按首屏 + 末屏行号拼"]}
+            # 两屏正好盖满、没有重叠行（22 张 = 6 行、一屏 3 行，滑一次就到底，验证局 1-i）是正常情况，不是滑过头：
+            # 退路拼成了就只留一句说明（complete=True，调用方照常用）
+            return {**alt, "screens": len(screens), "problems": [f"相邻两屏没有重叠行，按首屏 + 末屏行号拼（{alt.get('deck_size')} 张）"]}
     return out
 
 
