@@ -185,6 +185,9 @@ FAST_GAP = 0.8  # 三下之间的间隔（弹窗出现 / 叠上去的动画）
 AP_ROW = (200, 880, 720, 1010)  # 「AP回復」框 APドリンク 那一行（名字 + 「使う」），x1, y1, x2, y2
 
 
+CONFIRM_TITLES = ("AP不足", "AP回復")
+
+
 def refill_fast(shoot: Callable, click: Callable[[int, int], None], ocr: Callable, header: Callable, *,
                 sleep: Callable[[float], None] = time.sleep, gap: float = FAST_GAP, log: Callable[[str], None] = print,
                 clock: Callable[[], float] = time.monotonic) -> dict:
@@ -228,7 +231,8 @@ def refill_fast(shoot: Callable, click: Callable[[int, int], None], ocr: Callabl
             cancel = _lowest(modal, "キャンセル", exact=True, min_y=1000)
             body = "".join(t for t, _, y in modal if confirm and y < confirm[1])
             title = "".join(t for t, _, y in texts if top <= y < bottom)
-            if ("AP回復" in title and "APドリンクを消費" in body and confirm and cancel
+            # 实机（2026-11-07 验证局）最终确认框的标题是「AP不足」（「AP回復」是压在后面的列表框）
+            if (any(w in title for w in CONFIRM_TITLES) and "APドリンクを消費" in body and confirm and cancel
                     and cancel[0] < confirm[0] and abs(cancel[1] - confirm[1]) <= 30
                     and use_count(modal) in (None, 1)):
                 ready = confirm

@@ -8,7 +8,7 @@ from hiro.produce import hif_buttons as BTN
 
 
 class Game:
-    def __init__(self, row=("APドリンク", "使う"), confirmation="APドリンクを消費して、APを回復しますか？", delay=0, title="AP回復"):
+    def __init__(self, row=("APドリンク", "使う"), confirmation="APドリンクを消費して、APを回復しますか？", delay=0, title="AP不足"):
         self.step, self.row, self.clicks = 1, row, []
         self.confirmation, self.delay, self.title = confirmation, delay, title
         self.now, self.opened = 0, None
@@ -112,3 +112,31 @@ def test_unknown_modal_title_does_not_use_visible_drink_text():
     out = run(g)
     assert not out["ok"] and out["drinks"] == 0
     assert g.clicks == [BTN.DIALOG_OK, BTN.AP_USE]
+
+
+@pytest.mark.fixtures
+def test_real_final_confirmation_frame():
+    """2026-11-07 验证局实机帧：最终确认框标题「AP不足」、后面压着「AP回復」列表框、使用数 0→1、无ジュエル：点 OCR 的「回復する」。"""
+    from pathlib import Path
+
+    import cv2
+
+    from hiro.produce.ops import ocr_boxes
+    from hiro.vision.pages import dialog_header
+
+    path = Path(__file__).parent / "fixtures" / "trace" / "ap" / "ap-final-confirm.png"
+    if not path.exists():
+        pytest.skip("缺样例")
+    img = cv2.imread(str(path))
+    clicks, now = [], [0.0]
+
+    def tick(s):
+        now[0] += s
+
+    row = lambda im: [("APドリンク", 1, None), ("使う", 1, None)]  # noqa: E731  第 2 下的局部 OCR 不在这帧上
+    ocr = lambda im: row(im) if im.shape[0] < 1280 else ocr_boxes(im)  # noqa: E731
+    out = A.refill_fast(lambda: img, lambda x, y: clicks.append((x, y)), ocr, dialog_header,
+                        sleep=tick, log=lambda m: None, clock=lambda: now[0])
+    assert clicks[:2] == [BTN.DIALOG_OK, BTN.AP_USE]
+    assert len(clicks) == 3 and abs(clicks[2][0] - 517) <= 20 and abs(clicks[2][1] - 1160) <= 20
+    assert not out["ok"]  # 静态帧：确认后弹窗「仍在」
