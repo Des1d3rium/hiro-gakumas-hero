@@ -76,7 +76,7 @@ def screen_state(memory: ExamMemory, profile, exam_fields: dict, frame=None, *, 
         for k, v in (("remaining_turns", frame.remaining), ("hp", frame.hp), ("genki", frame.genki)):
             if kw[k] is None:
                 kw[k] = v
-    memory.observe_turn(kw["remaining_turns"])
+    memory.observe_turn(kw["remaining_turns"], [c.name for c in kw["hand"]] if kw.get("hand") is not None else None)
     return BattleState.build(memory, profile, target_score=target_score, source="screen", **kw)
 
 

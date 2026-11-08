@@ -68,6 +68,8 @@ class ExamMemory:
     actions_left: int = 1  # 本回合剩余行动数估算：基础 1 次 + 已知追加行动
     blocked: list[str] = field(default_factory=list)  # 本回合执行不了的动作（画面定位不到），换回合清空
     last_score: int | None = None  # 最近一次采信的分数读数（考试中分数只增不减，用来识别 OCR 掉位）
+    extra_turns: int = 0  # 喝了「ターン追加」（初星湯）还没兑现的加回合数
+    turn_over: bool = False  # 本回合跳过了；和「出牌次数用完」一起判断加出来的回合（剩余回合不变）
     repeat_pending: bool = False  # 喝了复制饮料（下一张主动卡效果再发动一次），还没打主动卡
     repeat_target: str | None = None  # 复制饮料要接的那张主动卡（喝之前的计划里的下一张主动卡）
     attr_permil: dict = field(default_factory=dict)  # 本场考试见过的各属性回合倍率（千分比）：{Vo: 34990, …}
@@ -107,12 +109,21 @@ class ExamMemory:
         if action not in self.blocked:
             self.blocked.append(action)
 
-    def observe_turn(self, remaining: int | None) -> bool:
+    def observe_turn(self, remaining: int | None, hand: list[str] | None = None) -> bool:
         """根据剩余回合数判断是否进入了新回合；新回合时推进持续效果的计数。返回是否换回合。"""
         if remaining is None:
             return False
         new_turn = self.last_remaining is None or remaining < self.last_remaining
         # 加回合卡会让剩余回合数变大，此时不算新回合
+        if self.last_remaining is not None and remaining > self.last_remaining and self.extra_turns:
+            self.extra_turns -= 1  # 加的回合已经体现在剩余回合数里
+        elif not new_turn and remaining == self.last_remaining and self.extra_turns and (
+                self.turn_over or (self.actions_left < 1 and hand is not None and self.expected_hand is not None
+                                   and sorted(hand) != sorted(self.expected_hand))):
+            # 出牌次数用完只看账本不够（VEIL 账本不记留下的再动层数，会少记），还要手牌和出牌后预期的不一样（重新发了牌）
+            # 1-h R1 最后一回合喝初星湯：多出的一回合画面剩余回合仍是 1，没换回合 → 沿用上回合的循环记录停机
+            self.extra_turns -= 1
+            new_turn = True
         self.last_remaining = remaining
         if not new_turn:
             return False
@@ -122,6 +133,7 @@ class ExamMemory:
                     e.turns_left -= 1
             self.installed = [e for e in self.installed if e.turns_left is None or e.turns_left > 0]
         self.turn += 1
+        self.turn_over = False
         self.this_turn = []
         self.plan = []
         self.expected_hand = None
@@ -142,6 +154,8 @@ class ExamMemory:
         if self.repeat_pending and card.category == "active":
             self.repeat_pending, self.repeat_target = False, None  # 复制效果被这张主动卡用掉
         self.actions_left += t.extra_actions - 1
+        if "ターン追加" in (card.text or ""):
+            self.extra_turns += 1
         if (
             profile
             and profile.item_trigger_card
@@ -157,6 +171,8 @@ class ExamMemory:
     def record_drink(self, drink: DrinkView) -> None:
         if "スキルカード使用数追加" in drink.text:
             self.actions_left += 1
+        if "ターン追加" in drink.text:
+            self.extra_turns += 1
         if drink.repeats_card:
             self.repeat_pending = True
             nxt = next((s.get("card") for s in self.plan if s.get("action") == "play" and s.get("card")), None)
@@ -164,6 +180,7 @@ class ExamMemory:
         self._log(f"喝 {drink.name}")
 
     def record_skip(self) -> None:
+        self.turn_over = True
         self._log("跳过回合")
 
     def _log(self, what: str) -> None:

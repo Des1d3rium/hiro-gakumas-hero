@@ -1242,7 +1242,8 @@ def change(state, args, *, persist=None):
         try:
             out = run_round(args.round, deck, f"batch-{args.batch}-{args.run}-exam{args.round}",
                             drinks=ledger["drinks"] if ledger else None,
-                            abilities=ledger.get("abilities") if ledger else None)  # fmt: skip
+                            abilities=ledger.get("abilities") if ledger else None,
+                            retry_drinks=snaps.get(str(args.round)))  # fmt: skip
         except ResumeBlocked as e:
             raise ValueError(str(e)) from e
         if ledger is not None and out.get("retry") and snaps.get(str(args.round)) is not None:
