@@ -248,7 +248,7 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
         col = pick_change_in(scan.get("candidates") or [], rank=rank)
         if col is None:
             return None
-        out = run_cmd("change-pick", col=col, row=None, commit=False, scan=None)
+        out = run_cmd("change-pick", col=col, row=None, commit=False, scan=None, name=None, customized=None)
         # 每个候选的排序（0 提高 / 1 照旧 / 2 降低）和一次性写进 prep 行，审计看得出为什么选这张
         fp_note = (f"（牌组全力値 {rank.total}；候选 "
                    + "，".join(f"{c['col']}:{c.get('name')}{'' if c.get('once') else '(非一次性)'}=r{rank(c)}"
@@ -259,7 +259,7 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
         target = pick_change_out(scan.get("cards") or [], state["active"].get("ledger"))
         if target is None:
             return None
-        out = run_cmd("change-pick", col=target[1], row=target[0], commit=True, scan=None)
+        out = run_cmd("change-pick", col=target[1], row=target[0], commit=True, scan=None, name=None, customized=None)
         if out.get("ok"):
             # 记账失败时（ledger_todo）游戏里也已经换了：写进 prep 行，代理从 Monitor 看到后补记
             todo = out.get("ledger_todo")

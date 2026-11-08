@@ -1410,9 +1410,10 @@ def change(state, args, *, persist=None):
                             out["ledger_todo"] = "新饮料没认出，用 ledger-edit --drink-add 补记"
                     persist()
                 return out
-            customized = None if args.customized is None else args.customized == "1"
+            raw = getattr(args, "customized", None)  # watch 的 prep 自己拼 Namespace，可能不带新参数
+            customized = None if raw is None else raw == "1"
             out = batch_change.pick(device, args.batch, args.run, col=args.col, row=args.row, commit=args.commit,
-                                    scan_file=args.scan, name=args.name, customized=customized)  # fmt: skip
+                                    scan_file=args.scan, name=getattr(args, "name", None), customized=customized)  # fmt: skip
             if ledger is not None and out.get("ok"):
                 if out.get("stage") == 1:
                     ledger["pending_add"] = {"name": out["picked"]["name"], "upgrade": out["picked"].get("upgrade"),
@@ -1804,7 +1805,7 @@ def watch(path, run):
     return 0
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--batch", required=True, help="当前对话批次 ID")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1905,6 +1906,11 @@ def main():
         if cmd == "exam":
             p.add_argument("--round", type=int, choices=(1, 2), required=True)
             p.add_argument("--deck", type=Path, help="可选。覆盖该轮的完整牌组 JSON")
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", args.batch):
         parser.error("批次 ID 仅支持字母、数字、下划线和连字符")

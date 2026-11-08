@@ -156,3 +156,31 @@ def test_veil_fp_change_subtracts_card_going_out(monkeypatch):
               "log": [{"op": "add", "card": "忍耐力+", "why": "换卡换入 授業"}]}
     rank = P.fp_rank(ledger, veil=True, change=True)
     assert rank.total == 6 and rank({"card_id": "id_seika", "upgrade": 1}) == 2  # 9 - 3 + 4 = 10 > 7
+
+
+def test_prep_change_pick_namespace_has_every_cli_arg(monkeypatch):
+    # 2026-11-08 第 2 局：change-pick 加了 --name/--customized，prep 自己拼的 Namespace 没带 → AttributeError，阶段 1、2 自动换卡全挂
+    import batch_change
+    import batch_hif
+
+    sub = next(a for a in batch_hif.build_parser()._actions if a.dest == "command").choices["change-pick"]
+    dests = {a.dest for a in sub._actions if a.dest != "help"}
+    seen = []
+
+    def change(state, ns, persist=None):
+        if ns.command == "change-scan":
+            return {"candidates": [{"col": 0, "once": True}], "cards": [{"row": 2, "col": 2, "name": "立ち回りの基本"}]}
+        seen.append(ns)
+        assert dests <= set(vars(ns)), dests - set(vars(ns))
+        return {"ok": False}
+
+    class Dev:
+        def screenshot(self):
+            return None
+
+    monkeypatch.setattr(P, "fp_rank", lambda *a, **k: None)
+    state = {"active": {"ledger": None}}
+    for stage in (1, 2):
+        monkeypatch.setattr(batch_change, "stage_of", lambda texts, s=stage: s)
+        P.handle(Dev(), lambda img: [], change, state, "b", 1, persist=lambda: None)
+    assert len(seen) == 2
