@@ -581,7 +581,7 @@ NAME_FUZZY_TOP = 3  # 只看卡面前几名
 
 def _art_one_char_off(base: str, art_top: list[tuple[str, float]]) -> SkillCard | None:
     """卡名精确 / 前缀都对不上时：卡面前几名里有一张卡的基础卡名和 OCR 文字等长、只差一个字（OCR 把一个字读成形近字），
-    就认那张——卡面和卡名两个各自不够格的信号指向同一张卡。验证局 1-i R1：嬉しい誤算+ 卡面 0.484（低于 ART_MIN_SCORE），
+    或开头多读了一个字、其余完全一致，就认那张——卡面和卡名两个各自不够格的信号指向同一张卡。验证局 1-i R1：嬉しい誤算+ 卡面 0.484（低于 ART_MIN_SCORE），
     卡名读成「薅しい誤算」，原来两边都定不了、手牌未读全停机。"""
     if len(base) < NAME_FUZZY_MIN:
         return None
@@ -590,8 +590,10 @@ def _art_one_char_off(base: str, art_top: list[tuple[str, float]]) -> SkillCard 
         if card is None:
             continue
         name = _fold(card.name.rstrip("+"))
-        if len(name) == len(base) and sum(a != b for a, b in zip(name, base)) == 1:
-            return card
+        # 开头多读一个字（卡名栏左边的徽章 / 卡框被读成「1」，1-i R1「1嬉しい誤算++」）：去掉后与卡名一致也算
+        for text in (base, base[1:]):
+            if len(name) == len(text) and sum(a != b for a, b in zip(name, text)) <= (1 if text is base else 0):
+                return card
     return None
 
 

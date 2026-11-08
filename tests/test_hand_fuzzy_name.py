@@ -17,6 +17,16 @@ def test_one_char_off_matches_art_candidate():
     assert card is not None and card.name == "嬉しい誤算" and not exact
 
 
+def test_extra_leading_char_matches_art_candidate():
+    """1-i R1 第 3 回合：「1嬉しい誤算++」（开头多读「1」，「++」是考试中临时强化）。"""
+    from hiro.vision.hif import _card_from_name
+
+    if _card_from_name("嬉しい誤算", [])[0] is None:
+        pytest.skip("没有主数据")
+    assert _card_from_name("1嬉しい誤算++", [(ART, 0.496)])[0].name == "嬉しい誤算"
+    assert _card_from_name("1薅しい誤算", [(ART, 0.496)])[0] is None  # 多一个字又错一个字：不认
+
+
 @pytest.mark.parametrize("text, top", [
     ("薅しい誤算", [("img_general_skillcard_men-3_062", 0.5)]),  # 卡面候选是别的卡：不认
     ("薅しい誤", [(ART, 0.5)]),                                   # 长度不同：不认
@@ -44,3 +54,17 @@ def test_real_hand_reads_all_five():
     assert missing == 0
     assert [c["name"] for c in hand] == ["頂点へ", "エンターテイナー", "嬉しい誤算", "アイドルになります", "第一印象+"] or \
         [c["name"].rstrip("+") for c in hand] == ["頂点へ", "エンターテイナー", "嬉しい誤算", "アイドルになります", "第一印象"]
+
+
+@pytest.mark.fixtures
+def test_real_hand_with_leading_digit():
+    import cv2
+
+    from hiro.vision.hif import read_hand
+    from hiro.vision.offline import load
+
+    path = FRAME.with_name("hand-ureshii-lead1-1i.png")
+    if not path.exists():
+        pytest.skip("缺样例")
+    hand, missing = read_hand(load(cv2.imread(str(path))), cache=None, batch_names=True)
+    assert missing == 0 and hand[1]["name"].startswith("嬉しい誤算")
