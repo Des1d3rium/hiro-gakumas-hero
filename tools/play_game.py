@@ -153,10 +153,11 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     common = ["--idol", args.idol, *(["--main-attr", args.main_attr] if args.main_attr else []), *passthrough]
     t0 = time.monotonic()
-    sys.path.insert(0, str(ROOT / "src"))
-    from hiro.loop import pause_flag
+    # 设备操作前：外部暂停旗标在就等。也放子进程里：导入 hiro 包会连带 cv2 / kotonebot，Windows 上包装进程因此常驻约 500 MB（第二十局）
+    import os
 
-    pause_flag.wait_until_recording()  # 设备操作前：外部暂停旗标在就等
+    subprocess.call([PY, "-c", "from hiro.loop import pause_flag; pause_flag.wait_until_recording()"], cwd=ROOT,
+                    env={**os.environ, "PYTHONPATH": str(ROOT / "src")})  # fmt: skip
     if not args.no_settings_check:
         # 开局前检查设置（重新登录后会被重置；只报警，不改，不阻断）。只打本战也要查（第二十三局）
         r = _probe("settings")

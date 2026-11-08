@@ -36,3 +36,4 @@ def test_wrapper_does_not_import_recognition():
     body = src[src.index("def main("):]
     assert "read_memory()" not in body.split("def _probe_main")[0] if "def _probe_main" in body else "read_memory()" not in body
     assert "from check_settings import" not in body
+    assert "\n    from hiro" not in body and "\n    import hiro" not in body  # pause_flag 也在子进程里等（第二十局包装进程 ~500 MB）
