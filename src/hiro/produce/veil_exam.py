@@ -30,7 +30,7 @@ def track_extra(data, memory, keep):
     回合开始时没有、回合内获得 → 留到下回合；回合开始时已有、回合内又获得 → 衰退（减 1）；
     回合开始时已有、回合内用到 0 后再获得 → 留到下回合。
     data["veil_extra"] = {turn, start（开局有没有再动）, zeroed（本回合用到过 0）, carried, left（剩余出牌次数，含基础 1 次）}。
-    keep（HIRO_VEIL_KEEP_WARM）时新回合把留下的层数加回 memory.actions_left；关着时只记账、不改行为。"""
+    keep（VEIL_KEEP_WARM）时新回合把留下的层数加回 memory.actions_left；关着时只记账、不改行为。"""
     ex = data.get("veil_extra")
     if ex is not None and ex.get("turn") == memory.turn:
         return ex

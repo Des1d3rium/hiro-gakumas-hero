@@ -1,4 +1,4 @@
-"""VEIL 考试记账：全力値预留（HIRO_VEIL_FP_RESERVE）、全力値账本重建 / exam 外出牌核对 / 増加量増加、
+"""VEIL 考试记账：全力値预留（VEIL_FP_RESERVE）、全力値账本重建 / exam 外出牌核对 / 増加量増加、
 牌库不确定（veil_uncertain）的原因与清除、决策 trace 字段与 exam_brain_end 退出原因。"""
 
 import json
@@ -46,14 +46,14 @@ def choose(state, mem):
     return VeilAdvisor().decide(state, mem, None, legal)
 
 
-# ---------------------------------------------------------------- 1. 全力値预留（HIRO_VEIL_FP_RESERVE，默认关）
+# ---------------------------------------------------------------- 1. 全力値预留（VEIL_FP_RESERVE，默认关）
 @pytest.fixture
 def reserve(monkeypatch):
-    monkeypatch.setenv("HIRO_VEIL_FP_RESERVE", "1")
+    monkeypatch.setenv("VEIL_FP_RESERVE", "1")
 
 
 def test_reserve_off_keeps_old_choice(monkeypatch):
-    monkeypatch.delenv("HIRO_VEIL_FP_RESERVE", raising=False)
+    monkeypatch.delenv("VEIL_FP_RESERVE", raising=False)
     state, mem = case(card(0, ANDANTE), fp=4)
     assert choose(state, mem).action.legal_key() == "play:0"
 

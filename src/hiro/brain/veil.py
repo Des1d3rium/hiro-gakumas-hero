@@ -23,65 +23,72 @@ LIMITS = {"r1": 700_000, "r2": 1_400_000}
 HAND_MAX = 5  # 手牌上限：抽牌超出的作废
 
 
+def _flag(name: str) -> bool:
+    """VEIL 出牌策略开关（都默认关）：环境变量 VEIL_<name>=1 打开。旧名 HIRO_VEIL_<name> 仍认，两个都设时以新名为准
+    （使用者 2026-11-07：策略开关去掉 HIRO_ 前缀）。"""
+    value = os.environ.get(f"VEIL_{name}")
+    return (value if value is not None else os.environ.get(f"HIRO_VEIL_{name}")) == "1"
+
+
 def keep_warm():
-    """HIRO_VEIL_KEEP_WARM=1：清牌阶段保留温存 / 能留到下回合的再动（默认关，回放验证后再开）。"""
-    return os.environ.get("HIRO_VEIL_KEEP_WARM") == "1"
+    """VEIL_KEEP_WARM=1：清牌阶段保留温存 / 能留到下回合的再动（默认关，回放验证后再开）。"""
+    return _flag("KEEP_WARM")
 
 
 def hp_guard():
-    """HIRO_VEIL_HP_GUARD=1：清牌阶段按姿态和消耗加成算出牌实际掉的体力，跌破保底线的不打；強気下不改姿态的掉血牌留到温存；
+    """VEIL_HP_GUARD=1：清牌阶段按姿态和消耗加成算出牌实际掉的体力，跌破保底线的不打；強気下不改姿态的掉血牌留到温存；
     強気下优先打切回温存的牌
     （使用者 2026-11-07：脚本在強気、一心不乱加成后、元気不足时照打高消耗牌，trace 里一张牌 25→4）。默认关，回放验证后再开。"""
-    return os.environ.get("HIRO_VEIL_HP_GUARD") == "1"
+    return _flag("HP_GUARD")
 
 
 def release_gain():
-    """HIRO_VEIL_RELEASE_GAIN=1：温存 / のんびり 下打「強気に変更」的牌，按「先结算牌、再结算夜空」算温存解除的 +1 出牌次数——
+    """VEIL_RELEASE_GAIN=1：温存 / のんびり 下打「強気に変更」的牌，按「先结算牌、再结算夜空」算温存解除的 +1 出牌次数——
     夜空只剩 1 次、最终变成のんびり时也算（原来算 0，于是手里有 エンターテイナー+、巻き返し+ 也去喝ホエイ）。
     实机 codex-20261107-1 第 1 局 R2 剩 8 回合：喝了ホエイ再打这两张，打完同回合还剩 1 次（trace 第 23 步）。默认关，回放验证后再开。"""
-    return os.environ.get("HIRO_VEIL_RELEASE_GAIN") == "1"
+    return _flag("RELEASE_GAIN")
 
 
 def fp_reserve():
-    """HIRO_VEIL_FP_RESERVE=1：清牌阶段花全力値的牌（アンダンテ+、清牌用的 巻き返し+…）只在花完还剩 ≥ FP_RESERVE_AT 时打，
+    """VEIL_FP_RESERVE=1：清牌阶段花全力値的牌（アンダンテ+、清牌用的 巻き返し+…）只在花完还剩 ≥ FP_RESERVE_AT 时打，
     给五卡循环留住 アイドルになります+（全力値消費3）先打的全力値。账本不知道（None）、アイドルになります+ 已不在牌组、
     最后一回合时不限制。实机 codex-20261107-1 第 1 局 R2：清牌把 成果+ 的 +4 花在 アンダンテ+ / 巻き返し+ ×2 上，
     剩 5 回合进循环时全力値 0，アイドルになります+ 灰着打不出。默认关，回放验证后再开。"""
-    return os.environ.get("HIRO_VEIL_FP_RESERVE") == "1"
+    return _flag("FP_RESERVE")
 
 
 def draw_last():
-    """HIRO_VEIL_DRAW_LAST=1：清牌时好几张都能加出牌次数，先打不抽牌、也不改姿态的那张（みずたまりスキップ 等），
+    """VEIL_DRAW_LAST=1：清牌时好几张都能加出牌次数，先打不抽牌、也不改姿态的那张（みずたまりスキップ 等），
     带抽牌的（インフルエンサー+、フルスロットル+、仕切り直し+）留后：手牌少了，抽进来的牌不会因手牌满而作废
     （使用者 2026-11-07，验证局 R1 剩 7 回合：满手先打了 インフルエンサー+ / フルスロットル+，みずたまりスキップ 留到最后）。默认关。"""
-    return os.environ.get("HIRO_VEIL_DRAW_LAST") == "1"
+    return _flag("DRAW_LAST")
 
 
 def free_extra():
-    """HIRO_VEIL_FREE_EXTRA=1：过渡阶段「等待下回合」之前，先打不改姿态、不抽牌、自己补回出牌次数的一次性牌（みずたまりスキップ+）。
+    """VEIL_FREE_EXTRA=1：过渡阶段「等待下回合」之前，先打不改姿态、不抽牌、自己补回出牌次数的一次性牌（みずたまりスキップ+）。
     验证局 R2 剩 8 回合它留在手里等过渡结束（使用者 2026-11-07：「不会吃亏」）。默认关。"""
-    return os.environ.get("HIRO_VEIL_FREE_EXTRA") == "1"
+    return _flag("FREE_EXTRA")
 
 
 def clear_first():
-    """HIRO_VEIL_CLEAR_FIRST=1：清牌阶段一次性牌（打出就离开牌库）排在复用牌前面，哪怕复用牌在温存下切強気能补一次出牌次数；
+    """VEIL_CLEAR_FIRST=1：清牌阶段一次性牌（打出就离开牌库）排在复用牌前面，哪怕复用牌在温存下切強気能补一次出牌次数；
     ひと呼吸 只让给别的一次性牌，不再让给复用牌。使用者 2026-11-07（验证局 1-f R1 剩 5–2 回合）：温存下总是先打
     教えてあげる+ / エンターテイナー+（切強気 +1 次），到強気又被体力闸压后，頂点へ+ 从剩 5 拖到剩 2 才打。默认关。"""
-    return os.environ.get("HIRO_VEIL_CLEAR_FIRST") == "1"
+    return _flag("CLEAR_FIRST")
 
 
 def drive_fp():
-    """HIRO_VEIL_DRIVE_FP=1：清牌阶段手里 アイドルになります+ / 巻き返し+ 因全力値不够发灰、又没有别的可打的加全力値牌时，
+    """VEIL_DRIVE_FP=1：清牌阶段手里 アイドルになります+ / 巻き返し+ 因全力値不够发灰、又没有别的可打的加全力値牌时，
     打 オーバードライブ+（全力値+2、自带再动）攒全力値。原来清牌一律不打 オーバードライブ，它又是唯一的全力値来源，
     全力値永远 0、两张一直灰着（使用者 2026-11-07，验证局 1-f R2 剩 7–1 回合：死循环）。默认关。"""
-    return os.environ.get("HIRO_VEIL_DRIVE_FP") == "1"
+    return _flag("DRIVE_FP")
 
 
 def fp_cap():
-    """HIRO_VEIL_FP_CAP=1：清牌阶段别把全力値加到 FULL_POWER_AT（满了下回合自动进全力、全力値清零）。有别的牌可打时，
+    """VEIL_FP_CAP=1：清牌阶段别把全力値加到 FULL_POWER_AT（满了下回合自动进全力、全力値清零）。有别的牌可打时，
     不打会让全力値到顶的加全力値牌。验证局 codex-20261107-1-c R2：プライド +3、成果+ +4、涙の思い出+ +4 在 T3 加到 11，
     T4 自动全力打的全是清牌牌，之后 T6–T10 全力値 0，巻き返し+ / アイドルになります+ 打不出。默认关，回放验证后再开。"""
-    return os.environ.get("HIRO_VEIL_FP_CAP") == "1"
+    return _flag("FP_CAP")
 
 
 FULL_POWER_AT = 10  # 全力値到 10 自动进全力（实机）
@@ -569,7 +576,7 @@ class VeilAdvisor:
         last_turn = state.remaining_turns is not None and state.remaining_turns <= 1
 
         def affordable(card):
-            """体力闸（HIRO_VEIL_HP_GUARD）：打完还剩不到保底线的牌不打；最后一回合不限。"""
+            """体力闸（VEIL_HP_GUARD）：打完还剩不到保底线的牌不打；最后一回合不限。"""
             if not guard or last_turn or state.hp is None:
                 return True
             loss = hp_loss(state, card, current, mods)
