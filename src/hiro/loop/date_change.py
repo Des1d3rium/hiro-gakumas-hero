@@ -28,7 +28,7 @@ FORCED_TITLES = DATE_TITLES + DATA_UPDATE_TITLES
 TO_TITLE = ("タイトルへ",)
 # 回标题后可能要下载数据：有「ダウンロード」字样时点这些按钮，绝不点キャンセル（不下载就进不去）
 DOWNLOAD_HINTS = ("ダウンロード",)
-DOWNLOAD_OK = ("ダウンロード", "OK", "はい", "同意する")
+DOWNLOAD_OK = ("ダウンロード", "OK", "はい", "同意する", "決定")  # 「データダウンロード 214.6 MB」确认框是 キャンセル / 決定（Windows 第十七局卡了 15 分钟）
 TAP_TO_START = ("TAPTOSTART",)
 CLOSE = ("閉じる", "キャンセル")
 PURCHASE_HINTS = ("購入", "ジュエル", "パック", "ショップ", "円")

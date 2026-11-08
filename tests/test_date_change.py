@@ -163,3 +163,31 @@ def test_recover_accepts_download_and_never_cancels():
     ok = dc.recover_to_home(shoot, lambda x, y: clicks.append((x, y)), lambda n: seq[n], lambda n: seq[n] == "home",
                             clock=lambda: t["now"], sleep=lambda x: t.__setitem__("now", t["now"] + x))  # fmt: skip
     assert ok and clicks == [(360, 1157), (500, 1000), (360, 1100)]
+
+
+def test_recover_download_dialog_kettei():
+    """「データダウンロード / ゲームデータのダウンロードを行います 214.6 MB」按钮是 キャンセル / 決定：点決定（Windows 第十七局只认 OK，等了 15 分钟）。"""
+    seq = [
+        [box("データダウンロード", 200, 820), box("ゲームデータのダウンロードを行います", 280, 900), box("キャンセル", 240, 1160), box("決定", 520, 1160)],
+        "home",
+    ]
+    i = {"n": 0}
+    clicks = []
+
+    def shoot():
+        n = i["n"]
+        i["n"] = min(n + 1, len(seq) - 1)
+        return n
+
+    t = {"now": 0.0}
+    ok = dc.recover_to_home(shoot, lambda x, y: clicks.append((x, y)), lambda n: seq[n], lambda n: seq[n] == "home",
+                            clock=lambda: t["now"], sleep=lambda x: t.__setitem__("now", t["now"] + x))  # fmt: skip
+    assert ok and clicks == [(520, 1160)]
+
+
+@_real('date_change/data-download-win17.png')
+def test_real_download_dialog_button():
+    img = cv2.imread(str(FIX / "data-download-win17.png"))
+    texts = [(dc._norm(t), b) for t, _, b in ops.ocr_boxes(img)]
+    assert any("ダウンロード" in t for t, _ in texts)
+    assert next((dc._center(b) for t, b in texts if t in dc.DOWNLOAD_OK and dc._center(b)[1] > 700), None) is not None
