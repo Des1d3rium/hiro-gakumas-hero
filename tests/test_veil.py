@@ -1354,3 +1354,83 @@ def test_release_gain_yields_to_clear_first_without_whey(monkeypatch):
     assert choose(state, mem) == "play:1"
     state, mem = case(teach, peak, drinks=(WHEY,))
     assert choose(state, mem) == "play:0"
+
+
+# ---------------------------------------------------------------- 2026-11-08 trusted trace 复盘（使用者确认的错误决策）
+def test_draw_all_schedules_teach_when_next_draw_short_of_deck(monkeypatch):
+    """3-c 第 2 局 R2 T6：牌库 5 张（核心 4 + ティーパーティ+），ソーダ 让下回合抽 4 张，夜空 2、のんびり。
+    原来抽 4 张就算够、连空 4 回合；VEIL_DRAW_ALL=1：抽不满牌库就先打 教えてあげる+ 预约多抽。"""
+    tea = card(0, "ティーパーティ+", "スキルカード使用数追加+1スキルカードを引く", once=True)
+    teach = card(1, TEACH, "強気に変更パラメータ+6次のターン、スキルカードを2枚引く")
+    hand = [tea, teach, card(2, DRIVE), card(3, REBOUND)]
+    state, mem = case(*hand, deck=[ENTERTAINER], status="のんびり", flower=2)
+    state.piles["next_draw"] = 4
+    monkeypatch.setenv("VEIL_DRAW_ALL", "0")
+    assert choose(state, mem) == "skip"
+    monkeypatch.setenv("VEIL_DRAW_ALL", "1")
+    assert choose(state, mem) == "play:1"
+    state.piles["next_draw"] = 5  # 抽得满：不用预约
+    assert choose(state, mem) == "skip"
+
+
+def test_last_turn_plays_instead_of_waiting(monkeypatch):
+    """3 第 2 局 R1 attempt2 T9（剩 1）：过渡里手有 エンターテイナー+、1 次出牌却「等待下回合」。VEIL_LAST_TURN=1：照打。"""
+    rebound = card(2, REBOUND, "全力値消費1温存に変更")
+    rebound.available = False
+    hand = [card(0, ENTERTAINER, "強気に変更パラメータ+12"), card(1, "眠気"), rebound]
+    state, mem = case(*hand, deck=[DRIVE], grave=[TEACH], status="強気", flower=2)
+    state.remaining_turns = 1
+    monkeypatch.setenv("VEIL_LAST_TURN", "0")
+    assert choose(state, mem) == "skip"
+    monkeypatch.setenv("VEIL_LAST_TURN", "1")
+    assert choose(state, mem) != "skip"
+    state.hand = [card(1, DRIVE, "強気に変更パラメータ+4")]  # 只剩 オーバードライブ+：最后一回合也打
+    assert choose(state, mem) == "play:1"
+
+
+def test_cycle_soda_waits_for_hand_room(monkeypatch):
+    """满 5 张进循环：VEIL_CYCLE_SODA=1 时不喝ソーダ（抽的 2 张作废），ホエイ / ブースト 照喝；最后一回合照喝。"""
+    cards = [card(i, n) for i, n in enumerate([DRIVE, REBOUND, TEACH, ENTERTAINER, "眠気"])]
+    state, mem = case(*cards, deck=[], drinks=(SODA, BOOST))
+    monkeypatch.setenv("VEIL_CYCLE_SODA", "1")
+    assert choose(state, mem) == "drink:1"
+    state.drinks = [d for d in state.drinks if d.name == SODA]
+    assert choose(state, mem) == "play:0"
+    state.remaining_turns = 1
+    assert choose(state, mem) == "drink:0"
+
+
+def test_stuck_soda_draws_when_nothing_playable(monkeypatch):
+    """3-3 第 1 局 R1 attempt2 T3：手牌空、1 次出牌、有ソーダ 却跳过。VEIL_STUCK_SODA=1：喝ソーダ 抽 2 继续清。"""
+    state, mem = case(card(0, DRIVE), drinks=(SODA,), status="のんびり", flower=3, actions_left=1)
+    monkeypatch.setenv("VEIL_STUCK_SODA", "0")
+    assert choose(state, mem) == "skip"
+    monkeypatch.setenv("VEIL_STUCK_SODA", "1")
+    assert choose(state, mem) == "drink:0"
+    state.hand = [card(i, f"一次性{i}", once=True) for i in range(4)]
+    for c in state.hand:
+        c.available = False
+    assert choose(state, mem) == "skip"  # 手牌放不下 2 张：不喝
+
+
+def test_hp_net_lets_genki_card_and_core_through(guard, monkeypatch):
+    """使用者 2026-11-08：体力闸太保守。みずたまりスキップ+（体力消費1、元気+8）加的元気比花的多，可用体力不减；
+    核心打分牌（エンターテイナー+）也不拦。打完体力至少剩 1。"""
+    skip_card = costly(0, "みずたまりスキップ+", "体力消費1元気+8スキルカード使用数追加+1", 0, hp_cost=1)
+    state, mem = case(skip_card, status="強気")
+    state.statuses[0]["value"] = 2
+    state.hp = 11  # 強気 2：1×2 + 1 = 3 → 剩 8 < 10
+    monkeypatch.setenv("VEIL_HP_NET", "0")
+    assert choose(state, mem) == "skip"
+    monkeypatch.setenv("VEIL_HP_NET", "1")
+    assert choose(state, mem) == "play:0"
+    ent = costly(1, ENTERTAINER, "体力消費5強気に変更パラメータ+12", 0, once=False, hp_cost=5)
+    state, mem = case(ent, status="温存")
+    state.statuses[0]["value"] = 2
+    state.hp = 12
+    monkeypatch.setenv("VEIL_HP_NET", "0")
+    assert choose(state, mem) == "skip"
+    monkeypatch.setenv("VEIL_HP_NET", "1")
+    assert choose(state, mem) == "play:1"
+    state.hp = 5  # 打完 0：仍拦
+    assert choose(state, mem) == "skip"

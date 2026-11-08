@@ -25,7 +25,8 @@ HAND_MAX = 5  # 手牌上限：抽牌超出的作废
 
 # 默认开的策略开关（使用者 2026-11-07，22 个 trace 回放后定）：设 VEIL_<name>=0 关掉。其余默认关，=1 打开
 DEFAULT_ON = frozenset({"HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP"})
-STRATEGY_FLAGS = ("KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP")
+STRATEGY_FLAGS = ("KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP",
+                  "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET")
 
 
 def _flag(name: str) -> bool:
@@ -91,6 +92,38 @@ def fp_cap():
     不打会让全力値到顶的加全力値牌。验证局 codex-20261107-1-c R2：プライド +3、成果+ +4、涙の思い出+ +4 在 T3 加到 11，
     T4 自动全力打的全是清牌牌，之后 T6–T10 全力値 0，巻き返し+ / アイドルになります+ 打不出。默认开（=0 关；22 个 trace 回放后打开，使用者 2026-11-07）。"""
     return _flag("FP_CAP")
+
+
+def draw_all():
+    """VEIL_DRAW_ALL=1：过渡阶段「要不要打 教えてあげる+ 预约下回合多抽 2 张」按牌库张数判断：下回合抽的张数少于牌库
+    （核心 4 张 + 第五张）就预约。原来只看下回合抽 4 / 5 张，センブリソーダ 让下回合抽 4 张时就当成够了。
+    trusted trace codex-20261108-3-c 第 2 局 R2 T5–T8：牌库 5 张、每回合抽 4 张，次次缺一张核心，连空 4 回合（使用者 2026-11-08 确认）。默认关。"""
+    return _flag("DRAW_ALL")
+
+
+def last_turn_play():
+    """VEIL_LAST_TURN=1：最后一回合（剩 1）不进过渡、不「等待下回合」，按清牌把能打的都打掉，オーバードライブ+ 也算。
+    trusted trace 3 第 2 局 R1 attempt2 T9、3-c 第 1 局 R2 T12：剩 1 回合手里有 エンターテイナー+ 等、还有出牌次数却跳过（使用者 2026-11-08 确认）。默认关。"""
+    return _flag("LAST_TURN")
+
+
+def cycle_soda():
+    """VEIL_CYCLE_SODA=1：五卡循环开头手牌放不下 2 张（满 5 / 4 张）时不喝センブリソーダ（当场抽的 2 张作废），
+    最后一回合照喝（只要 +10%）。trusted trace 里 10 次满手进循环喝ソーダ（使用者 2026-11-08 确认）。默认关。"""
+    return _flag("CYCLE_SODA")
+
+
+def stuck_soda():
+    """VEIL_STUCK_SODA=1：清牌阶段还有出牌次数、手里没有一张允许打的牌（不是被体力闸压住）时，手牌放得下就喝センブリソーダ 抽 2 继续清。
+    trusted trace 3-3 第 1 局 R1 attempt2 T3：手牌空、1 次出牌、有ソーダ 却跳过（使用者 2026-11-08：不 optimal）。默认关。"""
+    return _flag("STUCK_SODA")
+
+
+def hp_net():
+    """VEIL_HP_NET=1：体力闸按「可用体力 = 体力 + 元気」看：打出后加的元気不少于这张实际花掉的（元気 + 体力），
+    可用体力不减，不拦（みずたまりスキップ+：体力消費1、元気+8）；核心打分牌（エンターテイナー+ 等）也不拦。
+    打完体力至少剩 1。使用者 2026-11-08：mutation test 说体力闸没错但太保守。默认关。"""
+    return _flag("HP_NET")
 
 
 FULL_POWER_AT = 10  # 全力値到 10 自动进全力（实机）
@@ -177,12 +210,13 @@ def _master_text(name):
     return description_text(row[0]) if row else None
 
 
-def hp_loss(state, card, current, mods=None):
+def hp_loss(state, card, current, mods=None, *, spent=False):
     """打出这张牌实际掉的体力（估计，宁高勿低）。
 
     主数据（2026-11-07 核对）：コスト值先加一心不乱（強気効果的牌 +7）、盛り上げ上手（アクティブ +1）；
     姿态倍率 強気 ×2（2 段階另外每张直接扣 1）、温存 1 段階 ×0.5、2 段階 ×0.25、のんびり ×0；先扣元気。
-    未在主数据文本核实、按保守处理：消費体力増加 / 減少按 ±50%；体力消費（直接扣）也乘姿态倍率、不被元気挡。"""
+    未在主数据文本核实、按保守处理：消費体力増加 / 減少按 ±50%；体力消費（直接扣）也乘姿态倍率、不被元気挡。
+    spent=True：算花掉的元気 + 体力（不先扣元気），给 usable_net 用。"""
     import math
 
     names = {norm(s.get("name") or ""): s for s in state.statuses or []}
@@ -213,9 +247,25 @@ def hp_loss(state, card, current, mods=None):
         mult *= 1.5
     if "消費体力減少" in names:
         mult *= 0.5
-    paid = max(0, math.ceil(cost * mult) - (state.genki or 0))
+    scaled = math.ceil(cost * mult)
+    paid = max(0, scaled - (state.genki or 0))
     direct = math.ceil((card.hp_cost or 0) * max(mult, 1.0))  # 体力消費：只往高估，温存 / のんびり 不减
+    if spent:
+        return scaled + direct + per_card
     return paid + direct + per_card
+
+
+_GENKI_GAIN = re.compile(r"元気\+(\d+)")
+
+
+def genki_gain(card) -> int:
+    """牌面「元気+N」（打出时立刻加的元気；「元気値増加+N」这类加成不算）。"""
+    return sum(int(n) for n in _GENKI_GAIN.findall(norm(card.text or "")))
+
+
+def usable_net(state, card, current, mods=None) -> int:
+    """打出这张后可用体力（体力 + 元気）的变化：加的元気 − 花掉的（元気 + 体力）。≥ 0 表示可用体力不减。"""
+    return genki_gain(card) - hp_loss(state, card, current, mods, spent=True)
 
 
 def norm(text):
@@ -442,6 +492,9 @@ class VeilAdvisor:
         if cycle and cycle["turn"] == state.turn:
             order = ORDERS[cycle["flower"]]
             for drink in (WHEY, BOOST, SODA) + ((EXTRA_TURN,) if extra_turn_ok else ()):
+                if drink == SODA and cycle_soda() and len(state.hand) + 2 > HAND_MAX \
+                        and (state.remaining_turns is None or state.remaining_turns > 1):
+                    continue  # 满手喝ソーダ 抽的 2 张作废（VEIL_CYCLE_SODA）
                 if drink in drinks:
                     return act(drinks[drink], f"循环：使用 {drink}")
             # 第五张是アイドルになります+：它要求手里至少两张 エンターテイナー+／オーバードライブ+／教えてあげる+，
@@ -486,10 +539,11 @@ class VeilAdvisor:
                     return play(by_name[fifth], "五卡循环收尾")
             return skip("本回合循环完成")
 
-        eligible = [c for name, c in by_name.items() if name.rstrip("+") != DRIVE.rstrip("+") and (
+        final_turn = last_turn_play() and state.remaining_turns == 1
+        eligible = [c for name, c in by_name.items() if (final_turn or name.rstrip("+") != DRIVE.rstrip("+")) and (
             name.rstrip("+") != "アイドルになります" or len({ENTERTAINER, DRIVE, TEACH} & hand) >= 2
         )]
-        if compact:
+        if compact and not final_turn:
             if flower is None and not played:
                 raise ResumeBlocked("VEIL 已进入过渡，但夜空を従える花+剩余次数读不出")
             warm_next = warm_next_turn(state, memory)
@@ -497,6 +551,10 @@ class VeilAdvisor:
             # the flower and draw, and can change the stance we need to restore.
             need_flower = flower == 3
             need_draw = state.piles.get("next_draw") not in (4, 5) and TEACH not in played
+            if draw_all() and TEACH not in played:
+                # 牌库张数（核心 4 + 第五张）：下回合抽不满就预约（VEIL_DRAW_ALL）
+                total = len(state.hand) + sum(len(state.piles.get(k) or []) for k in ("deck", "grave", "unlocated"))
+                need_draw = (state.piles.get("next_draw") or 3) < total
             if clear_first() and SODA in drinks:
                 # 使用者 2026-11-07：过渡不喝ソーダ（当场抽的 2 张用不上、下回合只多抽 1）；留到下回合开局喝，抽 2 补齐核心
                 need_draw = False
@@ -598,7 +656,11 @@ class VeilAdvisor:
             if not guard or last_turn or state.hp is None:
                 return True
             loss = hp_loss(state, card, current, mods)
-            return loss == 0 or state.hp - loss >= hp_floor()  # 不掉血的牌永远能打（体力已在线下时也不能全拦）
+            if loss == 0 or state.hp - loss >= hp_floor():  # 不掉血的牌永远能打（体力已在线下时也不能全拦）
+                return True
+            # VEIL_HP_NET：可用体力（体力 + 元気）不减的、核心打分牌不拦，打完体力至少剩 1
+            return hp_net() and state.hp - loss >= 1 and (
+                norm(card.name) in CORE or usable_net(state, card, current, mods) >= 0)
 
         for name, allowed in (("ガタゴトすやすや", current in WARM), ("一心不乱", current == "強気")):
             card = stance_cards.get(name)
@@ -621,7 +683,8 @@ class VeilAdvisor:
                 # 強気 下体力消耗 ×2：不改姿态的掉血牌（ひと呼吸+、モチベ+…）留到温存（×0.5）再打，也不为它们喝ホエイ。
                 # 使用者 2026-11-07（1-e R2 T1）：打了 インフルエンサー+、第一印象+ 后又喝ホエイ 打 モチベ+ / ひと呼吸+，
                 # 体力 38→1 错过下回合出牌；理想是这两张后跳过回合，下回合进温存
-                keep = [c for c in eligible if hp_loss(state, c, current, mods) == 0 or destination(c) is not None]
+                keep = [c for c in eligible if hp_loss(state, c, current, mods) == 0 or destination(c) is not None
+                        or (hp_net() and (norm(c.name) in CORE or usable_net(state, c, current, mods) >= 0))]
                 if eligible and not keep:
                     return skip("清牌：強気下体力 ×2，不改姿态的掉血牌留到温存再打")
                 eligible = keep
@@ -653,6 +716,9 @@ class VeilAdvisor:
                     log.append(entry)
                 eligible = capped
         if not eligible:
+            if stuck_soda() and not playable and SODA in drinks and len(state.hand) + 2 <= HAND_MAX:
+                # VEIL_STUCK_SODA：还有出牌次数、手里没有能打的牌（不是被体力闸压住）→ 喝ソーダ 抽 2 继续清
+                return act(drinks[SODA], "清牌：手里没有能打的牌，喝ソーダ 抽 2 继续清")
             return skip("清牌：没有允许打出的已识别牌")
 
         from hiro.brain.memory_ability import pending as ability_of
