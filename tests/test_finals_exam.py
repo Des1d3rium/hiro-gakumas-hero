@@ -19,19 +19,27 @@ FIX = Path(__file__).with_name("fixtures") / "finals"
 @pytest.mark.parametrize(
     ("name", "rnd", "turns", "hp", "score", "npc"),
     [("exam-r1-t9", 1, 9, 33, 0, [399645, 304890]), ("exam-r1-t8", 1, 8, 23, 1085, [399645, 304890]),
-     ("exam-r2-t12", 2, 12, None, 0, [598516, 460505])],  # R2 开局画面压暗，「残りターン」模板只有 0.57
+     ("exam-r2-t12", 2, 12, None, 0, [598516, 460505]),  # R2 开局画面压暗，「残りターン」模板只有 0.57
+     # 本地 trace 帧（tools/fixtures/build_local.py，codex-20261107-1 第 1 局 R1，看图核对）。trace 存的是 JPEG：
+     # NPC 分数小字压缩后读不出（实机当时读到 [407094, 308467]，第 19 步还把 308467 读成 508467），轮次 / NPC 不在这里核对
+     ("../trace/exam-open-mixed-plus", None, 9, 44, 0, None), ("../trace/exam-strong1", None, 8, 39, 0, None),
+     ("../trace/exam-warm2", None, 5, 30, 12292, None)],
 )  # fmt: skip
 def test_finals_exam_screen(name, rnd, turns, hp, score, npc):
     img = load(cv2.imread(str(FIX / f"{name}.jpg")))
     assert classify_current().scene == "HIF_EXAM"  # 本战没有突破线，靠 1st / 2nd / 3rd 名次条认出
     r = read_hif_exam(img, cache=None)
-    assert (r["finals"], r["finals_round"], r["remaining_turns"], r["my_score"], r["my_rank_index"]) == (True, rnd, turns, score, 3)
-    assert r["npc_scores"] == npc and r["rank_line"] is None
+    assert (r["finals"], r["remaining_turns"], r["my_score"], r["my_rank_index"]) == (True, turns, score, 3)
+    if rnd is not None:
+        assert r["finals_round"] == rnd and r["npc_scores"] == npc
+    assert r["rank_line"] is None
     if hp is not None:
         assert r["hp"] == hp
     assert r["hand"] and r["drinks"]
     obs = observation(1, 0.0, "HIF_EXAM", r)
-    assert obs.problems(strict=True) == [] and obs.fields["finals_round"] == rnd and obs.fields["score"] == score
+    assert obs.problems(strict=True) == [] and obs.fields["score"] == score
+    if rnd is not None:
+        assert obs.fields["finals_round"] == rnd
 
 
 def test_finals_ranking_page():
@@ -117,23 +125,34 @@ def test_finals_start_confirm():
 
 
 INTERVAL_CARDS = [(0, "デイドリーミング+", 1, 30), (1, "元気な挨拶+", 1, 30), (4, "ひなたぼっこ+", 1, 50), (5, "ありがとうの言葉+", 1, 50)]
+INTERVAL_FIFTH = {"cards": INTERVAL_CARDS, "changes": [(2, "成長痛", 50), (3, "アイドル宣言", 50)],
+                  "drinks": [(6, "特製ハツボシエキス", 100), (7, "厳選初星ティー", 100)]}
+# 本地 trace 帧 veil-hif-20261107-r4 第 27 步（看图核对：体力 30/44、P 524、价格 50/50/50/50 · 30/50 · 100/100）。
+# 卡面没有名字，名字记 None 只核对格号、价格
+INTERVAL_VEIL = {"cards": [(0, None, 1, 50), (1, None, 1, 50), (4, None, 1, 30), (5, None, 1, 50)],
+                 "changes": [(2, None, 50), (3, None, 50)], "drinks": [(6, None, 100), (7, None, 100)]}
 
 
 @pytest.mark.parametrize(
-    ("name", "hp", "p", "recover"),
-    [("interval-shelf-17hp", 17, 380, True), ("interval-shelf-fullhp", 33, 300, False)],  # 满体力时「回復」变灰
+    ("name", "hp", "hp_max", "p", "recover", "shelf"),
+    [("interval-shelf-17hp", 17, 33, 380, True, INTERVAL_FIFTH), ("interval-shelf-fullhp", 33, 33, 300, False, INTERVAL_FIFTH),  # 满体力时「回復」变灰
+     ("../trace/interval-shop-empty-bar", 30, 44, 524, True, INTERVAL_VEIL)],
 )  # fmt: skip
-def test_round_interval_shelf(name, hp, p, recover):
+def test_round_interval_shelf(name, hp, hp_max, p, recover, shelf):
     """第五局本战轮间货架（reports/live/calib/20261031-2125*-轮间）：cards 0,1,4,5 / changes 2,3 / drinks 6,7。"""
     img = load(cv2.imread(str(FIX / f"{name}.jpg")))
     scene = classify_current().scene
     raw, _ = extract(scene, img)
     assert scene == "HIF_ROUND_INTERVAL" and raw["complete"] is True
-    assert (raw["stamina"], raw["max_stamina"], raw["produce_point"]) == (hp, 33, p)
+    assert (raw["stamina"], raw["max_stamina"], raw["produce_point"]) == (hp, hp_max, p)
     iv = raw["interval"]
-    assert [(c["index"], c["name"], c["upgrade"], c["price"]) for c in iv["cards"]] == INTERVAL_CARDS
-    assert [(c["index"], c["name"], c["price"]) for c in iv["changes"]] == [(2, "成長痛", 50), (3, "アイドル宣言", 50)]
-    assert [(d["index"], d["name"], d["price"]) for d in iv["drinks"]] == [(6, "特製ハツボシエキス", 100), (7, "厳選初星ティー", 100)]
+
+    def same(got, want):
+        return len(got) == len(want) and all(w is None or g == w for gr, wr in zip(got, want) for g, w in zip(gr, wr))
+
+    assert same([(c["index"], c["name"], c["upgrade"], c["price"]) for c in iv["cards"]], shelf["cards"])
+    assert same([(c["index"], c["name"], c["price"]) for c in iv["changes"]], shelf["changes"])
+    assert same([(d["index"], d["name"], d["price"]) for d in iv["drinks"]], shelf["drinks"])
     assert iv["upgrade"] == {"price": 100, "available": True, "left": 1} and iv["customize"] == {"left": 2}
     assert iv["recover"] == {"available": recover, "price_per_2hp": 10} and iv["refresh"] == {"price": 10, "available": True}
     assert not any(e["purchased"] for k in ("cards", "changes", "drinks") for e in iv[k])
@@ -169,7 +188,10 @@ def test_round_interval_cell_price_fallback():
       [("十王星南", 1, 1081287, 599432), ("篠澤広", 2, 1045084, 504068), ("倉本千奈", 3, 806132, 440026)]),
      # 第二十九局 R2（协调 D28）：加分蓝色小字的 6 被两票 OCR 一起读成 0（402,477），ddddocr 462,477 才对（= 941,193 − R1 478,716）
      ("final-gain-6as0-main29-241.jpg", "final", 941193, 462477, 2,
-      [("十王星南", 1, 1082489, 601653), ("篠澤広", 2, 941193, 462477), ("倉本千奈", 3, 814399, 447219)])],
+      [("十王星南", 1, 1082489, 601653), ("篠澤広", 2, 941193, 462477), ("倉本千奈", 3, 814399, 447219)]),
+     # 本地 trace（codex-20261107-1 第 1 局 R1 结果，看图核对）：我方第 1 名
+     ("../trace/r1-result-first.jpg", "round_result", 577868, 577868, 1,
+      [("秦谷美鈴", 1, 577868, 577868), ("十王星南", 2, 488512, 488512), ("月村手毬", 3, 370160, 370160)])],
 )  # fmt: skip
 def test_finals_round_scores(rel, kind, score, round_score, rank, rows):
     """用户指示：本战 R1 / R2 打完后的「現在順位」弹窗读所有人的分数与名次（字段对齐 HIF_EXAM_RESULT：entries[{name, score, rank, me}] / score / rank）。
@@ -235,3 +257,38 @@ def test_six_digit_badge_without_font(monkeypatch):
     monkeypatch.setattr(hif, "_templates", dict)
     r = read_hif_exam(load(cv2.imread(str(FIX / "badge-6digit-main8-00155.jpg"))), cache=None)
     assert [(c["name"], c["badge_score"]) for c in r["hand"]] == [("ゆめみごこち+", None), ("きらきら紙吹雪+", 45431), ("届いて！+", 106837)]
+
+
+TRACE = Path(__file__).with_name("fixtures") / "trace"
+WALK = Path(__file__).with_name("fixtures") / "walkthrough"
+
+
+@pytest.mark.parametrize(
+    ("name", "stance", "hand", "score"),
+    [("exam-open-mixed-plus", ("指針解除", None), [("オーバードライブ+", 1), ("第一印象+", 1), ("頂点へ++", 2)], 0),
+     ("exam-strong1", ("強気", 1), [("仕切り直し+", 1), ("エンターテイナー+", 1), ("インフルエンサー+", 1)], 0),
+     ("exam-warm2", ("温存", 2), [("教えてあげる+", 1), ("巻き返し+", 1), ("オーバードライブ", None), ("アンダンテ+", 1)], 12292),
+     # 出牌动画中：分数被大字遮住，读成 None（不瞎猜）；姿态图标照样读出 強気 2 段階
+     ("exam-strong2-anim", ("強気", 2), [("巻き返し+", 1), ("オーバードライブ+", 1)], None)],
+)  # fmt: skip
+def test_finals_exam_stance_level_and_hand(name, stance, hand, score):
+    """VEIL 体力闸要姿态层数（1 / 2 段階）：状态栏第一格读出姿态和层数；同一手牌里「+」「++」分得开。"""
+    r = read_hif_exam(load(cv2.imread(str(TRACE / f"{name}.jpg"))), cache=None)
+    assert (r["statuses"][0]["name"], r["statuses"][0].get("value")) == stance
+    assert [(c["name"], c["upgrade"]) for c in r["hand"]] == hand
+    assert r["my_score"] == score
+
+
+@pytest.mark.parametrize(
+    ("rel", "kind", "rnd", "outcome"),
+    [("trace/r1-result-first.jpg", "round_result", 1, None), ("walkthrough/13-r1-result.png", "round_result", 1, None),
+     ("walkthrough/16-r2-lost.png", "final", 2, "敗退")],
+)  # fmt: skip
+def test_finals_result_free_retry_offer(rel, kind, rnd, outcome):
+    """结果页的再挑戦按钮写着「本日あと1回無料」：读成 retry={left: 1, free: True}（只用免费次数的规则靠它）。"""
+    img = load(cv2.imread(str(Path(__file__).with_name("fixtures") / rel)))
+    scene = classify_current().scene
+    assert scene == "HIF_FINALS_RANKING"
+    raw, _ = extract(scene, img)
+    assert (raw["kind"], raw["finals_round"], raw["outcome"]) == (kind, rnd, outcome)
+    assert raw["retry"] == {"left": 1, "free": True}

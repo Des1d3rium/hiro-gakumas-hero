@@ -4,6 +4,7 @@
 夹具 tests/fixtures/pages/ 取自 datasets/20261029-224103-hif-qualify、reports/live（实机探测图）与 KAA 参考截图，真值按截图目视。
 """
 
+import os
 from pathlib import Path
 
 import cv2
@@ -29,10 +30,12 @@ def _page(rel: str):
     ("name", "kind"),
     [("dialog-turn_end", "turn_end"), ("dialog-drink_detail", "drink_detail"), ("dialog-drink_use_confirm", "drink_use_confirm"),
      ("dialog-retire", "retire"), ("dialog-consult_end", "consult_end"), ("dialog-customize_confirm", "customize_confirm"),
-     ("dialog-other-sort", "other")],
+     ("dialog-other-sort", "other"),
+     # 本地流程截图（敗退后「再挑戦確認」：左プロデュース終了 = 失败，不是危险框但也不能自动点）
+     ("../walkthrough/17-retry-confirm.png", "retry_confirm")],
 )  # fmt: skip
 def test_dialogs(name, kind):
-    scene, raw, _ = _page(f"pages/{name}.jpg")
+    scene, raw, _ = _page(f"pages/{name}" if name.endswith(".png") else f"pages/{name}.jpg")
     assert scene == "DIALOG" and raw["kind"] == kind
     assert raw["danger"] is (kind == "retire")
     obs = observation(1, 0.0, scene, raw)
@@ -115,7 +118,15 @@ def test_pdrink_max_two_incoming():
     ("rel", "names", "y"),
     [("pages/select_drink-full.jpg", ["リカバリドリンク", "ホットコーヒー", "厳選初星ティー", "おしゃれハーブティー"], 1213),
      ("shop/consult-r5.jpg", ["特製ハツボシエキス", "パワフル漢方ドリンク", "烏龍茶", None], 1213),
-     ("drinks/r2-00002.jpg", ["特製ハツボシエキス", "パワフル漢方ドリンク", None, None], 1200)],
+     ("drinks/r2-00002.jpg", ["特製ハツボシエキス", "パワフル漢方ドリンク", None, None], 1200),
+     # 本地 trace（tools/fixtures/build_local.py）：轮间页 4 格全空
+     ("trace/interval-shop-empty-bar.jpg", [None, None, None, None], 1213),
+     # 本地 trace 考试页：第 3 格是 初星ホエイプロテイン（考试记忆 veil_drinks 记着；当时执行层报「局面与画面对不上：drink:2」）
+     # 原画模板下判成 unknown；分支 claude/drink-insitu-templates 的实机模板（HIRO_DRINK_INSITU=1）补认，见下面 test_drink_bar_insitu
+     pytest.param("trace/exam-strong1.jpg", ["ブーストエキス", "センブリソーダ", "初星ホエイプロテイン", "センブリソーダ"], 1200,
+                  marks=pytest.mark.xfail(os.environ.get("HIRO_DRINK_INSITU") != "1", strict=True,
+                                          reason="原画模板下 初星ホエイプロテイン 匹配分 0.46、判成 unknown")),
+     ],
 )  # fmt: skip
 def test_drink_bar_on_produce_and_exam_pages(rel, names, y):
     """培育页饮料栏比考试页低 13 像素：两种页面都要认出（游戏执行报告培育页 4 格全判成 empty）。"""
@@ -363,3 +374,37 @@ def test_consult_hud(rel, hud):
     obs = observation(1, 0.0, "CONSULT", raw)
     assert (obs.fields["stamina"], obs.fields["max_stamina"], obs.fields["produce_point"]) == hud
     assert obs.problems(strict=True) == [] and obs.field_meta["produce_point"].method == "ocr"
+
+
+@pytest.mark.parametrize(
+    ("name", "page", "fallback"),
+    [("04-lesson-three", None, "ACTION_SELECT"), ("07-public-lesson", None, "ACTION_SELECT"),
+     ("09-outing-supply", None, "ACTION_SELECT"), ("11-consult-action", None, "ACTION_SELECT"),
+     ("13-r1-result", "HIF_FINALS_RANKING", None), ("16-r2-lost", "HIF_FINALS_RANKING", None),
+     ("17-retry-confirm", "DIALOG", None), ("21-produce-complete", "PRODUCE_END", None)],
+)  # fmt: skip
+def test_walkthrough_page_classes(name, page, fallback):
+    """本地流程截图（使用者 2026-11-07 的笔记）：行动页四种（授業 / 公開レッスン / おでかけ・差し入れ / 相談）都由 fallback 认成
+    ACTION_SELECT；结果页、再挑戦确认、培育完成由 classify_page 认出。截图是手动框选后缩放的，只核对页面类型。"""
+    from hiro.vision.pages import classify_page
+    from hiro.vision.quick import fallback_page
+
+    img = cv2.imread(str(FIX / "walkthrough" / f"{name}.png"))
+    got = classify_page(img)
+    assert (got[0] if got else None) == page
+    assert fallback_page(img) == fallback
+
+
+def test_drink_bar_insitu(monkeypatch):
+    """开实机模板（HIRO_DRINK_INSITU=1，分支 claude/drink-insitu-templates）后，考试页第 3 格 初星ホエイプロテイン 认得出、
+    其余格不变。没合入那个分支或本机没建实机模板（tools/assets/capture_drinks.py build）时跳过。"""
+    from hiro.vision import items
+
+    if not hasattr(items, "insitu_enabled"):
+        pytest.skip("还没合入饮料实机模板（claude/drink-insitu-templates）")
+    if not items._insitu_library(items.DRINK_SIZE).keys:
+        pytest.skip("本机没有饮料实机模板（HIRO_USER_ASSETS/icons/drink_exam）")
+    monkeypatch.setenv("HIRO_DRINK_INSITU", "1")
+    slots = items.read_drink_slots(cv2.imread(str(FIX / "trace" / "exam-strong1.jpg")))
+    assert [s["name"] for s in slots] == ["ブーストエキス", "センブリソーダ", "初星ホエイプロテイン", "センブリソーダ"]
+    assert slots[2].get("method") == "insitu"

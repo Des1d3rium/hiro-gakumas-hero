@@ -91,14 +91,28 @@ def no_confirm(monkeypatch, dev):
     monkeypatch.setattr(R.InProduce.DialogCardChange2.Title, "exists", classmethod(lambda cls, *a, **k: not dev.clicks and real()))
 
 
-def test_stage2_clicks_first_unprotected_deck_card(dev, no_confirm):
+@pytest.fixture
+def selected(monkeypatch):
+    """离线参考图点了卡不会变：模拟游戏详情栏显示的就是点的那张（阶段 2 先核对选中的卡、核对上才点「チェンジ」）。"""
+    monkeypatch.setattr(kaa_patches, "_read_change_selection",
+                        lambda img, target: {"card_id": target["card_id"], "upgrade": target.get("upgrade")})
+
+
+def test_stage2_unverified_selection_is_not_done(dev, no_confirm):
+    """点了卡但读不出选中的是哪张（离线画面不变）：没点「チェンジ」，阶段 2 不见了也按未完成返回 False。"""
+    load(cv2.imread(str(STAGE2)))
+    assert kaa_patches.change_stage2(None, 0) is False
+    assert dev.clicks[0] == (140, 697)
+
+
+def test_stage2_clicks_first_unprotected_deck_card(dev, no_confirm, selected):
     """参考图牌组左上第一张是 手拍子（不在保护名单）：点它。"""
     load(cv2.imread(str(STAGE2)))
     assert kaa_patches.change_stage2(None, 0) is True  # 点卡后阶段 2 标题连续两帧不在、也没有确认框 → 完成
     assert dev.clicks[0] == (140, 697)
 
 
-def test_stage2_skips_protected_card(dev, no_confirm, monkeypatch):
+def test_stage2_skips_protected_card(dev, no_confirm, selected, monkeypatch):
     """第四局本战：牌组按 id 排序，第 0 张是核心卡时不能换——跳到下一张非保护卡。"""
     load(cv2.imread(str(STAGE2)))
     monkeypatch.setattr(kaa_patches, "protected_card_ids", lambda: {"p_card-02-act-1_003", "p_card-02-act-2_049"})  # 手拍子、みんな大好き
@@ -106,7 +120,7 @@ def test_stage2_skips_protected_card(dev, no_confirm, monkeypatch):
     assert dev.clicks[0] == (286 + 147, 697)  # 第 3 张 輝くキミへ
 
 
-def test_stage2_uses_decision_card_id(dev, no_confirm):
+def test_stage2_uses_decision_card_id(dev, no_confirm, selected):
     load(cv2.imread(str(STAGE2)))
     assert kaa_patches.change_stage2(None, 0, card_id="p_card-02-men-2_051") is True  # やる気は満点
     assert dev.clicks[0] == (580, 845)

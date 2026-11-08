@@ -439,3 +439,85 @@ def test_deck_sync_reconciles_ledger_from_deck_list(monkeypatch):
     assert not B.deck_sync(dev, led, why="测试")["ok"] and led["cards"] == before
     monkeypatch.setattr(H, "is_hif_exam", lambda img: True)
     assert "考试页" in B.deck_sync(dev, led, why="测试")["why"]
+
+
+# ---- 实机画面（tests/fixtures/walkthrough：使用者 2026-11-07 的 H.I.F 流程截图笔记）走一遍 auto_decide
+# 上面的合成 OCR 用例覆盖同样的页面（授業三选一、分支第一项、选择页停点）；这里用真实整帧 OCR 再核一遍。
+# 期望按笔记：授業 / 公開レッスン 走固定路线；选择、相談、商店、考试、再挑戦确认都停给代理；结果页点「次へ」不点「再挑戦」；
+# 最終プロデュース評価 / プロデュース完了 点角落（笔记：live 结束后这一页 (12,12) 实测可行）。
+WALK = Path(__file__).with_name("fixtures") / "walkthrough"
+
+
+@pytest.mark.fixtures
+@pytest.mark.parametrize(("name", "kind", "detail"), [
+    ("04-lesson-three", "study_da", None),
+    ("05-lesson-options", "study_first", (360, 698)),  # 最上面一项 = 強気（笔记）
+    ("07-public-lesson", "public_vo", None),
+    ("08-drink-select", "hold", "领取选择"),
+    ("09-outing-supply", "hold", "行动页需要代理选择"),
+    ("10-card-acquire", "hold", "差し入れ 选技能卡"),
+    ("11-consult-action", "hold", "行动页需要代理选择"),
+    ("12-consult-shop", "hold", "选择页"),
+    ("14-interval-shop", "hold", "选择页"),
+    ("15-r2-exam", "hold", "考试中"),
+    ("13-r1-result", "result_next", (373, 1133)),
+    ("16-r2-lost", "result_next", (373, 1133)),
+    ("17-retry-confirm", "hold", "考试结果"),  # 绝不替使用者点「プロデュース終了」
+    ("18-final-evaluation", "corner", (12, 12)),
+    ("19-memory-generate", "hold", "结算回忆生成"),
+    ("20-memory-result", "hold", "结算回忆"),
+    ("21-produce-complete", "corner", (12, 12)),
+])  # fmt: skip
+def test_walkthrough_frames_auto_decide(name, kind, detail):
+    import cv2
+
+    from hiro.produce.ops import ocr_boxes
+    from hiro.vision.pages import dialog_header
+    from hiro.vision.quick import fallback_page, quick_page
+
+    img = cv2.imread(str(WALK / f"{name}.png"))
+    try:
+        got = B.auto_decide(img, ocr=ocr_boxes, quick=quick_page, fallback=fallback_page, header=dialog_header)
+    except B.HoldPage as e:
+        assert kind == "hold" and str(e).startswith(detail), str(e)
+        return
+    assert got is not None and got[0] == kind, got
+    if detail is not None:
+        assert tuple(got[1]) == detail
+    assert got[1] != (129, 1128)  # 再挑戦按钮
+
+
+@pytest.mark.fixtures
+@pytest.mark.parametrize(("name", "action", "kind", "tap"), [
+    ("01-hif-top", "open", "main", (581, 898)),  # 本戦
+    ("02-idol-select", "open", "remembered_idol", (335, 1087)),  # 次へ
+    ("03-start-confirm", "open", "opening_confirmation", None),  # 開始確認：不自动点「プロデュース開始」
+    ("18-final-evaluation", "settle", "result", (360, 1132)),  # TAPで次へ
+    ("19-memory-generate", "settle", "generate", (363, 978)),
+    ("20-memory-result", "settle", "regeneration_review", None),  # 再生成 / 次へ 交给代理
+    ("21-produce-complete", "settle", "result", (351, 1159)),
+])  # fmt: skip
+def test_walkthrough_frames_flow_page(name, action, kind, tap):
+    import cv2
+
+    from hiro.produce.ops import ocr_boxes
+    from hiro.vision.pages import dialog_header
+
+    img = cv2.imread(str(WALK / f"{name}.png"))
+    got = B.flow_page(ocr_boxes(img), action, dialog=dialog_header(img) is not None)
+    assert got[0] == kind and (got[1] is None if tap is None else abs(got[1][0] - tap[0]) <= 15 and abs(got[1][1] - tap[1]) <= 15), got
+
+
+@pytest.mark.fixtures
+@pytest.mark.xfail(strict=True, reason="H.I.F 首页的停点理由写成「结算回忆：再生成」（HOLD_PATTERNS 误命中）；停下本身是对的，理由应是首页 / 开局")
+def test_hif_top_hold_reason():
+    import cv2
+
+    from hiro.produce.ops import ocr_boxes
+    from hiro.vision.pages import dialog_header
+    from hiro.vision.quick import fallback_page, quick_page
+
+    img = cv2.imread(str(WALK / "01-hif-top.png"))
+    with pytest.raises(B.HoldPage) as e:
+        B.auto_decide(img, ocr=ocr_boxes, quick=quick_page, fallback=fallback_page, header=dialog_header)
+    assert str(e.value).startswith("首页")

@@ -143,6 +143,7 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | 页面认不出 | `hiro/vision/quick.py`、`hiro/vision/pages.py`；未知页面会交给 LLM 兜底（`loop/rescue.py`） |
 
 改代码后：`PYTHONPATH=src pytest -q`。没有截图样例时，读截图的用例会自动跳过；有自己的截图可以设 `HIRO_FIXTURES`。
+从自己的流程截图笔记 / trace 生成部分样例：`PYTHONPATH=src .venv/bin/python tools/fixtures/build_local.py --walkthrough <笔记.md> --traces traces`（写到被忽略的 `tests/fixtures/`，缺哪张只跳过哪条用例）。
 
 ## 六、改策略的规矩
 
