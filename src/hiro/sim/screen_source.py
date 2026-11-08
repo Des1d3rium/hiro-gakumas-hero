@@ -28,6 +28,9 @@ from hiro.defaults.exam_state import ScreenExamStateSource
 logger = logging.getLogger(__name__)
 
 FINALS_LABELS = ("r1", "r2")
+# 哪几轮给预演（逗号分隔，缺省 r1,r2）。Windows 第二十局：R1 有预演时 LLM 跟着预演早兑现，R1 只打 8.2 万（R2 反而受益），
+# 先可以只在 R2 开：HIRO_EXAM_SIM_ROUNDS=r2
+ROUNDS = tuple(x.strip().lower() for x in os.environ.get("HIRO_EXAM_SIM_ROUNDS", "r1,r2").split(",") if x.strip())
 PREVIEW_WORLDS = int(os.environ.get("HIRO_EXAM_SIM_WORLDS", "16"))
 PREVIEW_BUDGET_S = float(os.environ.get("HIRO_EXAM_SIM_BUDGET_S", "7.5"))
 
@@ -58,6 +61,8 @@ class SimScreenExamStateSource(ScreenExamStateSource):
         super().begin(context)
         ctx = context or {}
         self.label = _round_label(ctx.get("exam"))
+        if self.label is not None and self.label not in ROUNDS:
+            self.label = None  # 这一轮不给预演（HIRO_EXAM_SIM_ROUNDS）
         self.tracker = self.game = self.meta = None
         self.lost = None
         self.stats = {"tracked": 0, "rebuilt": 0, "lost": 0}

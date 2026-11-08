@@ -61,3 +61,14 @@ def test_tracks_and_previews_along_a_sim_game():
         src.executed(Action.from_legal(act), None)
     assert with_preview >= 8
     assert src.stats["lost"] == 0
+
+
+def test_rounds_switch(monkeypatch):
+    from hiro.sim import screen_source as ss
+
+    monkeypatch.setattr(ss, "ROUNDS", ("r2",))
+    src = ss.SimScreenExamStateSource()
+    src.begin({"exam": "r1", "profile": CAMPUS_HIRO})
+    assert src.label is None  # R1 不给预演
+    src.begin({"exam": "r2", "profile": CAMPUS_HIRO})
+    assert src.label == "r2"
