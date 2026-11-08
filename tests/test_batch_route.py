@@ -526,3 +526,19 @@ def test_hif_top_hold_reason():
     with pytest.raises(B.HoldPage) as e:
         B.auto_decide(img, ocr=ocr_boxes, quick=quick_page, fallback=fallback_page, header=dialog_header)
     assert str(e.value).startswith("首页")
+
+
+@pytest.mark.fixtures
+def test_home_bottom_bar_is_not_dialog():
+    """2026-11-07 实机首页：底栏 y=1244–1280 被 dialog_header 认成弹窗标题条，open 把首页判成开局确认页。"""
+    import cv2
+
+    from hiro.produce.ops import ocr_boxes
+    from hiro.vision.pages import dialog_header
+
+    path = Path(__file__).parent / "fixtures" / "trace" / "home" / "home-bottom-bar.png"
+    if not path.exists():
+        pytest.skip("缺样例")
+    img = cv2.imread(str(path))
+    assert dialog_header(img) is None
+    assert B.flow_page(ocr_boxes(img), "open", dialog=False)[0] == "home"

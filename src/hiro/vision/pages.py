@@ -91,10 +91,16 @@ def _title_white(img: MatLike, y1: int, y2: int) -> bool:
     return ((hsv[:, :, 1] < 40) & (hsv[:, :, 2] > 235)).mean() >= TITLE_WHITE_MIN
 
 
+# 标题条下面总有正文和按钮：贴着画面底边的条带不是弹窗（2026-11-07 实机首页底栏 y=1244–1280 被认成标题条，
+# 批量 open 把首页判成开局确认页、没点「プロデュース」）
+DIALOG_BODY_MIN = 40
+
+
 def dialog_header(img: MatLike) -> tuple[int, int] | None:
     """只用像素判断有没有弹窗（约 20ms，不做 OCR）：最下面一条带白色标题字的橙黄标题条 (y1, y2)，没有返回 None。
     与 read_dialog 同一判据；考试执行用它决定要不要 OCR 弹窗区。"""
-    return next(((y1, y2) for y1, y2 in reversed(_header_bands(img)) if _title_white(img, y1, y2)), None)
+    return next(((y1, y2) for y1, y2 in reversed(_header_bands(img))
+                 if y2 < img.shape[0] - DIALOG_BODY_MIN and _title_white(img, y1, y2)), None)
 
 
 def read_dialog(img: MatLike) -> dict | None:
@@ -103,7 +109,7 @@ def read_dialog(img: MatLike) -> dict | None:
     from hiro.vision.ocr import ocr
 
     for y1, y2 in reversed(_header_bands(img)):
-        if not _title_white(img, y1, y2):
+        if y2 >= img.shape[0] - DIALOG_BODY_MIN or not _title_white(img, y1, y2):
             continue  # 没有白色标题字：获得演出的金色名称栏、橙色背景的场景
         title = "".join(t for t, _ in ocr(img[max(0, y1 - 4) : y2 + 4, 20:560])).replace(" ", "")
         if not title:
