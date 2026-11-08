@@ -189,12 +189,14 @@ def keyword_texts(item):
     return [text] if text else []
 
 
-def resolve_customs(customs, lookup=None) -> dict[str, list[str]]:
+def resolve_customs(customs, lookup=None, copies=None, uncertain=None) -> dict[str, list[str]]:
     """客制化记录（按时间顺序）→ {去「+」的卡名: 要补进牌面的文字}。
     开关开着时按主数据：OCR 菜单名取它包含的最长菜单名，认到哪一项哪一级；第 1 级菜单名（「成長追加」）开始一条链，
     之后的「成長+」把这条链升一级，最终取那一级的文字（覆盖，不累加）。认不准时不猜，这一项不补：
     同一项不同级的菜单名认成了不同项、链没开头就升级、同名多张做到的级数不同、级数超过主数据。
-    主数据里认不到的记录（或开关关着）按 CUSTOM_TEXT 关键词。"""
+    主数据里认不到的记录（或开关关着）按 CUSTOM_TEXT 关键词。
+    copies（{去「+」的卡名: 牌组里几张}）给出时，同名多张只补每张都做过的项：某项做过的张数（链条数）少于牌组张数，
+    就不知道手里这张是哪一张，这一项不补，名字记进 uncertain（列表，调用方写 trace）。"""
     groups = defaultdict(list)
     for c in customs:
         groups[norm(c["card"])].append(norm(c["item"]))  # 记的是菜单 OCR 名，可能带别的字
@@ -225,17 +227,21 @@ def resolve_customs(customs, lookup=None) -> dict[str, list[str]]:
         for k, chain in chains.items():
             if k in broken or len(set(chain)) != 1 or chain[0] > len(items[k]):
                 continue
+            if copies and len(chain) < copies.get(base, 1):
+                if uncertain is not None:
+                    uncertain.append(f"{name}:{items[k][0][0]}")
+                continue
             out[base].extend(items[k][chain[0] - 1][1])
     return out
 
 
-def apply_customs(hand, customs, lookup=None):
+def apply_customs(hand, customs, lookup=None, copies=None, uncertain=None):
     """手牌里客制化过的牌：按账本把客制化效果补进牌面文字（同名按去「+」比；已含该文字的不重复加）。
     立即结算的文字加在原文前；「次のターン / ターン開始 / 以降」这类延后的加在原文后
     （destination / fp_effect 只看第一个「次のターン」之前的部分，加在前面会把原文的立即效果挤到延后段里）。"""
     from hiro.brain.veil import _DELAYED
 
-    extra = resolve_customs(customs, lookup)
+    extra = resolve_customs(customs, lookup, copies, uncertain)
     if not any(extra.values()):
         return hand
     out = []
@@ -249,7 +255,7 @@ def apply_customs(hand, customs, lookup=None):
     return out
 
 
-def remap_hand(hand, names_by_base, customs, cards=None):
+def remap_hand(hand, names_by_base, customs, cards=None, copies=None, uncertain=None):
     """把手牌名对到审核过的牌组账本（只处理去「+」后基名在牌组里唯一的牌；同基名有多个版本时不猜，原样留着）。
     - 画面比账本少「+」（OCR 漏了强化角标，1-f R2 トレーニングの成果）：按卡 id 和账本那一级查主数据整张重建——
       名字、强化等级、文字、标签（追加行动等）、费用都换成那一级，保留物理槽位、可用性和预计得分徽章
@@ -278,7 +284,7 @@ def remap_hand(hand, names_by_base, customs, cards=None):
                 out.append(replace(rebuilt, badge_score=card.badge_score))
                 continue
         out.append(replace(card, name=target))
-    return apply_customs(out, customs) if customs else out
+    return apply_customs(out, customs, copies=copies, uncertain=uncertain) if customs else out
 
 
 def read_deck(source):
@@ -889,8 +895,11 @@ class VeilScreen(ScreenExamStateSource):
         self.resume_checked = False  # 本进程第一帧：核对 exam 外有没有出牌、把不确定的原因写进 events.jsonl
         self.rec = None
         self.names_by_base = defaultdict(list)
+        self.copies = Counter()  # 去「+」卡名 → 牌组里几张（同名多张的客制化只补共有项）
+        self.custom_uncertain = []
         for name in deck:
             self.names_by_base[name.rstrip("+")].append(name)
+            self.copies[name.rstrip("+")] += deck[name]
 
     def begin(self, context):
         super().begin(context)
@@ -923,8 +932,9 @@ class VeilScreen(ScreenExamStateSource):
         state, why = super().read(frame, memory)
         if state is None:
             return state, why
+        uncertain = []
         if self.customs:
-            state.hand = apply_customs(state.hand, self.customs)
+            state.hand = apply_customs(state.hand, self.customs, copies=self.copies, uncertain=uncertain)
         # 轮次以状态为准：NPC 分数推出来的轮次常读错（验证局 1-c R2 剩 5 回合读成 R1 停机），连续 ROUND_MISMATCH 帧都不符才停
         if self.last_raw.get("finals_round") not in (None, int(state.exam[-1])):
             self.round_mismatch += 1
@@ -958,7 +968,10 @@ class VeilScreen(ScreenExamStateSource):
         if "veil_piles" not in data and memory.history:
             data["veil_legacy_piles"] = True
         deck = Counter(data["veil_deck"])
-        state.hand = remap_hand(state.hand, self.names_by_base, self.customs)
+        state.hand = remap_hand(state.hand, self.names_by_base, self.customs, copies=self.copies, uncertain=uncertain)
+        if uncertain and sorted(set(uncertain)) != self.custom_uncertain:
+            self.custom_uncertain = sorted(set(uncertain))
+            self._log("veil_custom_uncertain", items=self.custom_uncertain)  # 同名多张、只有部分做过这项：版本不确定，没补
         hand = Counter(norm(c.name) for c in state.hand if c.card_id)
         if len(state.hand) != hand.total():
             raise ResumeBlocked("VEIL 手牌未读全，暂停以免错牌")

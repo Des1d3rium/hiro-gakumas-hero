@@ -1264,3 +1264,24 @@ def test_scheduled_stance_level_survives_turn_boundary(guard):
     assert read_position(state, mem, Counter({warm.name: 1}), lambda: 2) is None
     assert (stance(state), state.statuses[0]["value"]) == ("強気", 2)
     assert choose(state, mem) == "skip"
+
+
+def test_custom_master_same_name_copies_only_shared_items(monkeypatch):
+    """同名两张、只有一张做了某项：不知道手里是哪张，这项不补并记「版本不确定」；两张都做了才补。开关关时照旧。"""
+    from hiro.produce.veil_exam import apply_customs
+
+    table = {"インフルエンサー+": ((("強気追加", ("強気に変更",)),), (("温存追加", ("次のターン、温存に変更",)),))}
+    lookup = lambda name: table.get(name, ())  # noqa: E731
+    inf = card(0, "インフルエンサー+", "元気+6")
+    one = [{"card": "インフルエンサー+", "item": "強気追加"}]
+    monkeypatch.setenv("HIRO_VEIL_CUSTOM_MASTER", "1")
+    uncertain = []
+    out, = apply_customs([inf], one, lookup=lookup, copies={"インフルエンサー": 2}, uncertain=uncertain)
+    assert out == inf and uncertain == ["インフルエンサー+:強気追加"]
+    out, = apply_customs([inf], one * 2, lookup=lookup, copies={"インフルエンサー": 2})
+    assert out.text == "強気に変更元気+6"
+    out, = apply_customs([inf], one, lookup=lookup, copies={"インフルエンサー": 1})
+    assert out.text == "強気に変更元気+6"
+    monkeypatch.delenv("HIRO_VEIL_CUSTOM_MASTER")
+    out, = apply_customs([inf], one, lookup=lookup, copies={"インフルエンサー": 2})
+    assert out.text == "強気に変更元気+6"  # 开关关：关键词表，行为不变
