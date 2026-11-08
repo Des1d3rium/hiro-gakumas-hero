@@ -28,7 +28,7 @@
 | NPC 分数、名次、突破线、本战名次条 | 可用 | 本来就走 OCR；本战玩家分数三票投票少了字体一票，剩 Vision + ddddocr 两票须一致 |
 | 手牌卡名 / 卡 id | 可用 | KAA 卡面 + 卡名栏 OCR |
 | 手牌预计得分徽章 | 可用 | 没有字体时白描边同色字形串交给 ddddocr，位数与字形数一致才用；58 帧与有字体时一致 |
-| P 饮料（考试 / 培育底栏、选饮料、相談货架） | 可用 | KAA 饮料图；名称按主数据 |
+| P 饮料（考试 / 培育底栏、选饮料、相談货架） | 可用 | KAA 饮料图；名称按主数据。考试饮料栏原画模板偶尔没把握（unknown），可用 `capture_drinks` 从自己的 trace 建实机模板补认（`HIRO_DRINK_INSITU=1`，见下文） |
 | 考试效果栏：数值 | 可用 | |
 | 考试效果栏：效果名（やる気、好印象 等） | 跑一次 capture_icons 后可用 | 默认没有图标时效果名为 None，观测里 motivation / impression 为 None（策略层只能退回保守规则，分数明显掉）。用自己的考试截图跑一次 `tools/assets/capture_icons.py`（见下文）补齐 |
 | 考试效果栏：卡牌效果（エンチャント）名 | 可用 | 用 KAA 卡面 |
@@ -71,6 +71,7 @@ Apple Vision 是 macOS 系统 OCR，识别层本来就只在 macOS 上跑（实�
 ```
 cards/            技能卡卡面（有则优先于 KAA）
 icons/drink/      P 饮料图标（有则优先于 KAA）
+icons/drink_exam/ 考试饮料栏实机模板（capture_drinks 生成；HIRO_DRINK_INSITU=1 时补认原画模板没把握的格）
 icons/pitem/      P 道具图标（capture_icons 生成）
 icons/status/     考试效果图标（capture_icons 生成；文件名 img_general_icon_exam-effect_<类型小写>.png，识别只用 alpha）
     *.png         RGBA（透明底）或白底 RGB；文件名 = 资源名
@@ -92,3 +93,19 @@ schedule_hif.json 日程（有则优先于仓库自带）
 - 「没有字体」的读法另有用例（`test_no_font_*`），把字体模板换成空，有没有字体都跑。
 - `test_capture_icons.py` 只用合成图（标 `@pytest.mark.synthetic`，不按「读样例截图」跳过），CI 上也跑。
 - 跑带截图样例的测试：设 `HIRO_FIXTURES`（样例目录）、`HIRO_KAA_GAME_DATA`（KAA 公开数据），不要在仓库目录生成 `resources/`。
+
+## 考试饮料栏实机模板：`tools/assets/capture_drinks.py`
+
+原画饮料图是 512px 干净原画缩到 56px，考试饮料栏的图标模糊、带彩虹圈，正确答案也只有 0.46–0.61 分，个别饮料在个别格稳定落到
+「没把握」（2026-11-07 的 trace：初星ホエイプロテイン 在第 3 格 0.455 / 领先 0.194，14 个 trace 共 227 帧）。
+这个工具只读 trace，不碰游戏：把原画模板已经高把握认出的格（领先 ≥ 0.3）按 rect 裁下来、按饮料取逐像素中位数，
+写到 `HIRO_USER_ASSETS/icons/drink_exam/`。开 `HIRO_DRINK_INSITU=1` 后，原画模板 unknown 的格再用它认一次
+（分数 ≥ 0.7 且领先 ≥ 0.3 才算）；认出的格和空槽不改，没采到过的饮料照旧按原画。
+
+```bash
+python tools/assets/capture_drinks.py build traces/               # 生成 / 更新模板（--dry-run 只报告）
+python tools/assets/capture_drinks.py check traces/ --holdout     # 新旧对比；--holdout = 每个 trace 用其余 trace 的模板
+```
+
+本机留一验证（2026-11-07，1357 帧考试画面）：原画 unknown 252 格，实机模板全部认出（初星ホエイプロテイン 227、
+初星スーパーソーダ 25，看图核对正确），剩 0；某种饮料不在模板里时它的最高分 ≤ 0.43，不会被认成别的。

@@ -9,6 +9,7 @@ P 道具是半透明叠在场景上的，身后的气球等大块背景会把直
 """
 
 import json
+import os
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -70,6 +71,33 @@ class IconLibrary:
         """没有图标素材：匹配一律 0 分（低于各处阈值，读数给 None）。"""
         return cls([], np.zeros((0, 1), np.float32), np.zeros((0, 1), np.float32), np.zeros(0, np.float32), size, {})
 
+    @classmethod
+    def load_insitu(cls, folder: Path, size: int) -> "IconLibrary":
+        """实机模板目录（tools/assets/capture_drinks.py 的产出：考试截图裁块取中位数，BGR 无透明度）。
+        index.json：资源名 → 名称。"""
+        images = {}
+        for png in sorted(folder.glob("*.png")):
+            im = cv2.imread(str(png), cv2.IMREAD_COLOR)
+            if im is not None:
+                images[png.stem] = im
+        index = folder / "index.json"
+        return cls.from_insitu(images, size, json.loads(index.read_text()) if index.exists() else {})
+
+    @classmethod
+    def from_insitu(cls, images: dict[str, np.ndarray], size: int, names: dict[str, str] | None = None) -> "IconLibrary":
+        """资源名 → 实机裁块（BGR）。只比圆形区域，避开格子四角透出来的场景背景。"""
+        if not images:
+            return cls.empty(size)
+        mask = np.repeat(insitu_mask(size)[:, :, None], 3, axis=2).ravel()
+        keys, rows = [], []
+        for key, im in images.items():
+            t = _highpass(cv2.resize(im, (size, size), interpolation=cv2.INTER_AREA)).ravel()
+            t = (t - (t * mask).sum() / mask.sum()) * mask
+            keys.append(key)
+            rows.append(t / (np.linalg.norm(t) + 1e-6))
+        masks = np.repeat(mask[None, :], len(keys), axis=0)
+        return cls(keys, np.stack(rows), masks, masks.sum(axis=1), size, dict(names or {}))
+
     def match(self, patch: MatLike) -> list[tuple[float, str]]:
         """patch 为 size×size 的 BGR；返回前 2 名 (分数, 资源名)。"""
         return self.match_many([patch])[0]
@@ -114,6 +142,32 @@ ICON_KIND = {"pdrink": "drink", "pitem": "pitem"}  # 识别层原名 → AssetSo
 def _library(kind: str, size: int) -> IconLibrary:
     folder = assets.icon_dir(ICON_KIND.get(kind, kind))
     return IconLibrary.load(folder, size) if folder is not None else IconLibrary.empty(size)
+
+
+INSITU_KIND = "drink_exam"  # AssetSource.icon_dir 的目录名：<素材目录>/icons/drink_exam/<资源名>.png
+INSITU_MIN = 0.7  # 实机模板：同一种饮料实测 0.85–0.96，空槽 ≤ 0.1（2026-11-07 trace 留一验证）
+INSITU_MARGIN = 0.3  # 领先次佳：实测 ≥ 0.47
+INSITU_RADIUS = 24 / 56  # 圆形比较区域半径（相对格子边长）
+
+
+def insitu_enabled() -> bool:
+    """HIRO_DRINK_INSITU=1：原画模板没把握（unknown）的格，再用实机模板认一次（默认关，回放验证后再开）。
+    原画图库是 512px 干净原画缩到 56px，考试里的图标模糊、带彩虹圈，正确答案也只有 0.46–0.61 分，
+    初星ホエイプロテイン 在第 3 格稳定落到 0.455 / 领先 0.194（14 个 trace 共 227 帧认不出）。"""
+    return os.environ.get("HIRO_DRINK_INSITU") == "1"
+
+
+@cache
+def insitu_mask(size: int) -> np.ndarray:
+    yy, xx = np.mgrid[:size, :size]
+    c, r = (size - 1) / 2, INSITU_RADIUS * size
+    return (((yy - c) ** 2 + (xx - c) ** 2) <= r * r).astype(np.float32)
+
+
+@cache
+def _insitu_library(size: int) -> IconLibrary:
+    folder = assets.icon_dir(INSITU_KIND)
+    return IconLibrary.load_insitu(folder, size) if folder is not None else IconLibrary.empty(size)
 
 
 def _crop(img: MatLike, x: int, y: int, size: int) -> MatLike | None:
@@ -169,7 +223,31 @@ def _read_drink_slots(img: MatLike) -> list[dict]:
         elif score < EMPTY_MAX:
             entry.update(state="empty", confidence=round(1 - score, 3))
         out.append(entry)
+    if insitu_enabled():
+        _resolve_insitu(out, crops)
     return out
+
+
+def _resolve_insitu(out: list[dict], crops: list[MatLike | None], lib: IconLibrary | None = None) -> None:
+    """只补原画模板没把握（unknown）的格：实机模板分数 ≥ INSITU_MIN 且领先 ≥ INSITU_MARGIN 才算认出。
+    认出的、空槽不改（实机模板只覆盖采到过的饮料，没采到的饮料照旧按原画认）。"""
+    from kaa.db.drink import Drink
+
+    lib = _insitu_library(DRINK_SIZE) if lib is None else lib
+    if not lib.keys:
+        return
+    todo = [i for i, e in enumerate(out) if e["state"] == "unknown" and crops[i] is not None]
+    for i, top in zip(todo, lib.match_many([crops[i] for i in todo]) if todo else []):
+        (score, asset), (second, _) = top
+        entry = out[i]
+        entry.update(insitu_score=round(score, 3), insitu_margin=round(score - second, 3))
+        if score < INSITU_MIN or score - second < INSITU_MARGIN:
+            continue
+        drink = Drink.from_asset_id(asset)
+        sat = float(cv2.cvtColor(crops[i], cv2.COLOR_BGR2HSV)[:, :, 1].mean())
+        entry.update(state="drink", drink_id=drink.id if drink else None, asset=asset, method="insitu",
+                     name=lib.names.get(asset) or (drink.name if drink else None),
+                     available=sat >= GREY_SAT_MAX, confidence=round(score, 3))  # fmt: skip
 
 
 FULL_BADGE = (240, 1105, 480, 1160)  # 选饮料页「受け取る」下方的红标「Pドリンク所持上限」（饮料满、受け取る变灰）
