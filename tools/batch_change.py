@@ -117,6 +117,14 @@ def scan(device, batch: str, run: int) -> dict:
     return {**out, "file": str(path), "table": summary(out)}
 
 
+def changed_text(texts: list[str]) -> bool:
+    """换卡完成提示「AをBにチェンジしました」。OCR 常拆成「…にチェンジ」「しました」两个框（验证局 1-i 实机），拼起来找。"""
+    return "チェンジしました" in "".join(t.replace(" ", "") for t in texts)
+
+
+CELL_TOL = 30  # 选中框所在格与目标格的中心差（像素）
+
+
 def to_top(device, t, swipe, tries: int = 6) -> bool:
     """阶段 2 列表滑到顶部（滚动条滑块贴顶，或画面不再变化）。"""
     area = t["CHANGE2_CARD_AREA"]
@@ -192,7 +200,10 @@ def pick(device, batch: str, run: int, *, col: int, row: int | None = None, comm
     sel = t["read_card_dialog"](device.screenshot(), area, icons=True)
     chosen = sel.get("selected_card") or {}
     picked = sel["cards"][sel["selected"]] if sel.get("selected") is not None else None
-    same_cell = picked is not None and picked["row"] == cell["row"] and picked["col"] == col
+    # 按格子中心比，不按屏内行号：点选前后两帧顶上那行算不算整格可见可能不同，行号会差一（验证局 1-i 实机）
+    near = picked is not None and all(abs(p - q) <= CELL_TOL for p, q in zip(picked["center"], cell["center"]))
+    same_cell = near or (picked is not None and picked.get("card_id") is not None and picked.get("card_id") == cell.get("card_id")
+                         and picked.get("upgrade") == cell.get("upgrade") and picked["col"] == col)
     same_card = not target.get("card_id") or chosen.get("card_id") in (None, target["card_id"])
     info = {"row": row, "col": col, "name": target.get("name"), "upgrade": target.get("upgrade"), "once": target.get("once"),
             "selected_detail": chosen.get("name")}  # fmt: skip
@@ -212,7 +223,7 @@ def pick(device, batch: str, run: int, *, col: int, row: int | None = None, comm
         time.sleep(SETTLE)
         img = device.screenshot()
         boxes = t["ocr_boxes"](img)
-        if any("チェンジしました" in b[0] for b in boxes):  # 游戏没弹确认框、直接换好时的完成提示
+        if changed_text([b[0] for b in boxes]):  # 游戏没弹确认框、直接换好时的完成提示
             return {"ok": True, "stage": 2, "changed": info, "confirmed": confirmed}
         if not confirmed and t["find_text"](boxes, "チェンジ確認"):
             device.click(*(t["find_text"](boxes, ("決定", "はい", "OK"), region=(300, 1080, 720, 1240)) or CHANGE_TAP))

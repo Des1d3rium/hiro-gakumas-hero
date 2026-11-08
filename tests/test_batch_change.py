@@ -141,3 +141,27 @@ def test_to_top_gives_up_when_list_does_not_move(monkeypatch):
     t = fake_tools([], None, scroll=[stuck] * 6)
     dev = Dev()
     assert not BC.to_top(dev, t, dev.swipe)
+
+
+def test_selection_matches_by_position_not_screen_row(tmp_path, monkeypatch):
+    """点选后那帧顶上多认出一整行，选中格的屏内行号 +1，但位置和卡都对：算选中正确（1-i 实机误报「选中框对不上」）。"""
+    import json
+
+    scan = tmp_path / "scan.json"
+    scan.write_text(json.dumps({"cards": DECK}))
+    visible = [dict(c) for c in DECK if c["row"] <= 1]
+    cell = next(c for c in visible if (c["row"], c["col"]) == (1, 0))
+    fake = fake_tools(visible, None)
+    shifted = dict(cell, row=cell["row"] + 1)  # 下一帧的屏内行号
+    fake["read_card_dialog"] = lambda img, area, icons=False: {"cards": [shifted], "selected": 0,
+                                                               "selected_card": {"card_id": "c", "name": "c"}}
+    monkeypatch.setattr(BC, "_tools", lambda: fake)
+    monkeypatch.setattr(BC, "SETTLE", 0)
+    out = BC.pick(Dev(), "b", 1, col=0, row=1, commit=False, scan_file=scan)
+    assert out["ok"], out
+
+
+def test_changed_text_split_across_boxes():
+    assert BC.changed_text(["嬉しい誤算+を嬉しい誤算+にチェンジ", "しました"])
+    assert BC.changed_text(["AをBにチェンジしました"])
+    assert not BC.changed_text(["チェンジするスキルカードを選択してください"])
