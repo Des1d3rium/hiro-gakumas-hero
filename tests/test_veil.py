@@ -1041,6 +1041,7 @@ def test_extra_turn_soup_starts_new_turn_at_same_remaining():
     ("強気", None, 14, 2, 5, "skip"),
     ("温存", 2, 11, 4, 1, "play:0"),
     ("温存", None, 11, 4, 2, "skip"),
+    ("温存2段階目", None, 11, 4, 1, "play:0"),  # 识别给的是带段階的名字、没有层数
 ])
 def test_stance_level_reaches_hp_guard(guard, name, level, hp, cost, expected_loss, expected):
     from collections import Counter
@@ -1053,7 +1054,7 @@ def test_stance_level_reaches_hp_guard(guard, name, level, hp, cost, expected_lo
     state.hp = hp
     state.statuses[0]["value"] = level
     assert read_position(state, mem, Counter(), lambda: 2) is None
-    assert mem.strategy_data["veil_position"]["stance_level"] == level
+    assert mem.strategy_data["veil_position"]["stance_level"] == (2 if name == "温存2段階目" else level)
     assert hp_loss(state, warm, stance(state)) == expected_loss
     assert choose(state, mem) == expected
 
@@ -1071,7 +1072,7 @@ def test_stance_level_updates_after_verified_play(guard):
     state.statuses[0]["value"] = 1
     mem.strategy_data["veil_deck"] = {change.name: 1, warm.name: 1}
     assert read_position(state, mem, Counter({change.name: 1, warm.name: 1}), lambda: 2) is None
-    VeilBrain(None, None).commit(state, mem, Decision("play", 0))
+    VeilBrain(None, None).commit(state, mem, Decision("play:0", "test", "rule"))
     state.hand, state.statuses, state.hp = [warm], [], 14
     mem.actions_left = 1
     assert read_position(state, mem, Counter({warm.name: 1}), lambda: 1) is None
@@ -1101,11 +1102,17 @@ def test_remap_rebuilds_upgrade_and_action_count_without_guessing():
     assert (corrected.slot, corrected.available, corrected.badge_score) == (1, False, 123)
     state, mem = case(replace(corrected, available=True))
     mem.strategy_data["veil_deck"] = {corrected.name: 1}
-    VeilBrain(None, None).commit(state, mem, Decision("play", 1))
+    VeilBrain(None, None).commit(state, mem, Decision("play:1", "test", "rule"))
     assert mem.actions_left == 2 and mem.used_once == [corrected.name]
     assert remap_hand([seen], {"全身全霊": ("全身全霊", "全身全霊+")}, [], cards=cards) == [seen]
-    temporary = replace(corrected, name="全身全霊++", upgrade=2)
-    assert remap_hand([temporary], {"全身全霊": ("全身全霊+",)}, [], cards=cards) == [temporary]
+    # 考试中临时强化（画面比账本多「+」）：名字对回账本那一张，牌面效果、费用、强化等级保持画面那一级，不降级
+    temporary = replace(corrected, name="全身全霊++", upgrade=2, text="スキルカード使用数追加+3", cost=2,
+                        tags=replace(corrected.tags, extra_actions=3))
+    kept, = remap_hand([temporary], {"全身全霊": ("全身全霊+",)}, [], cards=cards)
+    assert kept == replace(temporary, name="全身全霊+")
+    # 主数据查不到：只把名字对回账本（不让牌库记账对不上手牌）
+    renamed, = remap_hand([seen], {"全身全霊": ("全身全霊+",)}, [], cards={})
+    assert renamed == replace(seen, name="全身全霊+")
 
 
 @pytest.mark.parametrize("turn, remaining, action", [(1, 9, "打"), (1, 9, "喝"), (4, 6, "打")])

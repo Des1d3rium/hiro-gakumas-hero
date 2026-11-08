@@ -152,7 +152,14 @@ def apply_customs(hand, customs):
 
 
 def remap_hand(hand, names_by_base, customs, cards=None):
-    """Fill a missing upgrade badge only when the deck identifies one higher variant."""
+    """把手牌名对到审核过的牌组账本（只处理去「+」后基名在牌组里唯一的牌；同基名有多个版本时不猜，原样留着）。
+    - 画面比账本少「+」（OCR 漏了强化角标，1-f R2 トレーニングの成果）：按卡 id 和账本那一级查主数据整张重建——
+      名字、强化等级、文字、标签（追加行动等）、费用都换成那一级，保留物理槽位、可用性和预计得分徽章
+      （原来只换名字和文字，tags.extra_actions 还是旧版本的）；
+    - 画面比账本多「+」（考试中临时强化）：只把名字对回账本那一张（牌库记账按名字），文字 / 标签 / 费用 / 强化等级
+      保持画面那一级——游戏按强化后的效果结算，不降级；
+    - 主数据查不到时退回只换名字（同原来的行为），免得账本对不上手牌。
+    重建后再补客制化（1-g R2：インフルエンサー 换成主数据牌面后「強気追加」没了），已含的不重复加。"""
     from hiro.brain.cards import card_view, kaa_cards
 
     cards = kaa_cards() if cards is None else cards
@@ -161,15 +168,18 @@ def remap_hand(hand, names_by_base, customs, cards=None):
         name = norm(card.name)
         base = name.rstrip("+")
         variants = names_by_base.get(base, ())
-        if len(variants) == 1 and card.card_id:
-            target = variants[0]
-            upgrade = len(target) - len(base)
-            if upgrade > max(card.upgrade, len(name) - len(base)):
-                master = cards.get((card.card_id, upgrade))
-                if master is not None and norm(master.name) == target and master.upgrade_count == upgrade:
-                    rebuilt = card_view(card.slot, master, available=card.available)
-                    card = replace(rebuilt, badge_score=card.badge_score)
-        out.append(card)
+        if len(variants) != 1 or name == variants[0] or not card.card_id:
+            out.append(card)
+            continue
+        target = variants[0]
+        upgrade = len(target) - len(base)
+        if upgrade > max(card.upgrade or 0, len(name) - len(base)):
+            master = cards.get((card.card_id, upgrade))
+            if master is not None and norm(master.name or "") == target and master.upgrade_count == upgrade:
+                rebuilt = card_view(card.slot, master, available=card.available)
+                out.append(replace(rebuilt, badge_score=card.badge_score))
+                continue
+        out.append(replace(card, name=target))
     return apply_customs(out, customs) if customs else out
 
 
