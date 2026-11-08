@@ -52,14 +52,16 @@
 | 插件 | 回答什么 | 开源默认实现 |
 |---|---|---|
 | `asset_source` | 素材和主数据从哪来 | `defaults/assets.py`：KAA 公开数据 + 使用者自建素材 |
-| `exam_state_source` | 考试局面从哪来 | `defaults/exam_state.py`：画面识别 + 状态机记账（不知道牌库顺序） |
+| `exam_state_source` | 考试局面从哪来 | `defaults/exam_state.py`：画面识别 + 状态机记账（不知道牌库顺序）。另有 `hiro.sim.screen_source:SimScreenExamStateSource`：同样从画面读，再用模拟器跟踪局面、给每个候选动作附预演（不读存档） |
 | `exam_advisor` | 考试每一步怎么打 | `defaults/advisor.py`：社区规则链 + LLM 兜底 |
 
   换实现：环境变量 `HIRO_ASSET_SOURCE` / `HIRO_EXAM_STATE_SOURCE` / `HIRO_EXAM_ADVISOR`（写成 `包.模块:类名`），
   或在 `pyproject.toml` 的入口点组 `hiro_gakumas.plugins` 里登记，或代码里 `hiro.plugins.register(...)`。
 
-- **不在这个仓库里的东西**：考试存档读取、模拟器、预演搜索（带模拟器的出牌专家）、价值表。作者用私有插件接回去；
-  你用默认实现就能玩，只是考试决策没有模拟器那么强。
+- **模拟器**（`hiro/sim`，引擎 `vendor/gakumas-player/gakumas_sim`，主数据由 setup 第 6 步从社区公开的 gakumasu-diff 下载构建）：
+  轮间买什么 / 刷不刷货架、饮料取舍、本战相談按模拟算第二轮期望分（`HIRO_SIM=0` 关掉，只按社区规则）；
+  考试出牌的预演要选用 `SimScreenExamStateSource`（见上表）。主数据没构建时这些自动退回社区规则。
+- **不在这个仓库里的东西**：考试存档读取（解密）、高保真考试引擎。作者用私有插件接回去。
 
 ## 三、环境
 
@@ -134,7 +136,10 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | `HIRO_KAA_GAME_DATA` | KAA 公开数据目录（含 `game.db`），默认 `resources/game_data` |
 | `HIRO_USER_ASSETS` | 自建素材目录（`capture_icons` 的产出），可选；与随仓库素材包并用，同类图库取文件更多的一个 |
 | `HIRO_BUNDLED_ASSETS` | 随仓库素材包目录，默认 `assets/pack`；设 `0` 关掉 |
-| `HIRO_ASSET_SOURCE` / `HIRO_EXAM_STATE_SOURCE` / `HIRO_EXAM_ADVISOR` | 换插件实现（`包.模块:类名`） |
+| `HIRO_ASSET_SOURCE` / `HIRO_EXAM_STATE_SOURCE` / `HIRO_EXAM_ADVISOR` | 换插件实现（`包.模块:类名`）。考试预演：`HIRO_EXAM_STATE_SOURCE=hiro.sim.screen_source:SimScreenExamStateSource` |
+| `HIRO_EXAM_POLICY` | 有预演时怎么用：`llm`（缺省，预演写进提示词给 LLM 参考）/ `expert`（按预演期望 + 硬规则链直接选） |
+| `HIRO_SIM=0` | 不用模拟器（轮间 / 饮料 / 相談只按社区规则） |
+| `HIRO_INTERVAL_REFRESH=0` | 关掉规则版的轮间货架刷新（没有模拟器时：货架没有复制 / 爆发饮料先刷新） |
 | `HIRO_STRATEGY` | 换培育策略类（KAA `HifGrindStrategy` 子类），默认 `hiro.produce.hif:HiroHifStrategy` |
 | `HIRO_PAUSE_FLAG` | 外部暂停旗标文件路径：文件存在就暂停对局 |
 | `HIRO_DEVICE` / `HIRO_ADB` / `HIRO_SCREENSHOT` / `HIRO_EMULATOR_INSTANCE` | 设备后端与连接，见「三、环境」的「设备」表 |

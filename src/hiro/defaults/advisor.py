@@ -4,8 +4,9 @@
 
 - 没有预演（默认的 ScreenExamStateSource 不提供）：BattleBrain 出一步（不需要思考的情形 → 本回合计划 → LLM → 规则兜底），
   再过一遍硬规则（guard_llm：饮料预算、届いて 留到剩 ≤2 等只看局面就能判的规则），被拦就让 LLM 重选一次，还不行用规则兜底。
-- 有预演（接了别的 ExamStateSource，previews 不为 None）：按预演期望 + 同一套硬规则链选（exam_policy.expert_pick），
-  规则链选不出来再退回上面的 LLM 路径。
+- 有预演（接了别的 ExamStateSource，例如 hiro.sim.screen_source，previews 不为 None）：预演写进局面（state.action_previews），
+  默认（HIRO_EXAM_POLICY=llm）交给 LLM 参考；HIRO_EXAM_POLICY=expert 时按预演期望 + 同一套硬规则链选（exam_policy.expert_pick），
+  规则链选不出来再退回 LLM 路径。
 LLM 用 hiro.brain.llm.from_spec(环境变量 HIRO_LLM)，没配置时只用规则。
 """
 
@@ -19,7 +20,7 @@ from hiro.brain.battle import BattleBrain
 from hiro.brain.rules import fallback
 from hiro.brain.state import IdolProfile, profile_for
 from hiro.contracts import Action, Decision, Preview
-from hiro.produce.exam_policy import expert_pick, guard_llm
+from hiro.produce.exam_policy import expert_pick, guard_llm, policy_from_env
 
 
 def _llm_from_env():
@@ -70,11 +71,12 @@ class RuleLLMAdvisor:
         n_calls = len(self.brain.calls)
         if previews:
             state.action_previews = preview_rows(previews, legal)
-            pick = expert_pick(state)
-            if pick.decision is not None:
-                d = pick.decision
-                d.warnings = [f"预演选的动作违反规则（只记录）：{v}" for v in pick.violations or []]
-                return Decision.from_battle(d, seconds=time.monotonic() - t0)
+            if policy_from_env() == "expert":  # 同主仓库 HIRO_EXAM_POLICY：expert 按预演期望 + 硬规则链选；llm（默认）把预演放进提示词
+                pick = expert_pick(state)
+                if pick.decision is not None:
+                    d = pick.decision
+                    d.warnings = [f"预演选的动作违反规则（只记录）：{v}" for v in pick.violations or []]
+                    return Decision.from_battle(d, seconds=time.monotonic() - t0)
         d = guard_llm(state, memory, self.brain, self.brain.decide(state, memory))
         out = Decision.from_battle(d, calls=self.brain.calls[n_calls:], seconds=time.monotonic() - t0)
         keys = {a.legal_key() for a in legal}
