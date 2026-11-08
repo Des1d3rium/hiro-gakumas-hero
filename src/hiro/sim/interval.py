@@ -1169,7 +1169,9 @@ VALUE_TABLE_FILE = Path(__file__).resolve().parents[3] / "data" / "value_tables"
 def value_table_scale() -> dict:
     try:
         return json.loads(VALUE_TABLE_FILE.read_text(encoding="utf-8")).get("by_class", {})
-    except (OSError, ValueError):
+    except (OSError, ValueError) as e:
+        # 开源版：价值表随仓库在 data/value_tables/。缺了它增益没有校准、刷新估值偏高（Windows 第十四局后测试），要大声说
+        logger.warning("价值表读不到（%s：%s），轮间饮料增益不校准；检查 data/value_tables/", VALUE_TABLE_FILE, e)
         return {}
 
 

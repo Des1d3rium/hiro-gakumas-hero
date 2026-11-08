@@ -108,6 +108,9 @@ if sys.platform != "darwin" and not os.environ.get("HIRO_DEVICE"):
           "这些后端走 KAA 的设备工厂，作者没有实机验证过")
 import hiro.sim
 print(f"模拟器：引擎 {hiro.sim.ROOT}；主数据 {'已构建' if hiro.sim.master_ready() else '没有（模拟相关决策退回社区规则）'}")
+from pathlib import Path
+if not (Path("data") / "value_tables" / "drink_scale.json").exists():
+    print("  ⚠ 没有 data/value_tables/（价值表随仓库发布）：轮间饮料增益不校准，请用 git 拿完整仓库")
 print("自检通过：入口和 KAA 都能导入")
 PY
 
