@@ -567,6 +567,8 @@ def _prewarm_r2(workers: int = 4) -> None:
         return
     for a in ("Vo", "Da", "Vi"):
         permil.setdefault(a, min(permil.values()))
+    if sim_workers(workers) <= 1:
+        return  # 不开进程池（Windows 默认）：没有常驻子进程可预热，用到时在主进程里编译
     try:
         setup = R2Setup(deck=deck, drinks=[], hp=33, max_hp=33, permil=permil)
         pool = _pool(workers)

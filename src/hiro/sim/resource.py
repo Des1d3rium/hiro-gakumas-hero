@@ -106,8 +106,8 @@ def prewarm(exam: str, *, deck: list | None, max_hp: int, permil: dict | None = 
     「可以在上一页的动画期间提前算」）。不阻塞；同一组合只预热一次。返回是否提交了预热。"""
     setup, _ = setup_for(exam, deck=deck, drinks=[], hp=max_hp, max_hp=max_hp, permil=permil)
     key = iv._with(setup, drinks=[], hp=setup.max_hp).key()
-    if key in _WARMED:
-        return False
+    if key in _WARMED or iv.sim_workers(workers) <= 1:
+        return False  # 预热过 / 不开进程池（Windows 默认：spawn 子进程会重新导入整套主模块，第十五局内存耗尽）
     _WARMED.add(key)
     pool = iv._pool(workers)
     for _ in range(workers):

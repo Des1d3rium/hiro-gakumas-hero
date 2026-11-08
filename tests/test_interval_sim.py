@@ -130,3 +130,17 @@ def test_decider_executes_final_plan_with_upgrade(monkeypatch):
     d = dec.decide("HIF_ROUND_INTERVAL", _interval_state(hp=24, p=269))
     assert d.action.kind.value == "IntervalUpgradeCard" and d.action.args == {"card_id": "p_card-02-act-3_186"}
     assert dec.decide("HIF_ROUND_INTERVAL", _interval_state(hp=24, p=169)).action.kind.value == "IntervalEnd"
+
+
+def test_no_process_pool_when_workers_capped(monkeypatch):
+    """Windows 第十五局：spawn 起的模拟子进程把内存吃满。HIRO_SIM_WORKERS=1（Windows 默认）时预热也不能起进程池。"""
+    from hiro.sim import resource as rv
+
+    monkeypatch.setenv("HIRO_SIM_WORKERS", "1")
+    monkeypatch.setattr(iv, "_pool", lambda *a, **k: (_ for _ in ()).throw(AssertionError("不该起进程池")))
+    iv.CONTEXT.clear()
+    iv.CONTEXT.update(deck=[("p_card-02-act-3_039", 1)], permil={"Vo": 30000, "Da": 30000, "Vi": 20000})
+    iv._prewarm_r2()
+    assert rv.prewarm("r1", deck=[("p_card-02-act-3_039", 1)], max_hp=33) is False
+    assert iv.sim_workers(4) == 1
+    iv.CONTEXT.clear()
