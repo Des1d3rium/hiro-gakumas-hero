@@ -634,3 +634,48 @@ def test_generated_sleep_joins_deck_after_same_play_draws(monkeypatch):
     data = {"veil_piles": piles}
     out = track_piles(data, 2, ["E", "眠気", None, None, None], Counter({"G": 1, "M": 1}))
     assert out == {"deck": [], "grave": ["G", "M"], "unlocated": []}
+
+
+def test_swap_hand_draws_before_discarding_old_hand(monkeypatch):
+    """codex-20261108-3-b 第 1 局 R2 T4：山札空时打 ガタゴトすやすや+（手札をすべて入れ替える）。游戏先把捨札洗进山札抽 3，
+    抽完才丢原手牌；原手牌不在这次洗进去的山札里。以前账本先丢后洗，T5 起整副位置不明。"""
+    from hiro.produce.veil_exam import track_piles
+
+    monkeypatch.setenv("HIRO_VEIL_STRICT_SHUFFLE", "1")
+    grave = ["一心不乱+", "エンターテイナー+", "教えてあげる+", "オーバードライブ+", "アイドルになります+", "巻き返し+"]
+    old = ["演出計画+", "眠気", "ひと呼吸+"]
+    data = {"veil_piles": {**_piles([], grave, old), "turn": 4, "swap": True}}
+    new = ["教えてあげる+", "エンターテイナー+", "アイドルになります+"]
+    outside = Counter(["一心不乱+", "オーバードライブ+", "巻き返し+", *old])
+    out = track_piles(data, 4, [*new, None, None], outside)
+    assert sorted(out["deck"]) == sorted(["一心不乱+", "オーバードライブ+", "巻き返し+"])
+    assert sorted(out["grave"]) == sorted(old) and out["unlocated"] == []
+    assert "swap" not in data["veil_piles"]
+
+
+def test_fp_effect_drops_condition_broken_by_own_stance_change():
+    """涙の思い出+「温存に変更 元気+4 強気の場合、全力値+4」：先变温存，強気条件不成立，不记 +4。
+    没有先变姿态的条件（うたたねレポート+ 非全力状態の場合 +2）照旧算；「〜の場合、使用可」是打出条件，不受影响。"""
+    from hiro.brain.veil import fp_effect
+
+    assert fp_effect("温存に変更元気+4強気の場合、全力値+4レッスン中1回")["gain"] == 0
+    assert fp_effect("強気に変更強気の場合、全力値+4")["gain"] == 4
+    assert fp_effect("温存2段階目に変更非全力状態の場合、全力値+2")["gain"] == 2
+    assert fp_effect("全力値+5非全力状態の場合、全力値+2全力の場合、手札のパラメータ値増加+7")["gain"] == 7
+    assert fp_effect("全力値が5以上の場合、使用可全力値+5次のターン、手札のパラメータ値増加+8")["gain"] == 5
+
+
+def test_undo_of_ledger_unlocked_card_drops_fp_ledger():
+    """codex-20261108-3-b 第 1 局 R1 attempt2 T8：账本全力値 6、画面 3，按账本解灰打 アイドルになります+（消費3）打不出，
+    撤销后又解灰，循环 2.5 分钟。撤销的正是这回合解灰的牌 → 账本作废，下一帧按画面补账。"""
+    from types import SimpleNamespace
+
+    from hiro.produce.veil_exam import distrust_fp_after_undo
+
+    mem = SimpleNamespace(turn=8)
+    data = {"veil_fp": 6, "veil_fp_log": [{"turn": 8, "op": "按账本解灰", "cards": ["アイドルになります+"], "fp": 6}]}
+    assert distrust_fp_after_undo(data, mem, "巻き返し+") is False and data["veil_fp"] == 6
+    assert distrust_fp_after_undo(data, mem, "アイドルになります+") is True
+    assert data["veil_fp"] is None and "アイドルになります+" in data["veil_fp_gap"]
+    data2 = {"veil_fp": 6, "veil_fp_log": [{"turn": 7, "op": "按账本解灰", "cards": ["アイドルになります+"]}]}
+    assert distrust_fp_after_undo(data2, mem, "アイドルになります+") is False

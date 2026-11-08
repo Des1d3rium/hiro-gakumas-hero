@@ -103,12 +103,29 @@ _FP_GAIN = re.compile(r"全力値\+(\d+)")
 _FP_COST = re.compile(r"全力値消費(\d+)")
 _FP_BOOST = re.compile(r"全力値増加量増加\+(\d+)[%％][（(](\d+)ターン[）)]")  # norm 后全角括号变半角
 _FP_LATER = re.compile(r"以降|次のターン|ターン開始時|成長：")
+# 姿态条件的全力値：「強気の場合、全力値+4」。牌面前面先「温存に変更」的，结算到这里时姿态已是温存，条件不成立
+# （涙の思い出+「温存に変更 元気+4 強気の場合、全力値+4」：codex-20261108-3-b 第 1 局 R1 被无条件记 +4，
+# 账本 7、画面 3，T8 按账本解灰打 アイドルになります+ 打不出，撤销后又解灰，循环卡死）
+_FP_COND = re.compile(r"(非全力状態|強気|温存|のんびり|全力)の場合、全力値\+\d+")
+_STANCE_SET = re.compile(r"(強気|温存|のんびり|全力)(?:\d段階目)?に変更")
+
+
+def _fp_drop_false_conditions(text: str) -> str:
+    """去掉牌面里「先变姿态、后接与新姿态不符的姿态条件」的全力値段；前面没有变姿态的条件取决于打出时的姿态，照旧算。"""
+    out, last = [], 0
+    for m in _FP_COND.finditer(text):
+        changes = _STANCE_SET.findall(text, 0, m.start())
+        cond = m[1]
+        if changes and not (cond == changes[-1] or (cond == "非全力状態" and changes[-1] != "全力")):
+            out.append(text[last:m.start()])
+            last = m.end()
+    return "".join(out) + text[last:]
 
 
 def fp_effect(card) -> dict:
     """牌面文字 → {gain, cost, boost: (百分比, 回合数) | None}。主数据原文：オーバードライブ+ 全力値+2、巻き返し+ 全力値消費1、
     アイドルになります+ 全力値消費3、リスキーチャンス+ 全力値+3 / 全力値増加量増加+50%（4ターン）。"""
-    text = _FP_LATER.split(norm(getattr(card, "text", card) or ""), maxsplit=1)[0]
+    text = _fp_drop_false_conditions(_FP_LATER.split(norm(getattr(card, "text", card) or ""), maxsplit=1)[0])
     boost = _FP_BOOST.search(text)
     return {"gain": sum(map(int, _FP_GAIN.findall(text))), "cost": sum(map(int, _FP_COST.findall(text))),
             "boost": (int(boost[1]), int(boost[2])) if boost else None}

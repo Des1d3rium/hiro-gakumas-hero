@@ -389,11 +389,16 @@ def track_piles(data, turn, slots, outside):
         born = Counter(previous.get("born") or {})
         old_hand = Counter(c for c in previous["hand"] if c)
         hand = Counter(c for c in slots if c)
+        # 换手牌（ガタゴトすやすや+「手札をすべて入れ替える」）：游戏先抽新手牌（山札不够就先洗捨札），抽完才把原手牌丢进捨札，
+        # 原手牌不会被这次洗牌洗进山札（codex-20261108-3-b 第 1 局 R2 T4：山札空时打出，账本先丢后洗，T5 起位置不明）
+        held = Counter()
         if turn != previous["turn"]:
             grave.update(old_hand)
             drawn = hand
             deck += born
             born = Counter()
+        elif previous.get("swap"):
+            held, drawn = old_hand, hand
         else:
             grave.update(old_hand - hand)
             drawn = hand - old_hand
@@ -402,6 +407,7 @@ def track_piles(data, turn, slots, outside):
         if drawn - deck and not unknown and deck.total() < drawn.total() and not (strict_shuffle() and deck - drawn):
             deck.update(grave)
             grave.clear()
+        grave.update(held)
         if drawn - deck or deck - drawn + born + grave + unknown != outside:
             deck.clear()
             grave.clear()
@@ -809,6 +815,22 @@ def check_outside_plays(data, memory, state, before_remaining) -> str | None:
         data["veil_fp_gap"] = why
         data.setdefault("veil_fp_log", []).append({"turn": memory.turn, "op": "不知道", "why": why})
     return why
+
+
+def distrust_fp_after_undo(data, memory, undone) -> bool:
+    """这回合按账本解灰的牌没打出去、被撤销：说明全力値账本错了（画面的灰是对的）。账本作废（记 None），
+    下一帧按画面补账，不再解灰 → 不会「解灰→打不出→撤销→再解灰」循环（codex-20261108-3-b 第 1 局 R1 attempt2 T8 卡 2.5 分钟）。"""
+    log = data.get("veil_fp_log") or []
+    unlocked = next((e for e in reversed(log) if e.get("op") == "按账本解灰"), None)
+    if not unlocked or unlocked.get("turn") != memory.turn or norm(undone) not in unlocked.get("cards", []):
+        return False
+    if data.get("veil_fp") is not None:
+        why = f"按账本解灰的 {norm(undone)} 没打出去：账本全力値 {data['veil_fp']} 不可信，改用画面"
+        data["veil_fp"] = None
+        data["veil_fp_gap"] = why
+        log.append({"turn": memory.turn, "op": "不知道", "why": why})
+        data["veil_fp_log"] = log
+    return True
 
 
 def fp_grey_by_stale_frame(state, fp) -> list:
@@ -1275,6 +1297,7 @@ class VeilScreen(ScreenExamStateSource):
             self._log("veil_play_undone", turn=memory.turn, card=undone, hand=sorted(names.elements()))
             if undone is not None:
                 self.position_retries = 0
+                distrust_fp_after_undo(memory.strategy_data, memory, undone)  # 撤销换了记忆，旧的 data 引用已过时
                 return None, "veil_play_undone"
         if problem:
             self.position_retries += 1
@@ -1410,6 +1433,8 @@ class VeilBrain(BattleBrain):
             piles["hand"][decision.slot] = None
             if not lost:
                 piles["grave"][name] = piles["grave"].get(name, 0) + 1
+            if "手札をすべて入れ替える" in norm(card.text or ""):
+                piles["swap"] = True  # 下一次记账：先抽新手牌，原手牌抽完再进捨札（track_piles）
         if norm(card.name) in SLEEP_GENERATORS:
             deck["眠気"] = deck.get("眠気", 0) + 1
             if piles is not None:
