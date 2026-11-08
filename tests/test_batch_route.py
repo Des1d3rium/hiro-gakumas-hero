@@ -571,8 +571,11 @@ RETRY_DIALOG = [_b("再挑戦確認", 140, 420), _b("再挑戦チケット", 300
 
 
 @pytest.fixture
-def debug_retry(monkeypatch):
+def debug_retry(monkeypatch, tmp_path):
     clock = {"t": 1000.0}
+    monkeypatch.setattr(B, "DEBUG_XY_FILE", tmp_path / "xy.json")  # 学到的坐标不写进实机 reports/
+    monkeypatch.setitem(B.DEBUG_RETRY, "ending", None)
+    monkeypatch.setitem(B.DEBUG_RETRY, "round", None)
     monkeypatch.setattr(B.time, "monotonic", lambda: clock["t"])
     monkeypatch.setitem(B.DEBUG_RETRY, "plan", {"1": 2, "2": 1})
     monkeypatch.setitem(B.DEBUG_RETRY, "used", {})
@@ -609,17 +612,61 @@ def test_debug_retry_respects_plan_and_round(debug_retry):
     assert B.debug_retry_step(RESULT_R1, dialog=False) is None  # 没开 debug：不管
 
 
-def test_debug_retry_never_spends_jewels_or_touches_defeat_dialog(debug_retry):
+def test_debug_retry_never_spends_jewels(debug_retry):
     assert B.debug_retry_step(RETRY_DIALOG, dialog=True) is None  # 不是我们点出来的框
     B.debug_retry_step(RESULT_R1, dialog=False)
     with pytest.raises(B.HoldPage, match="ジュエル"):
         B.debug_retry_step(RETRY_DIALOG + [_b("ジュエル 30", 360, 700)], dialog=True)
-    B.debug_retry_step(RESULT_R1, dialog=False)
-    defeat = [_b("再挑戦確認", 140, 860), _b("プロデュース終了", 230, 1160), _b("再挑戦", 530, 1160)]
-    assert B.debug_retry_step(defeat, dialog=True) is None
     no_button = [b for b in RESULT_R1 if b[0] != "再挑戦"]
     B.DEBUG_RETRY["pending"] = None
     assert B.debug_retry_step(no_button, dialog=False) is None  # 没有再挑戦按钮：照常「次へ」
+
+
+DEFEAT = [_b("ラウンド1結果", 117, 139), _b("再挑戦確認", 140, 860), _b("プロデュース終了", 233, 1210), _b("再挑戦", 533, 1210)]
+
+
+def _frame(color):
+    import numpy as np
+
+    img = np.zeros((1280, 720, 3), np.uint8)
+    img[1180:1240, 440:630] = color  # 「再挑戦」按钮一带
+    return img
+
+
+def test_debug_defeat_retries_until_limit_then_ends(debug_retry):
+    """敗退：照样点「再挑戦」（使用者 2026-11-07），这一轮满 3 次后点「プロデュース終了」。"""
+    B.debug_retry_step(RESULT_R1, dialog=False)  # 记下轮次
+    B.DEBUG_RETRY["pending"] = None
+    orange = _frame((40, 140, 250))
+    assert B.debug_retry_step(DEFEAT, dialog=True, img=orange) == ("debug_defeat_retry", (533, 1210))
+    assert B.debug_retry_step(DEFEAT, dialog=True, img=orange) == "wait"  # 刚点过
+    B.DEBUG_RETRY["pending"] = None
+    B.DEBUG_RETRY["used"] = {"1": 3}
+    assert B.debug_retry_step(DEFEAT, dialog=True, img=orange) == ("debug_defeat_end", (233, 1210))
+
+
+def test_debug_defeat_grey_retry_ends(debug_retry):
+    """「再挑戦」变灰（免费 / 券用完）：点「プロデュース終了」；之后的确认框没有危险字样才点右侧。"""
+    B.debug_retry_step(RESULT_R1, dialog=False)
+    B.DEBUG_RETRY["pending"] = None
+    assert B.debug_retry_step(DEFEAT, dialog=True, img=_frame((128, 128, 128)))[0] == "debug_defeat_end"
+    debug_retry["t"] += 3
+    confirm = [_b("プロデュース終了確認", 200, 420), _b("キャンセル", 200, 860), _b("終了する", 520, 860)]
+    assert B.debug_retry_step(confirm, dialog=True) == ("debug_defeat_end_confirm", (520, 860))
+    debug_retry["t"] += 3
+    with pytest.raises(B.HoldPage):
+        B.debug_retry_step(confirm + [_b("データを破棄", 360, 600)], dialog=True)
+
+
+def test_debug_learned_xy_used_after_first_find(debug_retry):
+    """确认框按钮第一次 OCR 找到后存坐标，之后这一帧没认出按钮文字也照存的坐标点。"""
+    B.debug_retry_step(RESULT_R1, dialog=False)
+    assert B.debug_retry_step(RETRY_DIALOG, dialog=True) == ("debug_retry_confirm", (520, 860))
+    B.DEBUG_RETRY["pending"] = None
+    debug_retry["t"] += 20
+    B.debug_retry_step(RESULT_R1, dialog=False)
+    blurred = [b for b in RETRY_DIALOG if b[0] != "再挑戦する"]
+    assert B.debug_retry_step(blurred, dialog=True) == ("debug_retry_confirm", (520, 860))
 
 
 def test_debug_retry_pending_expires(debug_retry):

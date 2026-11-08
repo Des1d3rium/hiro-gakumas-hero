@@ -265,10 +265,38 @@ def result_next(boxes, dialog: bool):
 # 快速建可信 trace 库。只用免费 / 再挑戦チケット：确认框里有ジュエル、或是敗退的「プロデュース終了」框都不点。
 # 每轮最多 3 次（同 AGENTS.md 再挑戦上限）。计数存在 active.debug_retries_used，watch 重启不重来。
 DEBUG_RETRY_MAX = 3
-DEBUG_RETRY: dict = {"plan": None, "used": {}, "pending": None}  # pending：{"round", "at", "confirmed"}；tick 每步从批次状态填 plan / used
+DEBUG_RETRY: dict = {"plan": None, "used": {}, "pending": None, "ending": None, "round": None}  # pending：{"round", "at", "confirmed"}；tick 每步从批次状态填 plan / used
 DEBUG_RETRY_WAIT_S = 15.0  # 点了「再挑戦」后这么久内等确认框
 DEBUG_RETRY_RETAP_S = 2.0  # 点了确认框还在：隔这么久再点（不重复计数）
 RETRY_CONFIRM_WORDS = ("再挑戦する", "決定", "はい", "OK")
+END_CONFIRM_WORDS = ("終了する", "決定", "はい", "OK", "プロデュース終了")
+DEBUG_DANGER = ("ジュエル", "破棄", "リタイア", "タイトルへ")
+# 确认框按钮第一次靠 OCR 找到后存下坐标，之后直接点（使用者 2026-11-07：「找到后确定坐标，不用每次都找了」）。
+# 危险字样照样每帧 OCR 核对。文件在 reports/batches/（不进仓库），删掉就重新找
+DEBUG_XY_FILE = Path(__file__).resolve().parents[1] / "reports" / "batches" / "debug-retry-xy.json"
+
+
+def _learned_xy(key, found):
+    """found：这一帧 OCR 找到的按钮中心或 None。存过的坐标优先；没存过、这次找到了就存下。"""
+    try:
+        saved = json.loads(DEBUG_XY_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        saved = {}
+    if key in saved:
+        return tuple(saved[key])
+    if found is not None:
+        saved[key] = list(found)
+        try:
+            DEBUG_XY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            DEBUG_XY_FILE.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+    return found
+
+
+def _button(labels, boxes, words, *, right=True):
+    return next((((b[0] + b[2]) // 2, (b[1] + b[3]) // 2) for t, (_, _, b) in zip(labels, boxes)
+                 if t in words and (b[1] + b[3]) / 2 > 600 and (((b[0] + b[2]) / 2 > 360) == right)), None)
 
 
 def parse_debug_retries(text: str) -> dict | None:
@@ -284,7 +312,18 @@ def parse_debug_retries(text: str) -> dict | None:
     return plan if any(plan.values()) else None
 
 
-def debug_retry_step(boxes, dialog: bool):
+def button_grey(img, xy, half=(70, 18), max_sat=40) -> bool:
+    """按钮变灰（不能点）：中心附近一块的平均饱和度很低。可点的「再挑戦」是彩色按钮。阈值未在实机核对。"""
+    import cv2
+
+    x, y = xy
+    patch = img[max(0, y - half[1]):y + half[1], max(0, x - half[0]):x + half[0]]
+    if patch.size == 0:
+        return False
+    return float(cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)[..., 1].mean()) < max_sat
+
+
+def debug_retry_step(boxes, dialog: bool, img=None):
     """按 debug 计划主动再挑戦：结果页点「再挑戦」→ ("debug_retry", tap)；随后的确认框核对后点确认 → ("debug_retry_confirm", tap)；
     等确认框 / 等确认框关掉 → "wait"；不归这里管 → None。要花ジュエル时抛 HoldPage。"""
     from hiro.produce import hif_buttons as BTN
@@ -297,14 +336,47 @@ def debug_retry_step(boxes, dialog: bool):
     pend, now = DEBUG_RETRY["pending"], time.monotonic()
     if pend is not None and now - pend["at"] > DEBUG_RETRY_WAIT_S:
         DEBUG_RETRY["pending"] = pend = None
+    ending = DEBUG_RETRY.get("ending")
+    if ending is not None and now - ending > DEBUG_RETRY_WAIT_S:
+        DEBUG_RETRY["ending"] = ending = None
+    if dialog and "再挑戦確認" in flat and "プロデュース終了" in flat:
+        # 敗退（使用者 2026-11-07）：debug 攒 trace 时照样点「再挑戦」，直到「再挑戦」变灰（免费 / 券用完）或这一轮已再挑戦
+        # DEBUG_RETRY_MAX 次，才点「プロデュース終了」接着结算开下一局。ジュエル 照样不花
+        if any(w in flat for w in DEBUG_DANGER):
+            raise HoldPage("debug 敗退框里有危险字样，不点")
+        if (ending is not None and now - ending < DEBUG_RETRY_RETAP_S) or (pend is not None and pend["confirmed"] is not None):
+            return "wait"
+        rnd = DEBUG_RETRY.get("round")
+        used = DEBUG_RETRY["used"].get(rnd, 0) if rnd else DEBUG_RETRY_MAX
+        retry_at = _learned_xy("defeat_retry", _button(labels, boxes, ("再挑戦",)))
+        if used < DEBUG_RETRY_MAX and retry_at is not None and not (img is not None and button_grey(img, retry_at)):
+            DEBUG_RETRY["pending"] = {"round": rnd, "at": now, "confirmed": now}  # 之后若有确认框只补点、不重复计数
+            return "debug_defeat_retry", retry_at
+        found = _button(labels, boxes, ("プロデュース終了",), right=False)
+        tap = _learned_xy("defeat_end", found)
+        if tap is None:
+            return "wait"
+        DEBUG_RETRY["ending"] = now
+        DEBUG_RETRY["pending"] = None
+        return "debug_defeat_end", tap
+    if dialog and ending is not None:
+        # 「プロデュース終了」之后可能还有一层确认：没有危险字样才点右侧的「終了する / 決定 / はい」
+        if any(w in flat for w in DEBUG_DANGER):
+            raise HoldPage("debug 敗退后的确认框里有危险字样，不点")
+        if now - ending < DEBUG_RETRY_RETAP_S:
+            return "wait"
+        tap = _learned_xy("defeat_end_confirm", _button(labels, boxes, END_CONFIRM_WORDS))
+        if tap is None:
+            return "wait"
+        DEBUG_RETRY["ending"] = now
+        return "debug_defeat_end_confirm", tap
     if dialog:
-        if pend is None or "プロデュース終了" in flat:
-            return None  # 不是我们点出来的框（敗退的「再挑戦確認」照旧停下交给代理）
-        if "ジュエル" in flat:
+        if pend is None:
+            return None  # 不是我们点出来的框
+        if any(w in flat for w in DEBUG_DANGER):
             DEBUG_RETRY["pending"] = None
-            raise HoldPage("debug 再挑戦：确认框要消耗ジュエル，不点")
-        hit = next((((b[0] + b[2]) // 2, (b[1] + b[3]) // 2) for t, (_, _, b) in zip(labels, boxes)
-                    if t in RETRY_CONFIRM_WORDS and (b[1] + b[3]) / 2 > 600 and (b[0] + b[2]) / 2 > 360), None)
+            raise HoldPage("debug 再挑戦：确认框要消耗ジュエル（或有危险字样），不点")
+        hit = _learned_xy("retry_confirm", _button(labels, boxes, RETRY_CONFIRM_WORDS))
         if hit is None:
             return "wait"
         if pend["confirmed"] is not None:
@@ -318,6 +390,7 @@ def debug_retry_step(boxes, dialog: bool):
     if m is None:
         return None
     rnd = m.group(1)
+    DEBUG_RETRY["round"] = rnd
     if pend is not None:
         # 点了「再挑戦」、确认框还没出来，或确认后结果页还没退：别再点、也别点「次へ」
         return "wait" if pend["confirmed"] is None or now - pend["confirmed"] < DEBUG_RETRY_WAIT_S else None
@@ -595,7 +668,7 @@ def auto_decide(img, *, ocr, quick, fallback, header):
     # 整帧读一次：选择页、考试、商店、确认框等都停下交给代理。快识别认成动画的页面也读：
     # 商店 / 轮间选中饮料时会被认成 ACQUIRE，轮间菜单会被认成 CUSTOMIZE_RESULT（全局回放）。
     boxes = boxes if boxes is not None else ocr(img)
-    if step := debug_retry_step(boxes, dialog):
+    if step := debug_retry_step(boxes, dialog, img):
         return None if step == "wait" else step
     if tap := result_next(boxes, dialog):
         return None if tap == "wait" else ("result_next", tap)
@@ -1664,7 +1737,8 @@ def watch(path, run):
             if result is not None:
                 kind, tap = result
                 extra = {}
-                if kind == "debug_retry_confirm" and DEBUG_RETRY["pending"] is not None:
+                if kind in ("debug_retry_confirm", "debug_defeat_retry") and DEBUG_RETRY["pending"] is not None \
+                        and DEBUG_RETRY["pending"]["round"]:
                     rnd = DEBUG_RETRY["pending"]["round"]
                     used = active.setdefault("debug_retries_used", {})
                     used[rnd] = used.get(rnd, 0) + 1
