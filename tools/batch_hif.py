@@ -323,6 +323,14 @@ def button_grey(img, xy, half=(70, 18), max_sat=40) -> bool:
     return float(cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)[..., 1].mean()) < max_sat
 
 
+def final_result_page(labels) -> bool:
+    """本战最终结果页（R2 结束）：没有「ラウンドN結果」，左上是「優勝 / 準優勝…」+「現在順位」，分数旁带这一轮的「+620,548」。
+    codex-20261108-3 第 1 局：只认「ラウンドN結果」，R2 计划的 1 次再挑戦没点，直接「次へ」，一局只出 4 条 trace。"""
+    flat = "".join(labels)
+    return ("現在順位" in flat and not re.search(r"ラウンド\d結果", flat)
+            and any(re.search(r"\+\d{1,3}(,\d{3})+", t) for t in labels))  # OCR 可能把总分和「+分数」并成一个框
+
+
 def debug_retry_step(boxes, dialog: bool, img=None):
     """按 debug 计划主动再挑戦：结果页点「再挑戦」→ ("debug_retry", tap)；随后的确认框核对后点确认 → ("debug_retry_confirm", tap)；
     等确认框 / 等确认框关掉 → "wait"；不归这里管 → None。要花ジュエル时抛 HoldPage。"""
@@ -387,9 +395,12 @@ def debug_retry_step(boxes, dialog: bool, img=None):
         pend["confirmed"] = now
         return "debug_retry_confirm", hit
     m = next((re.search(r"ラウンド(\d)結果", t) for t in labels if re.search(r"ラウンド(\d)結果", t)), None)
-    if m is None:
+    if m is not None:
+        rnd = m.group(1)
+    elif final_result_page(labels):
+        rnd = "2"
+    else:
         return None
-    rnd = m.group(1)
     DEBUG_RETRY["round"] = rnd
     if pend is not None:
         # 点了「再挑戦」、确认框还没出来，或确认后结果页还没退：别再点、也别点「次へ」

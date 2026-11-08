@@ -683,3 +683,20 @@ def test_debug_retries_command_sets_and_clears_plan():
     assert state["debug_retries"] == {"1": 2, "2": 1} and out["used"] == {"1": 1}
     B.change(state, NS(command="debug-retries", plan="off"))
     assert "debug_retries" not in state
+
+
+def test_debug_retry_on_final_result_page(debug_retry):
+    # codex-20261108-3 第 1 局：R2 结束的最终结果页没有「ラウンド2結果」（左上「優勝」+「現在順位」，分数旁带「+620,548」），
+    # 原来认不出，计划的 1 次 R2 再挑戦没点
+    from hiro.produce import hif_buttons as BTN
+
+    final = [_b("優勝", 90, 100), _b("現在順位", 70, 186), _b("1,518,642", 330, 318), _b("+620,548", 490, 318)] + RESULT_R1[-2:]
+    B.DEBUG_RETRY["used"] = {"1": 2}
+    assert B.final_result_page(["".join(t.split()) for t, _, _ in final])
+    assert B.debug_retry_step(final, dialog=False) == ("debug_retry", BTN.RESULT_RETRY)
+    assert B.DEBUG_RETRY["round"] == "2"
+    B.DEBUG_RETRY["pending"] = None
+    B.DEBUG_RETRY["used"] = {"1": 2, "2": 1}
+    assert B.debug_retry_step(final, dialog=False) is None  # R2 用满：照常「次へ」
+    assert not B.final_result_page(["ラウンド1結果", "現在順位", "+1,000"])
+    assert not B.final_result_page(["現在順位", "898,094"])  # 没有这一轮的「+分数」：不认
