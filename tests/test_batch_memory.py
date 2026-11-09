@@ -45,3 +45,9 @@ def test_choice_without_labels_or_hits_stops():
     boxes = [box("再生成前", 180, 200), box("タフネス+", 180, 260), box("再生成後", 540, 200), box("達成感+", 540, 260)]
     r = BM.choose(boxes)
     assert r["pick"] is None and r["tap"] is None
+
+
+def test_card_name_skips_count_badge():
+    """codex-20261109-1-p：「開始時に獲得」后先读出数量角标「2」，卡名记成「2」。"""
+    assert BM.card_name(["獲得可能スキルカード(", "開始時に獲得", "2", "涙の思い出", "アノマリーのみ"]) == "涙の思い出"
+    assert BM.card_name(["獲得可能スキルカード", "中間試験/1次オーディション後に獲得", "タフネス"]) == "タフネス"

@@ -50,7 +50,8 @@ def card_name(texts: list[str]) -> str | None:
     start = next((i for i, t in enumerate(items) if "獲得可能" in t), None)
     if start is None:
         return None
-    return next((t for t in items[start + 1:start + 4] if t and "獲得" not in t), None)
+    # 跳过纯数字 / 单字符（codex-20261109-1-p：「開始時に獲得」徽章后读出数量角标「2」「5」，记成卡名）
+    return next((t for t in items[start + 1:start + 5] if len(t) > 1 and "獲得" not in t and not t.isdigit()), None)
 
 
 def is_choice(texts: list[str]) -> bool:

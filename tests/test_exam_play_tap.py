@@ -213,3 +213,30 @@ def test_confirmed_but_hand_unchanged_is_not_landed(game, monkeypatch):
     drawn = same.copy()
     drawn[900:1080, 240:360] = 200  # codex-20261109-1-l：打出后抽牌补到同一格，角标位置不变、那一格卡面换了 = 打出了
     assert ex._play_not_landed(NS(img=drawn), X) is None
+
+
+def test_merged_name_labels_still_locate_card(monkeypatch):
+    """codex-20261109-1-p R2 T11：相邻两张卡名并成一段「オーバードラエンターテイナー＋」（x 397–693，中心 545），
+    原来按段中心比 x 454 的 オーバードライブ+ 认不出 → 单击被吞后当成已打出、下一帧撤回。按字数比例取这张卡名的位置。"""
+    label = [ex._Text("オーバードラエンターテイナー＋", Rect(397, 1120, 296, 20)), ex._Text("教えてあげ", Rect(300, 1120, 70, 20))]
+    monkeypatch.setattr(ex, "_roi_texts", lambda img, y1, y2: label)
+    assert ex._name_at("f", 454, "オーバードライブ+")
+    assert ex._name_at("f", 610, "エンターテイナー+")
+    assert not ex._name_at("f", 454, "エンターテイナー+")
+    assert ex._name_at("f", 332, "教えてあげる+")
+
+
+def test_unconfirmed_sig_missing_hand_unchanged_is_not_landed(monkeypatch):
+    """没确认打出、结算后签名一直读不到：手牌带逐像素没变 → 没打出（原来直接当打出）。"""
+    import numpy as np
+
+    same = np.zeros((1280, 720, 3), np.uint8)
+    monkeypatch.setattr(ex, "device", NS(screenshot=lambda: same, click=lambda *a: None))
+    monkeypatch.setattr(ex, "sleep", lambda s: None)
+    monkeypatch.setattr(ex, "_screen_calm", lambda s: None)
+    monkeypatch.setattr(ex, "_select_at", lambda img, x: False)
+    monkeypatch.setattr(ex, "_lite_sig", lambda img: None)
+    monkeypatch.setitem(ex.PLAY_RESULT, "confirmed", False)
+    monkeypatch.setitem(ex.PLAY_RESULT, "stuck", False)
+    monkeypatch.setitem(ex.PLAY_RESULT, "name_visible", False)
+    assert "没打出" in ex._play_not_landed(NS(img=same), 454)

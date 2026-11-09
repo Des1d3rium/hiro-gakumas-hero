@@ -873,7 +873,27 @@ def _name_at(img, x: int, name: str | None) -> bool:
     """x 这张卡下方还写着它的卡名（手牌少时游戏在卡下方显示卡名；选中后也可能仍是卡名而不是「SELECT」）。"""
     if not name:
         return False
-    return any(abs(t.rect.center.x - x) <= SELECT_DX and _name_match(t.text, name) for t in _roi_texts(img, *SELECT_BAND))
+    return any(abs(_name_x(t, name) - x) <= SELECT_DX and _name_match(_name_part(t.text, name), name)
+               for t in _roi_texts(img, *SELECT_BAND))
+
+
+def _name_part(text: str, name: str) -> str:
+    """相邻两张卡的卡名标签 OCR 常并成一段（codex-20261109-1-p R2 T11：「オーバードラエンターテイナー＋」中心 x 545，
+    オーバードライブ+ 在 x 454 → 认不出卡名，单击被吞后当成已打出、下一帧撤回）。段里含这张卡名的前 4 个字时只取从那里起的一截。"""
+    t, head = _norm_name(text), _norm_name(name)[:4]
+    k = t.find(head) if len(head) >= 2 else -1
+    return t[k:k + max(len(_norm_name(name)), 4)] if k > 0 or (k == 0 and len(t) > len(_norm_name(name)) + 1) else text
+
+
+def _name_x(t, name: str) -> float:
+    """卡名在这段文字里的横向中心：并成一段时按字数比例估（每个字宽度近似相同）。"""
+    full, head = _norm_name(t.text), _norm_name(name)[:4]
+    k = full.find(head) if len(head) >= 2 else -1
+    if k < 0 or len(full) <= len(_norm_name(name)) + 1:
+        return t.rect.center.x
+    x1, w = t.rect.x1, t.rect.w
+    n = min(len(_norm_name(name)), len(full) - k)
+    return x1 + w * (k + n / 2) / len(full)
 
 
 def _play_not_landed(frame, x: int | None, name: str | None = None) -> str | None:
@@ -915,6 +935,9 @@ def _play_not_landed(frame, x: int | None, name: str | None = None) -> str | Non
         return "结算稳定后手牌位置和卡面都没变，没打出"
     if confirmed:
         return None
+    if b is None and _hand_unchanged(frame.img, after):
+        # 没确认、结算后签名读不到：手牌带逐像素没变也算没打出（codex-20261109-1-p R2 T11 单击被吞，签名读不到时没核对）
+        return "没确认打出、签名读不到，手牌带没变，没打出"
     if (x is not None and name and a is not None and b is not None and len(a[1]) == len(b[1])
             and _name_at(after, x, name) and not _select_at(after, x)):
         # codex-20261109-1-e / 1-g 循环 T7：决策帧上一张 オーバードライブ+ 还浮在手牌上方结算，点 教えてあげる+ 被吞掉；
