@@ -782,7 +782,19 @@ def drive_useful(drive, starved, fp, current, hand) -> bool:
     return False
 
 
+CYCLE_MARK = "五卡循环"  # 循环出牌决策理由的前缀（五卡循环 / 五卡循环收尾）：连打只接这类决策
+LEDGER = "veil-ledger"  # memory.strategy_data 里的 veil_* 账：姿态 / 夜空 / 全力値 / 牌组 / 牌堆 / 槽位记账键，由 VeilScreen 提供
+
+
 class VeilAdvisor:
+    """ExamAdvisor 插件：五卡循环出牌（只用于 H.I.F 本战 R1 / R2）。决策读 VeilScreen 记的账（requires），
+    本回合的循环规划（veil_cycle）写回 memory.strategy_data。"""
+
+    requires = frozenset({LEDGER})
+
+    def burst_ok(self, contract) -> bool:
+        return CYCLE_MARK in contract.reason
+
     def on_round_start(self, round_no, context):
         pass
 

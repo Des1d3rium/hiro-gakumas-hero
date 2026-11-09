@@ -46,18 +46,20 @@
 - 现在在哪：
   - `src/hiro/brain/veil.py`：cycle 引擎 + VEIL 常量 + `VEIL_*` 开关。
   - `src/hiro/brain/piles.py`：牌堆记账。
-  - `src/hiro/produce/veil_exam.py`：`VeilBrain`、夜空 / 全力値 / 一番星账本、单轮执行。
-  - `src/hiro/exec/exam.py` 里还有专为 VEIL 的落地核对分支。
-- 问题：
-  - 不走 `exam_advisor` / `exam_state_source` 插件。`veil_exam` 直接新建 `ScreenExamStateSource`，再调 VEIL 逻辑，等于第二条写死的考试路线。
-  - 默认 advisor 和它互不相通。
-- [ ] 包成插件：
-  - VEIL = 一个 `ExamAdvisor` 实现（cycle 引擎 + VEIL 档案）。
-  - `piles.py` 记账和夜空 / 全力値 / 一番星账本并进一个 `ExamStateSource` 实现。
-  - `veil_exam` 改成经 `plugins.get` 取这两个。
+  - `src/hiro/produce/veil_exam.py`：`VeilScreen`（局面来源 + 夜空 / 全力値 / 一番星 / 牌组 / 牌堆账本）、单轮执行。
+- [x] **包成插件**（2026-11-09，分支 `claude/veil-plugin`）：`VeilScreen` = `ExamStateSource`（画面 + 全部账本），`VeilAdvisor` = `ExamAdvisor`，
+  `run_round` 经 `plugins.route_default` 取（没另外指定时用这两个，指定了用使用者的），`VeilBrain` 只留给测试的旧接口。
+  原插件协议装不下的地方，改了插件设计（都是可选钩子，旧插件不用改）：
+  - **记账**：原来在 `VeilBrain.commit`（BattleBrain 子类，不属于任何插件），而 `executed(action, result)` 拿不到局面 / 记忆 / 决策。
+    加 `ExamStateSource.commit(state, memory, decision, base)`，base 是通用记忆更新，来源决定前后记什么（VEIL 要在前面存撤回快照）。
+  - **每轮账本输入**：插件是无参单例，VEIL 每轮要牌组 / 饮料栏 / 回忆能力 / 客制化 / 分版本 / 应援棒张数。`run_exam(setup=…)` 传进 `begin` 的 context，来源每轮按它从头初始化。
+  - **决策读来源的账**：`VeilAdvisor` 读 `memory.strategy_data` 里的 veil_* 账。加 `requires` / `provides`，配错（如默认来源 + VEIL 决策）开考前就报错。
+  - **连打**：`cycle_tap` 原来按理由里有没有「五卡循环」判断，执行器认识 VEIL 的文字。改成决策器的 `burst_ok(contract)` 钩子。
+  - **trace 内部局面**：`trace_context` 原来靠 hasattr，现在是声明过的可选钩子。
+  - 验收：`tests/test_veil_plugin.py`（同一回合逐手打完，旧 `VeilBrain.commit` 和钩子路径的记忆逐字段相同；配套核对、单例每轮重置、路线缺省 / 使用者覆盖）；全量 1175 过。
 - [ ] 引擎 / 档案拆分：见重构指南 2.2 和 4.1「S3 没做完的」。
-- [ ] `exec/exam.py` 里的 VEIL 专用分支改成按能力位走（如 `needs_ledger`）。
-- [ ] 验收：用 `tools/audit/veil_replay.py` 回放，前后每一步的决策和理由都相同。
+- [ ] `exec/exam.py` 落地核对里还有为 VEIL 加的判据（注释里提到 veil_play_*），它们对所有出牌都生效，不按偶像分支；暂不动。
+- [ ] 真实 trace 验收：`tools/audit/veil_replay.py` 在 `claude/strategy-profiles` 上，合并后连同记账一起回放；再上一局实机。
 
 ## 验证局 codex-20261109-1（使用者 2026-11-09）
 

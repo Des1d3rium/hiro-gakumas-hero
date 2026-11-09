@@ -29,7 +29,6 @@ CARD_W, CARD_H = 57, 148  # KAA play_cards.ui.CARD_OFFSET：卡名首字母框�
 GREY = "#7a7d7d"  # 首字母角标发灰色（KAA locate_cards 判 available 用的同一个颜色）
 SETTLE_S = 4.0  # 等手牌摆到 n 张布局的上限（同 exam.SETTLE_FAST_MAX）
 SETTLE_GAP = 0.15
-MARK = "五卡循环"  # VEIL 循环出牌决策理由的前缀（hiro.brain.veil：五卡循环 / 五卡循环收尾）
 
 
 def tap_point(n: int, index: int, letter_top: int) -> tuple[int, int]:
@@ -103,7 +102,10 @@ def run_burst(state, memory, decision, *, brain, source, advisor, exam: str, rec
     from hiro.exec import exam as ex
     from hiro.loop.errors import ResumeBlocked
 
-    if not hasattr(source, "burst_begin"):
+    from hiro import plugins
+
+    burst_ok = getattr(advisor, "burst_ok", None)
+    if getattr(source, "burst_begin", None) is None or burst_ok is None:
         return 0
     st = source.burst_begin(state, memory, decision)
     if st is None:
@@ -130,12 +132,12 @@ def run_burst(state, memory, decision, *, brain, source, advisor, exam: str, rec
             why = f"决策停机（{e}）"
             break
         d = contract.to_battle()
-        if d.kind != "play" or MARK not in contract.reason or d.slot is None or d.slot >= n:
+        if d.kind != "play" or not burst_ok(contract) or d.slot is None or d.slot >= n:
             why = f"决策不是循环出牌：{d.action} {contract.reason}"
             break
         card = st.hand[d.slot]
         x, y = tap_point(n, d.slot, letters[d.slot][1])
-        context = source.trace_context(st, memory) if hasattr(source, "trace_context") else None
+        context = plugins.exam_trace_context(source, st, memory)
         if rec is not None:
             rec.log("battle_decision", image=img, exam=exam, source="cycle_tap", contract=contract.to_dict(),
                     **({"context": context} if context else {}))
@@ -160,7 +162,7 @@ def run_burst(state, memory, decision, *, brain, source, advisor, exam: str, rec
                                  error=missed if missed is not None else None if changed else "画面未变化",
                                  seconds=round(t_done - t_tap, 3))  # fmt: skip
         if ok:
-            brain.commit(st, memory, d)
+            plugins.exam_commit(source, brain.commit, st, memory, d)
             source.executed(Action.from_legal(d.action), result)
             done += 1
         if session is not None:

@@ -76,10 +76,19 @@ class AssetSource(Protocol):
 
 @runtime_checkable
 class ExamStateSource(Protocol):
-    """考试局面从哪来。默认实现：画面识别 + 状态机记账（confidence="screen"，牌库顺序未知）。"""
+    """考试局面从哪来。默认实现：画面识别 + 状态机记账（confidence="screen"，牌库顺序未知）。
+
+    下面是必需方法。另有可选钩子（没有就按缺省处理，见 EXAM_STATE_HOOKS），带账本的来源（如 VEIL 的 VeilScreen）靠它们接进执行器：
+    - commit(state, memory, decision, base)：动作落地后记账。base 是通用记忆更新（BattleBrain.commit），
+      由来源决定在它之前 / 之后做自己的账（VEIL 要在之前存撤回快照、之后改牌组 / 牌堆 / 全力値账本）。缺省 = 只调 base。
+    - trace_context(state, memory) -> dict | None：决策时的内部局面（姿态、计数、账本），写进 trace。
+    - burst_begin(state, memory, decision) / burst_settle(state, memory, greys)：循环回合连打（hiro.exec.cycle_tap）。
+    - provides：这个来源往 memory.strategy_data 里提供哪些账（字符串集合），给 ExamAdvisor.requires 核对。
+    begin(context) 的 context 里有 setup（run_exam 的 setup 参数，本轮的账本输入：牌组、饮料栏、回忆能力…），
+    插件是进程内单例，每轮按 setup 重新初始化。"""
 
     def begin(self, context: dict[str, Any]) -> None:
-        """一场考试开始（context：轮次、角色、牌组、饮料、P 道具等已知信息）。"""
+        """一场考试开始（context：exam / profile / target_score / session / brain / rec / setup）。"""
 
     def read(self, frame: Any, memory: Any) -> tuple[Any | None, str]:
         """当前局面 → (局面, 来源说明)。局面类型是 hiro.brain.state.BattleState；读不到返回 (None, 原因)。"""
@@ -98,7 +107,11 @@ class ExamStateSource(Protocol):
 
 @runtime_checkable
 class ExamAdvisor(Protocol):
-    """考试里每一步怎么打。默认实现：社区规则 + LLM 兜底，不需要模拟器。"""
+    """考试里每一步怎么打。默认实现：社区规则 + LLM 兜底，不需要模拟器。
+
+    可选钩子（见 EXAM_ADVISOR_HOOKS）：
+    - requires：决策要读哪些账（字符串集合）。局面来源的 provides 不全时，run_exam 在开考前就报错，不会拿空账本出牌。
+    - burst_ok(contract) -> bool：这一步能不能进循环连打（缺省不能）。"""
 
     def on_round_start(self, round_no: int, context: dict[str, Any]) -> None: ...
 
@@ -106,6 +119,33 @@ class ExamAdvisor(Protocol):
         """返回契约 Decision；只能从 legal 里选。previews 可能是 None。"""
 
     def on_round_end(self, result: dict[str, Any] | None) -> None: ...
+
+
+EXAM_STATE_HOOKS = ("commit", "trace_context", "burst_begin", "burst_settle", "provides")
+EXAM_ADVISOR_HOOKS = ("requires", "burst_ok")
+
+
+def exam_commit(source: Any, base: Callable[[Any, Any, Any], None], state: Any, memory: Any, decision: Any) -> None:
+    """动作落地后记账：来源有 commit 钩子就交给它（它负责调 base），没有就只做通用记忆更新。"""
+    hook = getattr(source, "commit", None)
+    if hook is None:
+        base(state, memory, decision)
+    else:
+        hook(state, memory, decision, base)
+
+
+def exam_trace_context(source: Any, state: Any, memory: Any) -> dict | None:
+    hook = getattr(source, "trace_context", None)
+    return hook(state, memory) if hook is not None else None
+
+
+def check_exam_pair(source: Any, advisor: Any) -> None:
+    """决策要的账，局面来源必须都提供；缺了直接报错（开考前，不碰游戏）。"""
+    need = set(getattr(advisor, "requires", None) or ())
+    have = set(getattr(source, "provides", None) or ())
+    if need - have:
+        raise TypeError(f"考试决策 {type(advisor).__name__} 需要账本 {sorted(need - have)}，"
+                        f"局面来源 {type(source).__name__} 只提供 {sorted(have) or '无'}")
 
 
 KINDS: dict[str, tuple[type, str, str]] = {
@@ -124,6 +164,15 @@ def register(kind: str, factory: Callable[[], Any]) -> None:
         raise KeyError(f"未知插件种类：{kind}（可选 {sorted(KINDS)}）")
     _registered[kind] = factory
     _cache.pop(kind, None)
+
+
+def route_default(kind: str, factory: Callable[[], Any]) -> Any:
+    """某条路线（如 VEIL 批量）有自己的缺省实现：使用者没用 register / 环境变量 / 入口点指定时用它，指定了就用使用者的。"""
+    if source(kind).startswith("default:"):
+        current = _registered.get(kind)
+        if current is not factory:
+            register(kind, factory)
+    return get(kind)
 
 
 def _load(spec: str) -> Callable[[], Any]:

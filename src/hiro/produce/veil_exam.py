@@ -18,7 +18,7 @@ from hiro.defaults.exam_state import ScreenExamStateSource
 from hiro.loop.date_change import DateChanged
 from hiro.loop.errors import ResumeBlocked
 from hiro.brain.veil import (
-    CORE, DRIVE, IDOL, REBOUND, SODA, STANCES, STRATEGY_FLAGS, TEACH, WARM, VeilAdvisor, _flag,
+    CORE, DRIVE, IDOL, LEDGER, REBOUND, SODA, STANCES, STRATEGY_FLAGS, TEACH, WARM, VeilAdvisor, _flag,
     NEUTRAL, STAR, after_play, destination, flower_count, keeps_nonbiri, full_power_count, keep_warm, next_stance_change, norm,
     stance, stance_level, stance_change_level, start_turn, level_after, swaps_hand,
 )
@@ -1110,7 +1110,7 @@ def stance_grey_by_stale_frame(state) -> list:
 
 
 # ---------------------------------------------------------------- 牌库账本不确定（veil_uncertain）：原因、自愈、核对后清除
-# 置真的地方只有 VeilBrain._commit：①打出的一次性牌不在牌组账本里；②打出会生成 / 变换牌的牌（眠気生成牌除外，单独记账）。
+# 置真的地方只有 _commit_ledger：①打出的一次性牌不在牌组账本里；②打出会生成 / 变换牌的牌（眠気生成牌除外，单独记账）。
 # 置真后 read() 每帧都跳过牌堆记账，手里同时有四张核心或已进循环就停；以前没有任何地方清它，只能代理手改记忆
 # （codex-20261107-1 第 1 局 R2：T3 手里出现牌组外的 立ち回りの基本，T5 打出后置真，剩 5 回合进循环时停机）。
 # 现在：①的常见来源（牌组外的一次性牌出现在手里）在看到时就收进账本（adopt_added_cards），打出时正常扣掉，不再置真；
@@ -1394,8 +1394,16 @@ def tap_probe(frame, card) -> str | None:
 
 
 class VeilScreen(ScreenExamStateSource):
-    def __init__(self, deck, once, ledger_drinks=None, abilities=None, customs=None, variants=None, probe=None, fill=0):
+    """ExamStateSource 插件：画面识别 + VEIL 账本（姿态 / 夜空 / 全力値 / 牌组 / 牌堆 / 饮料栏 / 回忆能力 / 客制化 / 分版本）。
+    本轮的账本输入由 run_exam 的 setup 传进 begin（键同 __init__ 的参数），插件单例每轮按它重新初始化；
+    动作落地后的记账在 commit 钩子里（commit_ledger），连打用 burst_begin / burst_settle，trace 用 trace_context。"""
+
+    provides = frozenset({LEDGER})
+
+    def __init__(self, deck=None, once=None, ledger_drinks=None, abilities=None, customs=None, variants=None, probe=None, fill=0):
         super().__init__()
+        deck = deck if deck is not None else {}
+        once = once if once is not None else set()
         self.fill = fill  # 开考时 H.I.F応援棒 生成的「基本」牌张数（fill_count）
         # 分版本记账（HIRO_VEIL_SIGNATURE=1 且账本里有同名不同版本）：deck / once 的键是记账键（见 instance_keys）
         self.variants = variants or None
@@ -1431,8 +1439,14 @@ class VeilScreen(ScreenExamStateSource):
             self.copies[name.rstrip("+")] += deck[key]
 
     def begin(self, context):
+        setup = (context or {}).get("setup")
+        if setup is not None:
+            self.__init__(**setup)  # 插件单例：每轮按本轮账本输入从头初始化，不带上一轮的状态
         super().begin(context)
         self.rec = (context or {}).get("rec")
+
+    def commit(self, state, memory, decision, base):
+        commit_ledger(state, memory, decision, base)
 
     def _log(self, kind, **fields):
         if self.rec is not None:
@@ -1998,94 +2012,102 @@ def star_count(card) -> int:
     return 3
 
 
+def commit_ledger(state, memory, decision, base):
+    """动作落地后记账（VeilScreen.commit 钩子）：先存出牌前的整份记忆（没落地时撤回用），base 做通用记忆更新，再记 VEIL 的账。"""
+    before = memory.actions_left
+    undo = json.loads(json.dumps(memory.to_dict())) if decision.kind == "play" else None
+    _commit_ledger(state, memory, decision, base)
+    pending = memory.strategy_data.get("veil_pending_play")
+    if undo is not None and pending is not None:
+        # 出牌前的整份记忆：牌没落地（手里同名牌没少）时按它撤销这一手，见 undo_unlanded_play
+        pending["undo"] = undo
+        pending["hand"] = sorted(norm(c.name) for c in state.hand if c.card_id)
+    note_extra(memory.strategy_data, memory, decision, before)
+    note_commit(memory.strategy_data, memory, state, decision)
+
+
 class VeilBrain(BattleBrain):
+    """旧接口（测试 / 离线工具用）：记账已挪到 VeilScreen.commit 钩子，执行器用普通 BattleBrain + VeilScreen。"""
+
     def commit(self, state, memory, decision):
-        before = memory.actions_left
-        undo = json.loads(json.dumps(memory.to_dict())) if decision.kind == "play" else None
-        self._commit(state, memory, decision)
-        pending = memory.strategy_data.get("veil_pending_play")
-        if undo is not None and pending is not None:
-            # 出牌前的整份记忆：牌没落地（手里同名牌没少）时按它撤销这一手，见 undo_unlanded_play
-            pending["undo"] = undo
-            pending["hand"] = sorted(norm(c.name) for c in state.hand if c.card_id)
-        note_extra(memory.strategy_data, memory, decision, before)
-        note_commit(memory.strategy_data, memory, state, decision)
+        commit_ledger(state, memory, decision, super().commit)
 
-    def _commit(self, state, memory, decision):
-        super().commit(state, memory, decision)
-        data = memory.strategy_data
-        if decision.kind == "drink":
-            drink = next(d for d in state.drinks if d.slot == decision.slot)
-            bar = data.get("veil_bar")
-            if bar is not None and 0 <= decision.slot < len(bar):
-                bar.pop(decision.slot)  # 喝掉：后面的往左挤（实机 1-d R2：3 瓶喝掉第 2 格后第 3 瓶挪到第 2 格）
-                data["veil_drinks"] = bar_record(bar)
-            if drink.name == SODA:
-                data["veil_soda_until"] = memory.turn + 5
-            from hiro.brain import piles as PB
 
-            PB.expect(data.get("veil_piles"), PB.moves_of_drink(norm(drink.name)))
-            commit_full_power(data, memory, drink, "喝")  # ジンジャーエール 全力値+1、ほうじ茶 +2、厳選初星チャイ 每回合 +1
-            return
-        if decision.kind != "play":
-            return
-        card = next(c for c in state.hand if c.slot == decision.slot)
-        slot_keys = data.get("veil_slot_keys") or {}
-        name = slot_keys.get(str(decision.slot)) or norm(card.name)  # 记账键（分版本记账时带版本后缀，否则就是卡名）
-        variant = name != norm(card.name)
-        before = stance(state)
-        if before is None and memory.turn == 1 and (data.get("veil_position") or {}).get("stance") in (None, NEUTRAL):
-            before = NEUTRAL  # 第 1 回合还没切过姿态：切強気不推夜空（原来记成 None、夜空不明）
-        current, flower = after_play(before, state.pitem_charges, card)
-        level = (level_after(before, stance_level(state, before), current, stance_change_level(card))
-                 if destination(card) == current else None)
-        if current == before and destination(card) != current:
-            level = stance_level(state, before)
-        if norm(card.name).startswith(STAR):
-            data["veil_star"] = star_count(card)
-        delayed, delayed_level = next_stance_change(card)
-        data["veil_pending_play"] = {
-            "turn": memory.turn, "card": name,
-            "count": sum((slot_keys.get(str(c.slot)) or norm(c.name)) == name for c in state.hand),
-            "stance": current, "stance_level": level, "flower": flower,
-            "next_stance": delayed, "next_stance_level": delayed_level,
-        }
-        if destination(card) == "強気" and stance(state) in WARM:
-            memory.actions_left += 1
-        commit_full_power(data, memory, card)
-        deck = data["veil_deck"]
-        if variant:  # 分版本：一次性按这一张的版本（账本记的），不按同名
-            lost = name in data.get("veil_initial_once", ())
+def _commit_ledger(state, memory, decision, base):
+    base(state, memory, decision)
+    data = memory.strategy_data
+    if decision.kind == "drink":
+        drink = next(d for d in state.drinks if d.slot == decision.slot)
+        bar = data.get("veil_bar")
+        if bar is not None and 0 <= decision.slot < len(bar):
+            bar.pop(decision.slot)  # 喝掉：后面的往左挤（实机 1-d R2：3 瓶喝掉第 2 格后第 3 瓶挪到第 2 格）
+            data["veil_drinks"] = bar_record(bar)
+        if drink.name == SODA:
+            data["veil_soda_until"] = memory.turn + 5
+        from hiro.brain import piles as PB
+
+        PB.expect(data.get("veil_piles"), PB.moves_of_drink(norm(drink.name)))
+        commit_full_power(data, memory, drink, "喝")  # ジンジャーエール 全力値+1、ほうじ茶 +2、厳選初星チャイ 每回合 +1
+        return
+    if decision.kind != "play":
+        return
+    card = next(c for c in state.hand if c.slot == decision.slot)
+    slot_keys = data.get("veil_slot_keys") or {}
+    name = slot_keys.get(str(decision.slot)) or norm(card.name)  # 记账键（分版本记账时带版本后缀，否则就是卡名）
+    variant = name != norm(card.name)
+    before = stance(state)
+    if before is None and memory.turn == 1 and (data.get("veil_position") or {}).get("stance") in (None, NEUTRAL):
+        before = NEUTRAL  # 第 1 回合还没切过姿态：切強気不推夜空（原来记成 None、夜空不明）
+    current, flower = after_play(before, state.pitem_charges, card)
+    level = (level_after(before, stance_level(state, before), current, stance_change_level(card))
+             if destination(card) == current else None)
+    if current == before and destination(card) != current:
+        level = stance_level(state, before)
+    if norm(card.name).startswith(STAR):
+        data["veil_star"] = star_count(card)
+    delayed, delayed_level = next_stance_change(card)
+    data["veil_pending_play"] = {
+        "turn": memory.turn, "card": name,
+        "count": sum((slot_keys.get(str(c.slot)) or norm(c.name)) == name for c in state.hand),
+        "stance": current, "stance_level": level, "flower": flower,
+        "next_stance": delayed, "next_stance_level": delayed_level,
+    }
+    if destination(card) == "強気" and stance(state) in WARM:
+        memory.actions_left += 1
+    commit_full_power(data, memory, card)
+    deck = data["veil_deck"]
+    if variant:  # 分版本：一次性按这一张的版本（账本记的），不按同名
+        lost = name in data.get("veil_initial_once", ())
+    else:
+        lost = (name in data.get("veil_initial_once", ()) if name == REBOUND else
+                card.tags.once or name == "眠気" or name in data.get("veil_known_once", ()))
+    cache = (data.get("veil_hand_keys") or {}).get("by_name", {}).get(norm(card.name))
+    if cache is not None:
+        cache.pop(str(decision.slot), None)  # 打出去的那张不再在手里
+    if lost:
+        if deck.get(name, 0) == 0:
+            mark_uncertain(data, memory, f"打出的一次性牌不在牌组账本里：{name}")
         else:
-            lost = (name in data.get("veil_initial_once", ()) if name == REBOUND else
-                    card.tags.once or name == "眠気" or name in data.get("veil_known_once", ()))
-        cache = (data.get("veil_hand_keys") or {}).get("by_name", {}).get(norm(card.name))
-        if cache is not None:
-            cache.pop(str(decision.slot), None)  # 打出去的那张不再在手里
-        if lost:
-            if deck.get(name, 0) == 0:
-                mark_uncertain(data, memory, f"打出的一次性牌不在牌组账本里：{name}")
-            else:
-                deck[name] -= 1
-        piles = data.get("veil_piles")
-        if piles is not None:
-            piles["hand"][decision.slot] = None
-            if not lost:
-                piles["grave"][name] = piles["grave"].get(name, 0) + 1
-            if swaps_hand(card):
-                piles["swap"] = True  # 下一次记账：原手牌整手进捨札，新手牌全部算新抽的（track_piles）
-            from hiro.brain import piles as PB
+            deck[name] -= 1
+    piles = data.get("veil_piles")
+    if piles is not None:
+        piles["hand"][decision.slot] = None
+        if not lost:
+            piles["grave"][name] = piles["grave"].get(name, 0) + 1
+        if swaps_hand(card):
+            piles["swap"] = True  # 下一次记账：原手牌整手进捨札，新手牌全部算新抽的（track_piles）
+        from hiro.brain import piles as PB
 
-            PB.expect(piles, PB.moves_of_card(card))  # 这一手应该抽几张：回合结束都没出现的记成暗抽（VEIL_PILE_ENGINE）
-        if norm(card.name) in SLEEP_GENERATORS:
-            deck["眠気"] = deck.get("眠気", 0) + 1
-            if piles is not None:
-                piles.setdefault("born", {})
-                piles["born"]["眠気"] = piles["born"].get("眠気", 0) + 1  # 抽完这一手的牌再并进山札（track_piles）
-        elif card.tags.makes_sleep or "生成" in card.text or "変換" in card.text:
-            mark_uncertain(data, memory, f"打出会生成 / 变换牌的牌，牌组账本跟不上：{name}")
-        # 回忆能力在牌的效果之后结算（「〜使用後」）：再动 / 抽牌 / 删眠気，每项按次数触发后取否
-        apply_ability(data, memory, norm(card.name))
+        PB.expect(piles, PB.moves_of_card(card))  # 这一手应该抽几张：回合结束都没出现的记成暗抽（VEIL_PILE_ENGINE）
+    if norm(card.name) in SLEEP_GENERATORS:
+        deck["眠気"] = deck.get("眠気", 0) + 1
+        if piles is not None:
+            piles.setdefault("born", {})
+            piles["born"]["眠気"] = piles["born"].get("眠気", 0) + 1  # 抽完这一手的牌再并进山札（track_piles）
+    elif card.tags.makes_sleep or "生成" in card.text or "変換" in card.text:
+        mark_uncertain(data, memory, f"打出会生成 / 变换牌的牌，牌组账本跟不上：{name}")
+    # 回忆能力在牌的效果之后结算（「〜使用後」）：再动 / 抽牌 / 删眠気，每项按次数触发后取否
+    apply_ability(data, memory, norm(card.name))
 
 
 OPEN_WAIT_S = 30.0  # 开场演出（回忆能力发动、ターン開始）期间不是出牌页，等它播完再接管
@@ -2188,6 +2210,14 @@ def handoff_due(last: dict, on_exam: bool, remaining, now: float, off_s: float =
     return now - last["off_since"] >= off_s
 
 
+def veil_plugins():
+    """VEIL 路线的考试插件：没另外指定（register / 环境变量 / 入口点）时用 VeilScreen + VeilAdvisor。
+    指定了别的实现也行，但决策要的账（requires）局面来源必须都提供，run_exam 开考前核对。"""
+    from hiro import plugins
+
+    return plugins.route_default("exam_state_source", VeilScreen), plugins.route_default("exam_advisor", VeilAdvisor)
+
+
 def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retry_drinks=None):
     from kaa.config.const import HifScenario
     from kotonebot import device
@@ -2279,7 +2309,11 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
             session.record(session.observe(scene="HIF_FINALS_RANKING", img=frame, fields=fields, save_frame=True))
             return True
 
-        trace = TraceWriter(root=directory.parent, name=directory.name, meta={"mode": "main", "idol": IDOL, "advisor": "veil", "round": round_no})
+        from hiro import plugins
+
+        trace = TraceWriter(root=directory.parent, name=directory.name,
+                            meta={"mode": "main", "idol": IDOL, "advisor": "veil", "round": round_no,
+                                  "plugins": {k: plugins.source(k) for k in ("exam_state_source", "exam_advisor")}})
         session = Session(trace)
         watch = pause_flag.Watcher(kvars.flow, session=session).start()
         guard = watchdog(session)
@@ -2295,10 +2329,12 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
         rec = Recorder(trace.dir / "battle")
         if retry and retry_drinks is not None:
             drinks = retry_drinks  # 再挑戦：游戏把饮料栏恢复到这一轮开考前，账本也用开考前的快照
-        source = VeilScreen(deck, once, drinks, abilities, customs=customs, variants=variants, fill=fill_count(round_no, deck))
+        setup = {"deck": deck, "once": once, "ledger_drinks": drinks, "abilities": abilities, "customs": customs,
+                 "variants": variants, "fill": fill_count(round_no, deck)}
+        source, advisor = veil_plugins()
         try:
-            run_exam(VeilBrain(None, None), exam, rec, ended, session=session, source=source,
-                     advisor=VeilAdvisor(), round_no=round_no, strict=True)
+            run_exam(BattleBrain(None, None), exam, rec, ended, session=session, source=source,
+                     advisor=advisor, setup=setup, round_no=round_no, strict=True)
         except ResumeBlocked as e:
             save_failure(trace.dir, device.screenshot, str(e))
             raise

@@ -1295,17 +1295,23 @@ def run_exam(
     advisor=None,
     strict: bool = False,
     round_no: int | None = None,
+    setup: dict | None = None,
 ) -> ExamMemory:
     """一场考试的主循环。brain：记忆管理（new_memory / commit）与偶像档案；source / advisor：局面来源与出招（不给时取
     hiro.plugins 注册 / 默认的实现）。session 给出时每个决策点写一条 trace Step（观测 → 状态 → 决策 → 执行结果，带分阶段耗时）。
     strict：不在过时帧上点（连续 STRICT_STALE_MAX 次过时就停）、动作连续无效时停下而不是跳过回合（都抛 ResumeBlocked）、
-    没确认到结算结果时考试记忆不标完成（便于续跑）。默认关，行为与之前相同。"""
+    没确认到结算结果时考试记忆不标完成（便于续跑）。默认关，行为与之前相同。
+    setup：本轮交给局面来源的账本输入（begin 的 context["setup"]），插件是单例，靠它每轮重新初始化。
+    记账走 source 的 commit 钩子（没有就是 brain.commit），见 hiro.plugins.ExamStateSource。"""
     from hiro.loop.errors import ResumeBlocked
 
     source = source or _plugin("exam_state_source")
     advisor = advisor or _plugin("exam_advisor")
     if source is None or advisor is None:
         raise RuntimeError("考试需要 ExamStateSource 与 ExamAdvisor 插件（hiro.plugins），一个都没拿到")
+    from hiro import plugins
+
+    plugins.check_exam_pair(source, advisor)
     memory = brain.new_memory(exam)
     restored = None
     if session is not None:
@@ -1314,7 +1320,8 @@ def run_exam(
             memory, restored = got
             rec.log("exam_memory_restored", exam=exam, source=str(restored), turn=memory.turn, last_remaining=memory.last_remaining)
             session.note(f"读回本场考试记忆（{restored.name}）：T{memory.turn}")
-    source.begin({"exam": exam, "profile": brain.profile, "target_score": target_score, "session": session, "brain": brain, "rec": rec})
+    source.begin({"exam": exam, "profile": brain.profile, "target_score": target_score, "session": session, "brain": brain, "rec": rec,
+                  "setup": setup})
     advisor.on_round_start(round_no if round_no is not None else (2 if exam == "r2" else 1),
                            {"exam": exam, "idol": brain.profile.idol_id if brain.profile else None, "brain": brain})  # fmt: skip
     rec.log("exam_brain_start", exam=exam, profile=brain.profile.idol_id if brain.profile else None, source=source.confidence())
@@ -1410,7 +1417,7 @@ def run_exam(
             contract = advisor.decide(state, memory, previews, legal)
             d = contract.to_battle()
             # 局面来源可给出决策时的内部局面（如 VEIL 的姿态 / 夜空计数 / 全力値账本），观测里没有这些字段
-            context = source.trace_context(state, memory) if hasattr(source, "trace_context") else None
+            context = plugins.exam_trace_context(source, state, memory)
             last_context = context or last_context
             rec.log("battle_decision", image=frame.img, exam=exam, source=source.confidence(), contract=contract.to_dict(),
                     **({"context": context} if context else {}))
@@ -1495,7 +1502,7 @@ def run_exam(
                     session.recover("tap_no_effect", f"{d.action} {missed}")
                     session.note(f"blunder:play_missed_turn_end D34 {d.action}")
             elif changed:
-                brain.commit(state, memory, d)
+                plugins.exam_commit(source, brain.commit, state, memory, d)
                 if landing_blocks:
                     # 打出了别的牌：手牌槽位会移动、使用条件也可能变了，放开之前没落地的禁用
                     memory.blocked = [a for a in memory.blocked if a not in landing_blocks]
@@ -1524,7 +1531,7 @@ def run_exam(
                                            "wait_change": (t_done - t_tap) * 1000, "cycle": (t_done - t_cycle) * 1000,
                                            "anim_taps": _anim["taps"], **_take_phases()})  # fmt: skip
                 _guard_repeated_decision(session, memory, d, exam)
-            if changed and missed is None and d.kind == "play" and hasattr(source, "burst_begin"):
+            if changed and missed is None and d.kind == "play" and getattr(source, "burst_begin", None) is not None:
                 # 循环回合连打（VEIL_CYCLE_TAP，默认关）：这张循环牌落地记完账后，剩下的按首读手牌 + n 张布局直接点，见 hiro.exec.cycle_tap
                 from hiro.exec.cycle_tap import run_burst
 

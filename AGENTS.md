@@ -57,6 +57,9 @@
 
   换实现：环境变量 `HIRO_ASSET_SOURCE` / `HIRO_EXAM_STATE_SOURCE` / `HIRO_EXAM_ADVISOR`（写成 `包.模块:类名`），
   或在 `pyproject.toml` 的入口点组 `hiro_gakumas.plugins` 里登记，或代码里 `hiro.plugins.register(...)`。
+  带账本的考试插件用可选钩子接进执行器：来源的 `commit`（动作落地后记账）/ `trace_context` / `burst_begin`·`burst_settle`（连打）/ `provides`，
+  决策器的 `requires` / `burst_ok`；`run_exam(setup=…)` 把本轮账本输入交给来源的 `begin`。VEIL 批量路线就是这样接的
+  （`produce/veil_exam.py` 的 `VeilScreen` + `brain/veil.py` 的 `VeilAdvisor`），见 `hiro/plugins.py`。
 
 - **不在这个仓库里的东西**：考试存档读取、模拟器、预演搜索（带模拟器的出牌专家）、价值表。作者用私有插件接回去；
   你用默认实现就能玩，只是考试决策没有模拟器那么强。
