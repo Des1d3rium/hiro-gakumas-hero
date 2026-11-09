@@ -9,6 +9,17 @@ from hiro.contracts import Action
 from hiro.loop.errors import ResumeBlocked
 
 
+
+@pytest.fixture(autouse=True)
+def _old_defaults_for_2026_11_08(monkeypatch):
+    """FP_RESERVE / CLEAR_FIRST / MINOR_HP 2026-11-08 起默认开（验证局 1-c R1 剩 3）。这里的老用例按当时的默认（关）写的：
+    没显式设开关时固定成关；要测新默认的用例自己 setenv / delenv。"""
+    import os
+
+    for name in ("FP_RESERVE", "CLEAR_FIRST", "MINOR_HP"):
+        if f"VEIL_{name}" not in os.environ and f"HIRO_VEIL_{name}" not in os.environ:
+            monkeypatch.setenv(f"VEIL_{name}", "0")
+
 def card(slot, name, text="", *, once=False):
     return CardView(slot, name, name, 1, True, "mental", 0, 0, None, text, parse_tags(name, text, once=once))
 
@@ -541,7 +552,7 @@ def test_free_extra_in_transition_covered_by_clear_first(monkeypatch):
     cards = [card(i, n) for i, n in enumerate((DRIVE, REBOUND, TEACH, ENTERTAINER))] + [puddle]
     state, mem = case(*cards, deck=[], status="次のターン開始時、温存に変更", flower=2)
     state.piles["next_draw"] = 4
-    monkeypatch.delenv("VEIL_CLEAR_FIRST", raising=False)
+    monkeypatch.setenv("VEIL_CLEAR_FIRST", "0")
     monkeypatch.setenv("VEIL_FREE_EXTRA", "1")  # 旧开关不再起作用
     assert choose(state, mem) == "skip"
     monkeypatch.setenv("VEIL_CLEAR_FIRST", "1")
@@ -652,7 +663,7 @@ def test_clear_first_plays_once_card_before_reusable(monkeypatch):
     ent = card(1, ENTERTAINER, "強気に変更パラメータ+10")
     peak = card(2, "頂点へ+", "すべてのスキルカードのパラメータ値増加+6", once=True)
     state, mem = case(teach, ent, peak)
-    monkeypatch.delenv("VEIL_CLEAR_FIRST", raising=False)
+    monkeypatch.setenv("VEIL_CLEAR_FIRST", "0")
     assert choose(state, mem) in ("play:0", "play:1")
     monkeypatch.setenv("VEIL_CLEAR_FIRST", "1")
     assert choose(state, mem) == "play:2"
@@ -716,7 +727,7 @@ def test_clear_first_no_reusable_pad_without_overflow(monkeypatch):
             card(3, TEACH, "強気に変更パラメータ+6次のターン、スキルカードを2枚引く")]
     state, mem = case(*hand, actions_left=2)
     assert choose(state, mem) == "play:1"
-    monkeypatch.delenv("VEIL_CLEAR_FIRST")
+    monkeypatch.setenv("VEIL_CLEAR_FIRST", "0")
     assert choose(state, mem) == "play:3"
 
 
@@ -775,7 +786,7 @@ def test_transition_sheds_harmless_once_card(monkeypatch):
     cards = [card(i, n) for i, n in enumerate((DRIVE, REBOUND, TEACH, ENTERTAINER))] + [breath]
     state, mem = case(*cards, deck=[], status="次のターン開始時、温存に変更", flower=2)
     state.piles["next_draw"] = 4
-    monkeypatch.delenv("VEIL_CLEAR_FIRST", raising=False)
+    monkeypatch.setenv("VEIL_CLEAR_FIRST", "0")
     assert choose(state, mem) == "skip"
     monkeypatch.setenv("VEIL_CLEAR_FIRST", "1")
     assert choose(state, mem) == "play:4"
@@ -801,7 +812,7 @@ def test_transition_full_throttle_and_soda_before_teach(monkeypatch):
     state.hand.remove(full)
     state.hand.append(card(3, "眠気"))
     assert choose(state, mem) == "play:3"  # 不喝ソーダ、不打 教えて；眠気 清掉 → 牌组只剩 4 张核心
-    monkeypatch.delenv("VEIL_CLEAR_FIRST")
+    monkeypatch.setenv("VEIL_CLEAR_FIRST", "0")
     state.hand = [drive, full, teach]
     assert choose(state, mem) == "play:2"  # 关开关：原行为
 
@@ -852,7 +863,7 @@ def test_clear_skips_reusable_when_no_once_card_follows(monkeypatch):
     state.remaining_turns = 10
     state.hand.append(card(2, "頂点へ+", "パラメータ値増加+6", once=True))  # 后面有一次性牌可接：照常
     assert choose(state, mem) != "skip"
-    monkeypatch.delenv("VEIL_CLEAR_FIRST")
+    monkeypatch.setenv("VEIL_CLEAR_FIRST", "0")
     state.hand = state.hand[:2]
     assert choose(state, mem) == "play:0"
 
@@ -869,7 +880,7 @@ def test_cycle_keeps_warm_instead_of_last_reusable(monkeypatch):
     assert choose(state, mem) == "skip"
     state.remaining_turns = 1  # 最后一回合照打
     assert choose(state, mem) == "play:0"
-    monkeypatch.delenv("VEIL_CLEAR_FIRST")
+    monkeypatch.setenv("VEIL_CLEAR_FIRST", "0")
     state.remaining_turns = 7
     assert choose(state, mem) == "play:0"
 
@@ -945,7 +956,7 @@ def test_drinks_extra_turn_soup(monkeypatch):
     assert choose(state, mem) == "drink:0"  # 最后一回合
     state.remaining_turns = 5
     assert choose(state, mem) == "play:0"  # 清牌中不喝
-    monkeypatch.delenv("VEIL_CLEAR_FIRST")
+    monkeypatch.setenv("VEIL_CLEAR_FIRST", "0")
     state.remaining_turns = 1
     assert choose(state, mem) == "play:0"
 
@@ -1343,11 +1354,12 @@ def test_strategy_flag_defaults(monkeypatch):
         monkeypatch.delenv(f"VEIL_{name}", raising=False)
         monkeypatch.delenv(f"HIRO_VEIL_{name}", raising=False)
     on = {f.__name__ for f in (veil.hp_guard, veil.release_gain, veil.draw_last, veil.drive_fp, veil.fp_cap,
-                               veil.draw_all, veil.last_turn_play, veil.cycle_soda, veil.stuck_soda) if f()}
-    # 2026-11-08 复盘后 DRAW_ALL / LAST_TURN / CYCLE_SODA / STUCK_SODA 也默认开
+                               veil.draw_all, veil.last_turn_play, veil.cycle_soda, veil.stuck_soda,
+                               veil.fp_reserve, veil.clear_first, veil.minor_hp) if f()}
+    # 2026-11-08 复盘后 DRAW_ALL / LAST_TURN / CYCLE_SODA / STUCK_SODA 也默认开；验证局 1-c 后 FP_RESERVE / CLEAR_FIRST / MINOR_HP 也开
     assert on == {"hp_guard", "release_gain", "draw_last", "drive_fp", "fp_cap",
-                  "draw_all", "last_turn_play", "cycle_soda", "stuck_soda"}
-    assert not (veil.clear_first() or veil.fp_reserve() or veil.keep_warm() or veil.hp_net())
+                  "draw_all", "last_turn_play", "cycle_soda", "stuck_soda", "fp_reserve", "clear_first", "minor_hp"}
+    assert not (veil.keep_warm() or veil.hp_net())
     assert not hasattr(veil, "free_extra")
 
 
@@ -1540,3 +1552,36 @@ def test_plus_probe_only_when_ledger_cannot_decide():
     data = {"veil_piles": {**piles, "deck": {"トレーニングの成果+": 1}}}
     assert fix_plus_misread([card(1, "トレーニングの成果++")], data, 4, deck, probe=probe)[0].name == "トレーニングの成果+"
     assert calls == [1]
+
+
+def test_strong_minor_hp_once_card_before_rebound(monkeypatch):
+    """验证局 1-c R1 剩 3（使用者 2026-11-08）：強気、全力値 3、只剩 1 次出牌，已打 教えてあげる+，牌堆只剩 アイドルになります+。
+    原来体力闸把只掉 1 点的 ひと呼吸+ 留到温存，打了 巻き返し+（全力値 3→2，下回合 アイドルになります+ 打不出）。
+    新默认（MINOR_HP / FP_RESERVE / CLEAR_FIRST）：先清一次性牌 ひと呼吸+，全力値留着。"""
+    from hiro.brain.cards import CardView, parse_tags
+
+    for n in ("FP_RESERVE", "CLEAR_FIRST", "MINOR_HP"):
+        monkeypatch.delenv(f"VEIL_{n}", raising=False)
+    monkeypatch.delenv("VEIL_HP_GUARD", raising=False)
+
+    def real(slot, name, cid, cat, cost, hp_cost, extra, text, once):
+        return CardView(slot, name, cid, 1, True, cat, cost, hp_cost, extra, text, parse_tags(name, text, once=once))
+
+    hand = [
+        real(0, "ひと呼吸+", "p_card-01-men-1_034", "mental", 7, 0, None, "好調4ターン集中+5重複不可 レッスン中1回", True),
+        real(1, ENTERTAINER, "p_card-03-act-3_188", "active", 0, 5, None,
+             "体力消費5強気に変更パラメータ+10成長：直接効果で指針を3回変更するたび、自身のパラメータ上昇回数増加+1・体力消費コスト値減少-1（2回まで）重複不可", False),
+        real(2, REBOUND, "p_card-03-men-1_050", "mental", 0, 0, {"type": "ExamCostType_ExamFullPowerPoint", "value": 1},
+             "全力値消費1温存に変更熱意追加+6すべてのスキルカードのコスト値減少-1レッスン中1回", True),
+        real(3, DRIVE, "p_card-03-act-2_102", "active", 4, 0, None,
+             "強気に変更パラメータ+4（2回）全力値+2スキルカード使用数追加+1眠気を山札のランダムな位置に生成次のターン、温存に変更 重複不可", False),
+    ]
+    state, mem = case(*hand, status="強気", flower=1, deck=["アイドルになります+"], grave=[TEACH])
+    state.hp, state.genki, state.remaining_turns = 44, 49, 3
+    mem.this_turn = [f"打 {TEACH}"]
+    mem.strategy_data["veil_fp"] = 3
+    mem.strategy_data["veil_deck"] = {DRIVE: 1, ENTERTAINER: 1, TEACH: 1, REBOUND: 1, "ひと呼吸+": 1, "アイドルになります+": 1}
+    assert choose(state, mem) == "play:0"
+    for n in ("FP_RESERVE", "CLEAR_FIRST", "MINOR_HP"):
+        monkeypatch.setenv(f"VEIL_{n}", "0")
+    assert choose(state, mem) == "play:2"  # 旧默认：巻き返し+

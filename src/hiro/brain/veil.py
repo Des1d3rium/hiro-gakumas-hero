@@ -25,10 +25,12 @@ HAND_MAX = 5  # 手牌上限：抽牌超出的作废
 
 # 默认开的策略开关（使用者 2026-11-07，22 个 trace 回放后定）：设 VEIL_<name>=0 关掉。其余默认关，=1 打开
 # 2026-11-08 trusted trace 复盘后：DRAW_ALL / LAST_TURN / CYCLE_SODA / STUCK_SODA 也默认开（使用者确认）；HP_NET 默认关
+# 2026-11-08 验证局 1-c R1 倒数第三回合后：FP_RESERVE / CLEAR_FIRST / MINOR_HP 默认开（使用者：「按方案改」）
 DEFAULT_ON = frozenset({"HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP",
-                        "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA"})
+                        "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA",
+                        "FP_RESERVE", "CLEAR_FIRST", "MINOR_HP"})
 STRATEGY_FLAGS = ("KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP",
-                  "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET")
+                  "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET", "MINOR_HP")
 
 
 def _flag(name: str) -> bool:
@@ -53,6 +55,16 @@ def hp_guard():
     return _flag("HP_GUARD")
 
 
+MINOR_LOSS = 2  # 強気下掉血不超过这么多、打完仍在保底线上的牌不留到温存（ひと呼吸+ 強気 1 点）
+
+
+def minor_hp():
+    """VEIL_MINOR_HP=1（默认开）：体力闸「強気下不改姿态的掉血牌留到温存」只拦掉血超过 MINOR_LOSS 的牌。
+    验证局 1-c R1 剩 3：強気、体力 44，ひと呼吸+ 只掉 1 点也被拦，候选只剩 エンターテイナー+ / 巻き返し+，
+    打了 巻き返し+ 花掉全力値，下回合 アイドルになります+ 打不出（使用者 2026-11-08：应先清一次性牌）。"""
+    return _flag("MINOR_HP")
+
+
 def release_gain():
     """VEIL_RELEASE_GAIN=1：温存 / のんびり 下打「強気に変更」的牌，按「先结算牌、再结算夜空」算温存解除的 +1 出牌次数——
     夜空只剩 1 次、最终变成のんびり时也算（原来算 0，于是手里有 エンターテイナー+、巻き返し+ 也去喝ホエイ）。
@@ -64,7 +76,7 @@ def fp_reserve():
     """VEIL_FP_RESERVE=1：清牌阶段花全力値的牌（アンダンテ+、清牌用的 巻き返し+…）只在花完还剩 ≥ FP_RESERVE_AT 时打，
     给五卡循环留住 アイドルになります+（全力値消費3）先打的全力値。账本不知道（None）、アイドルになります+ 已不在牌组、
     最后一回合时不限制。实机 codex-20261107-1 第 1 局 R2：清牌把 成果+ 的 +4 花在 アンダンテ+ / 巻き返し+ ×2 上，
-    剩 5 回合进循环时全力値 0，アイドルになります+ 灰着打不出。默认关，回放验证后再开。"""
+    剩 5 回合进循环时全力値 0，アイドルになります+ 灰着打不出。默认开（=0 关；使用者 2026-11-08，验证局 1-c R1 剩 3 同样的错）。"""
     return _flag("FP_RESERVE")
 
 
@@ -78,7 +90,8 @@ def draw_last():
 def clear_first():
     """VEIL_CLEAR_FIRST=1：清牌阶段一次性牌（打出就离开牌库）排在复用牌前面，哪怕复用牌在温存下切強気能补一次出牌次数；
     ひと呼吸 只让给别的一次性牌，不再让给复用牌。使用者 2026-11-07（验证局 1-f R1 剩 5–2 回合）：温存下总是先打
-    教えてあげる+ / エンターテイナー+（切強気 +1 次），到強気又被体力闸压后，頂点へ+ 从剩 5 拖到剩 2 才打。默认关。"""
+    教えてあげる+ / エンターテイナー+（切強気 +1 次），到強気又被体力闸压后，頂点へ+ 从剩 5 拖到剩 2 才打。
+    默认开（=0 关；使用者 2026-11-08，验证局 1-c R1 剩 3：应先清一次性牌 ひと呼吸+）。"""
     return _flag("CLEAR_FIRST")
 
 
@@ -685,7 +698,11 @@ class VeilAdvisor:
                 # 強気 下体力消耗 ×2：不改姿态的掉血牌（ひと呼吸+、モチベ+…）留到温存（×0.5）再打，也不为它们喝ホエイ。
                 # 使用者 2026-11-07（1-e R2 T1）：打了 インフルエンサー+、第一印象+ 后又喝ホエイ 打 モチベ+ / ひと呼吸+，
                 # 体力 38→1 错过下回合出牌；理想是这两张后跳过回合，下回合进温存
-                keep = [c for c in eligible if hp_loss(state, c, current, mods) == 0 or destination(c) is not None
+                def minor(c):
+                    loss = hp_loss(state, c, current, mods)
+                    return minor_hp() and loss <= MINOR_LOSS and state.hp is not None and state.hp - loss >= hp_floor()
+
+                keep = [c for c in eligible if hp_loss(state, c, current, mods) == 0 or destination(c) is not None or minor(c)
                         or (hp_net() and (norm(c.name) in CORE or usable_net(state, c, current, mods) >= 0))]
                 if eligible and not keep:
                     return skip("清牌：強気下体力 ×2，不改姿态的掉血牌留到温存再打")

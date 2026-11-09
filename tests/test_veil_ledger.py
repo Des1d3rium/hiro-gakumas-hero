@@ -28,6 +28,17 @@ TEXT = {
 }
 
 
+
+@pytest.fixture(autouse=True)
+def _old_defaults_for_2026_11_08(monkeypatch):
+    """FP_RESERVE / CLEAR_FIRST / MINOR_HP 2026-11-08 起默认开（验证局 1-c R1 剩 3）。这里的老用例按当时的默认（关）写的：
+    没显式设开关时固定成关；要测新默认的用例自己 setenv / delenv。"""
+    import os
+
+    for name in ("FP_RESERVE", "CLEAR_FIRST", "MINOR_HP"):
+        if f"VEIL_{name}" not in os.environ and f"HIRO_VEIL_{name}" not in os.environ:
+            monkeypatch.setenv(f"VEIL_{name}", "0")
+
 def card(slot, name, *, available=True):
     text = TEXT.get(name, "")
     return CardView(slot, name, name, 1, available, "active", 0, 0, None, text, parse_tags(name, text, once="レッスン中1回" in text))
@@ -55,7 +66,7 @@ def reserve(monkeypatch):
 
 
 def test_reserve_off_keeps_old_choice(monkeypatch):
-    monkeypatch.delenv("VEIL_FP_RESERVE", raising=False)
+    monkeypatch.setenv("VEIL_FP_RESERVE", "0")
     state, mem = case(card(0, ANDANTE), fp=4)
     assert choose(state, mem).action.legal_key() == "play:0"
 
