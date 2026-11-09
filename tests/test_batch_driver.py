@@ -45,7 +45,8 @@ def test_defaults_keep_manual_workflow_and_veil_target():
     assert not R.DEFAULTS["driver"]["enabled"]
     assert R.DEFAULTS["interval"]["target_hp"] == 10  # 使用者 2026-11-08
     assert not R.DEFAULTS["prep"]["auto_drink_replace"]
-    assert R.DEFAULTS["retry"] == {"on_defeat": "hold", "tickets": False}
+    # 使用者 2026-11-08：敗退默认自动再挑戦（免费 / 券），变灰才「プロデュース終了」
+    assert R.DEFAULTS["retry"] == {"on_defeat": "auto", "tickets": True, "end_when_exhausted": True}
     assert D.next_step(state(), EXAM, R.DEFAULTS) is None  # 没开自动模式：照旧交给代理
 
 

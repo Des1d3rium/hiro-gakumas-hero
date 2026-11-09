@@ -312,7 +312,7 @@ def attempt_env(spec, rnd, active) -> dict:
 
 
 DEBUG_RETRY: dict = {"plan": None, "used": {}, "pending": None, "ending": None, "round": None,  # pending：{"round", "at", "confirmed"}；tick 每步从批次状态填 plan / used
-               "auto": False, "tickets": False, "auto_used": {}, "saved": None}  # auto：自动模式下普通敗退也点再挑戦（retry.on_defeat=auto）
+               "auto": False, "tickets": False, "end_when_exhausted": False, "auto_used": {}, "saved": None}  # auto：自动模式下普通敗退也点再挑戦（retry.on_defeat=auto）
 RETRY_FRAME_DIR = Path(__file__).resolve().parents[1] / "traces" / "retry-dialogs"  # 不带「無料」的敗退框存帧（校准用券那一行，不进仓库）
 DEBUG_RETRY_WAIT_S = 15.0  # 点了「再挑戦」后这么久内等确认框
 DEBUG_RETRY_RETAP_S = 2.0  # 点了确认框还在：隔这么久再点（不重复计数）
@@ -406,16 +406,28 @@ def debug_retry_step(boxes, dialog: bool, img=None):
         if not free:
             save_retry_frame(img)
         if not plan:
-            # 自动模式的普通敗退（没有 debug 计划）：免费次数直接用；要用券看 retry.tickets；用完 / 变灰停下，不点「プロデュース終了」
+            # 自动模式的普通敗退（没有 debug 计划）：免费次数 / 再挑戦チケット（retry.tickets）直接用；
+            # 变灰（「あと0回」）或本轮已用满 3 次：retry.end_when_exhausted（默认开）时点「プロデュース終了」接着结算，否则停下。
+            # 使用者 2026-11-08：「把再挑战选择做成默认选项，不再返回到agent。只有再挑战变灰：不可选的时候再选择终了。」
             rnd = DEBUG_RETRY.get("round")
             used = DEBUG_RETRY["auto_used"].get(rnd, 0) if rnd else DEBUG_RETRY_MAX
-            if not free and not DEBUG_RETRY.get("tickets"):
-                raise HoldPage("敗退再挑戦：没有免费次数，要用再挑戦チケット（retry.tickets 关），交给代理")
-            retry_at = _learned_xy("defeat_retry", _button(labels, boxes, ("再挑戦",)))
-            if used >= DEBUG_RETRY_MAX or retry_at is None or retry_exhausted(flat):
-                raise HoldPage(f"敗退再挑戦：本轮已用 {used} 次或按钮不可用，不点「プロデュース終了」，交给代理")
-            DEBUG_RETRY["pending"] = {"round": rnd, "at": now, "confirmed": now}
-            return "auto_defeat_retry", retry_at
+            exhausted = retry_exhausted(flat) or used >= DEBUG_RETRY_MAX
+            if not exhausted:
+                if not free and not DEBUG_RETRY.get("tickets"):
+                    raise HoldPage("敗退再挑戦：没有免费次数，要用再挑戦チケット（retry.tickets 关），交给代理")
+                retry_at = _learned_xy("defeat_retry", _button(labels, boxes, ("再挑戦",)))
+                if retry_at is None:
+                    return "wait"  # 按钮没读到不等于变灰：等下一帧
+                DEBUG_RETRY["pending"] = {"round": rnd, "at": now, "confirmed": now}
+                return "auto_defeat_retry", retry_at
+            if not DEBUG_RETRY.get("end_when_exhausted"):
+                raise HoldPage(f"敗退再挑戦：本轮已用 {used} 次或按钮已变灰，不点「プロデュース終了」，交给代理")
+            tap = _learned_xy("defeat_end", _button(labels, boxes, ("プロデュース終了",), right=False))
+            if tap is None:
+                return "wait"
+            DEBUG_RETRY["ending"] = now
+            DEBUG_RETRY["pending"] = None
+            return "auto_defeat_end", tap
         rnd = DEBUG_RETRY.get("round")
         used = DEBUG_RETRY["used"].get(rnd, 0) if rnd else DEBUG_RETRY_MAX
         retry_at = _learned_xy("defeat_retry", _button(labels, boxes, ("再挑戦",)))
@@ -1895,6 +1907,7 @@ def watch(path, run, *, auto=False):
             auto_on = bool(rules["driver"].get("enabled"))
             DEBUG_RETRY["auto"] = auto_on and rules.get("retry", {}).get("on_defeat") == "auto"
             DEBUG_RETRY["tickets"] = bool(rules.get("retry", {}).get("tickets"))
+            DEBUG_RETRY["end_when_exhausted"] = bool(rules.get("retry", {}).get("end_when_exhausted"))
             DEBUG_RETRY["auto_used"] = dict(active.get("retries_used") or {})
             try:
                 result = advance() if active.get("phase") == "playing" else None

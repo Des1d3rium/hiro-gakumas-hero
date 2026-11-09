@@ -783,3 +783,54 @@ def test_auto_resolve_command_writes_state_file(tmp_path, monkeypatch):
     assert B.main() == 0
     driver = json.loads(path.read_text(encoding="utf-8"))["active"]["driver"]
     assert driver["stage"] == "r2" and "pending" not in driver and driver["resolved"][0]["applied"]
+
+
+def test_auto_defeat_retries_by_default_then_ends_when_grey(debug_retry, monkeypatch):
+    """使用者 2026-11-08：「把再挑战选择做成默认选项，不再返回到agent。只有再挑战变灰：不可选的时候再选择终了。」
+    自动模式普通敗退（没有 debug 计划）：免费 / 券都直接再挑戦；「あと0回」或本轮满 3 次才点「プロデュース終了」。"""
+    from batch_rules import DEFAULTS
+
+    assert DEFAULTS["retry"]["on_defeat"] == "auto" and DEFAULTS["retry"]["tickets"] and DEFAULTS["retry"]["end_when_exhausted"]
+    monkeypatch.setitem(B.DEBUG_RETRY, "plan", None)
+    monkeypatch.setitem(B.DEBUG_RETRY, "auto", True)
+    monkeypatch.setitem(B.DEBUG_RETRY, "tickets", True)
+    monkeypatch.setitem(B.DEBUG_RETRY, "end_when_exhausted", True)
+    monkeypatch.setitem(B.DEBUG_RETRY, "auto_used", {})
+    B.debug_retry_step(RESULT_R1, dialog=False)  # 记下轮次
+    B.DEBUG_RETRY["pending"] = None
+    assert B.debug_retry_step(DEFEAT + [_b("本日あと1回無料", 520, 1240)], dialog=True) == ("auto_defeat_retry", (533, 1210))
+    B.DEBUG_RETRY["pending"] = None
+    debug_retry["t"] += 20
+    assert B.debug_retry_step(DEFEAT + [_b("あと2回", 520, 1240)], dialog=True)[0] == "auto_defeat_retry"  # 券
+    B.DEBUG_RETRY["pending"] = None
+    debug_retry["t"] += 20
+    assert B.debug_retry_step(DEFEAT + [_b("あと0回", 520, 1240)], dialog=True) == ("auto_defeat_end", (233, 1210))
+    debug_retry["t"] += 3
+    confirm = [_b("プロデュース終了確認", 200, 420), _b("キャンセル", 200, 860), _b("終了する", 520, 860)]
+    assert B.debug_retry_step(confirm, dialog=True) == ("debug_defeat_end_confirm", (520, 860))
+    # 本轮已用满 3 次（按钮还没读成灰）也结束
+    B.DEBUG_RETRY.update(ending=None, pending=None, auto_used={"1": 3})
+    debug_retry["t"] += 20
+    assert B.debug_retry_step(DEFEAT, dialog=True)[0] == "auto_defeat_end"
+    # 关掉 end_when_exhausted：照旧停下交给代理
+    B.DEBUG_RETRY.update(ending=None, pending=None, end_when_exhausted=False)
+    debug_retry["t"] += 20
+    with pytest.raises(B.HoldPage):
+        B.debug_retry_step(DEFEAT + [_b("あと0回", 520, 1240)], dialog=True)
+
+
+def test_auto_defeat_never_spends_jewel(debug_retry, monkeypatch):
+    monkeypatch.setitem(B.DEBUG_RETRY, "plan", None)
+    monkeypatch.setitem(B.DEBUG_RETRY, "auto", True)
+    monkeypatch.setitem(B.DEBUG_RETRY, "tickets", True)
+    monkeypatch.setitem(B.DEBUG_RETRY, "end_when_exhausted", True)
+    monkeypatch.setitem(B.DEBUG_RETRY, "auto_used", {})
+    B.debug_retry_step(RESULT_R1, dialog=False)
+    B.DEBUG_RETRY["pending"] = None
+    with pytest.raises(B.HoldPage):
+        B.debug_retry_step(DEFEAT + [_b("ジュエル", 520, 1240)], dialog=True)
+    B.DEBUG_RETRY["pending"] = None
+    assert B.debug_retry_step(DEFEAT, dialog=True)[0] == "auto_defeat_retry"
+    debug_retry["t"] += 3
+    with pytest.raises(B.HoldPage):  # 点了再挑戦后弹出的确认框要花ジュエル：不点
+        B.debug_retry_step([_b("再挑戦", 200, 420), _b("ジュエルを消費", 360, 600), _b("キャンセル", 200, 860), _b("決定", 520, 860)], dialog=True)
