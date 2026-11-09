@@ -128,13 +128,27 @@ def scan(device, batch: str, run: int) -> dict:
     #（2026-11-07 验证局 1-i：第一次扫描从第 2 行开始，r1c0 实际是第 3 行的卡，按它点会点到别的卡）
     if not to_top(device, t, swipe):
         return {"stage": 2, "ok": False, "why": "换卡阶段 2 列表滑不回顶部，没扫描"}
-    res = t["scan_dialog_deck"](t["CHANGE2_CARD_AREA"], shoot=device.screenshot, swipe=swipe)
+    frames: list = []
+
+    def shoot():
+        img = device.screenshot()
+        frames.append(img)
+        return img
+
+    res = t["scan_dialog_deck"](t["CHANGE2_CARD_AREA"], shoot=shoot, swipe=swipe)
     cards = [{k: c.get(k) for k in ("deck_index", "row", "col", "card_id", "name", "upgrade", "customized", "screen")}
              | {"once": t["is_once"](c.get("card_id"))} for c in res["cards"]]  # fmt: skip
     out = {"stage": 2, "complete": res["complete"], "screens": res["screens"], "problems": res["problems"], "cards": cards,
            "unknown": [[c["row"], c["col"]] for c in cards if not c["card_id"]]}  # fmt: skip
     SCAN_DIR.mkdir(parents=True, exist_ok=True)
     path = SCAN_DIR / f"change-{batch}-{run}-{time.strftime('%Y%m%d-%H%M%S')}.json"
+    if out["unknown"]:
+        # 认不出的格留证据（2026-11-08 批次 1-e：客制化过的巻き返し+ 在换卡框里两次都认不出，当时没存帧、查不了）
+        import cv2
+
+        for i, img in enumerate(frames):
+            cv2.imwrite(str(path.with_suffix(f".{i:02d}.jpg")), img)
+        out["frames"] = len(frames)
     path.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     return {**out, "file": str(path), "table": summary(out)}
 

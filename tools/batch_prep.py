@@ -253,6 +253,18 @@ def _center(b):
     return (b[0] + b[2]) // 2, (b[1] + b[3]) // 2
 
 
+def acquire_overlay(img) -> bool:
+    """获得演出盖在页面上（快识别 ACQUIRE + 名称栏像素）。"""
+    from batch_hif import acquire_bar
+    from hiro.vision.quick import quick_page
+
+    try:
+        page = quick_page(img)
+    except Exception:  # noqa: BLE001
+        return False
+    return page is not None and page["page"] == "ACQUIRE" and acquire_bar(img)
+
+
 def handle(device, ocr, change, state, batch: str, run: int, persist, log=print) -> str | None:
     """当前画面属于前六周固定流程就做完并返回说明；否则返回 None。change = batch_hif.change（复用记账）。"""
     import batch_change
@@ -449,9 +461,16 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
 
     consult_page = any(t == "相談" for t, _, b in boxes if b[1] < 80) and has("Pポイントと交換するもの") and has("終了")
     if consult_page:
+        if acquire_overlay(img):
+            # 使用者 2026-11-08：P 道具「相談選択時、ランダムな特定のPドリンクを2つ獲得」的获得演出盖在相談页上，
+            # 原来在这帧跑 shop-auto（失败「不在相談主画面」）、点「終了」没生效还报 done。交回 watch 连点过去并记账
+            return None
+        out = None
         if batch_rules.get("prep.consult_shop", True):
-            out = run_cmd("shop-auto", max_refresh=10)
+            out = run_cmd("shop-auto", max_refresh=batch_rules.get("driver.max_refresh", 10))  # 使用者 2026-11-08：取消刷新上限（conf 设 9999），刷到栏满或 P 不够
             log(f"shop-auto: {out.get('why') or out.get('stop')}")
+            if not out.get("ok"):
+                return None  # shop-auto 没跑成：不点「終了」、不报 done，留在停点
         # 牌组对账在 shop-auto 里做（退出商店前记账，见 batch_hif shop-auto / shop.deck_sync）
         sync = (out or {}).get("deck_sync") if batch_rules.get("prep.consult_shop", True) else None
         sync_note = f"；牌组对账 {sync.get('diff') if sync.get('diff') is not None else sync.get('why') or sync.get('problems')}" if sync else ""

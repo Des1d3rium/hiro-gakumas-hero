@@ -274,6 +274,23 @@ class HoldPage(Exception):
 BANNER_PASS = ("领取选择", "考试中")
 
 
+SHOP_PASS = ("选择页", "相談 / 商店")
+
+
+def shop_overlay(kind, page, boxes, img) -> bool:
+    """相談 / 商店页上盖着获得演出（使用者 2026-11-08：P 道具「相談選択時、ランダムな特定のPドリンクを2つ獲得」，
+    watch 当成「选择页」停下，prep 又在这帧跑 shop-auto 失败）。要快识别 ACQUIRE + 名称栏像素，且商店按钮被盖住
+    （看不到「交換する」「強化や削除」：商店里选中饮料时这两个还在，不放行）。"""
+    if kind not in SHOP_PASS or page is None or page["page"] != "ACQUIRE" or not acquire_bar(img):
+        return False
+    labels = ["".join(unicodedata.normalize("NFKC", t).split()) for t, _, _ in boxes]
+    if any(t == "交換する" for t in labels):  # 按钮整词；标题「Pポイントと交換するものを…」也含这几个字
+        return False
+    if any(w in t for t in labels for w in ("強化や削除", "交換確認", "インターバル", "ジュエル")):
+        return False
+    return True
+
+
 def acquire_banner(boxes) -> bool:
     """物品条下的效果说明行：中心 y 在 905–1070、左缘 x < 170、宽 > 150。选择页这一带只有图标，没有这种长文字行。"""
     return any(905 <= (b[1] + b[3]) / 2 <= 1070 and b[0] < 170 and b[2] - b[0] > 150 for _, _, b in boxes)
@@ -814,7 +831,8 @@ def auto_decide(img, *, ocr, quick, fallback, header):
         kind = reason.split("：")[0]
         # 考试出牌页选中一张牌时，牌的说明行也落在 acquire_banner 那一带（验证局 1-c：exam 退出后代理手选牌，watch 2 分钟点了
         # 126 下角落、手点的牌没生效）→ 「考试中」还要看到获得演出的名称栏（像素）才放行
-        if not (acquire_banner(boxes) and kind in BANNER_PASS and (kind != "考试中" or acquire_bar(img))):
+        if not (acquire_banner(boxes) and (kind in BANNER_PASS and (kind != "考试中" or acquire_bar(img))
+                                           or shop_overlay(kind, page, boxes, img))):
             raise HoldPage(reason)
         note_drink(page, dialog)
         return "corner", ADVANCE_TAP

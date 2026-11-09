@@ -16,7 +16,7 @@ DEFAULT_PATH = ROOT / "conf" / "batch-rules.json"
 DEFAULTS: dict = {
     "driver": {  # watch 自动模式（watch --auto 也能临时打开）：常规停点（考试 / 轮间 / 结算回忆）自己下命令，不叫代理
         "enabled": False,
-        "max_refresh": 3,  # 轮间 shop-auto 最多刷新几次
+        "max_refresh": 3,  # 相談 / 轮间 shop-auto 最多刷新几次（本机 conf 设 9999 = 不限，刷到饮料栏满或 P 不够）
     },
     "watch": {
         "tap_gap": 0.2,  # 连点间隔（秒）；实测 0.2 → 实际约 0.39s/下，0.4 → 约 0.59s/下

@@ -189,6 +189,20 @@ def resolve(kaa_id: str | None, img: MatLike, rect: tuple[int, int, int, int], l
     m = match(img, rect, lib)
     if kaa_id is not None:
         if m["known"] and kaa_id not in m["ids"]:
+            # KAA 那张卡的模板分和图片认出的那张差不到 MIN_MARGIN 时不算冲突，照用 KAA（2026-11-08 批次 1-e：一览里的眠気，
+            # 原位置图片认卡第一就是眠気 0.84、只是领先不够；±2 像素重搜后另一张 0.88 领先够了，反过来否决了 KAA，对账作废）
+            kaa = kaa_score(kaa_id, img, rect, lib)
+            if kaa is not None and m["score"] is not None and kaa <= m["score"] + MIN_MARGIN:
+                return kaa_id, {**m, "kaa_score": round(kaa, 3)}
             return None, {**m, "conflict": kaa_id}
         return kaa_id, m
     return m["card_id"], m
+
+
+def kaa_score(kaa_id: str, img: MatLike, rect: tuple[int, int, int, int] | None, lib: Library | None = None) -> float | None:
+    """KAA 认出的那张卡在图片认卡里的最好分（原位置和 ±2 像素都算）；模板库里没有这张卡时 None。"""
+    lib = lib if lib is not None else library()
+    if lib is None:
+        return None
+    scores = [s for shifts in ((0,), SHIFT_RETRY) for ids, s, _ in lib.rank(img, rect, shifts) if kaa_id in ids]
+    return min(scores) if scores else None
