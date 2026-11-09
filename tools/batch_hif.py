@@ -410,7 +410,8 @@ def debug_retry_step(boxes, dialog: bool, img=None):
             # 变灰（「あと0回」）或本轮已用满 3 次：retry.end_when_exhausted（默认开）时点「プロデュース終了」接着结算，否则停下。
             # 使用者 2026-11-08：「把再挑战选择做成默认选项，不再返回到agent。只有再挑战变灰：不可选的时候再选择终了。」
             rnd = DEBUG_RETRY.get("round")
-            used = DEBUG_RETRY["auto_used"].get(rnd, 0) if rnd else DEBUG_RETRY_MAX
+            # 轮次不知道（watch 停在敗退框时重启，没经过结果页）：不能当成用满，只看游戏自己的角标「あと0回」
+            used = DEBUG_RETRY["auto_used"].get(rnd, 0) if rnd else 0
             exhausted = retry_exhausted(flat) or used >= DEBUG_RETRY_MAX
             if not exhausted:
                 if not free and not DEBUG_RETRY.get("tickets"):
@@ -422,7 +423,9 @@ def debug_retry_step(boxes, dialog: bool, img=None):
                 return "auto_defeat_retry", retry_at
             if not DEBUG_RETRY.get("end_when_exhausted"):
                 raise HoldPage(f"敗退再挑戦：本轮已用 {used} 次或按钮已变灰，不点「プロデュース終了」，交给代理")
-            tap = _learned_xy("defeat_end", _button(labels, boxes, ("プロデュース終了",), right=False))
+            # 按钮两行字常被 OCR 拆成「xプロデョース」+「終了」：左半边单独的「終了」也认
+            tap = _learned_xy("defeat_end", _button(labels, boxes, ("プロデュース終了",), right=False)
+                              or _button(labels, boxes, ("終了",), right=False))
             if tap is None:
                 return "wait"
             DEBUG_RETRY["ending"] = now

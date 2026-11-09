@@ -834,3 +834,20 @@ def test_auto_defeat_never_spends_jewel(debug_retry, monkeypatch):
     debug_retry["t"] += 3
     with pytest.raises(B.HoldPage):  # 点了再挑戦后弹出的确认框要花ジュエル：不点
         B.debug_retry_step([_b("再挑戦", 200, 420), _b("ジュエルを消費", 360, 600), _b("キャンセル", 200, 860), _b("決定", 520, 860)], dialog=True)
+
+
+def test_auto_defeat_unknown_round_is_not_exhausted(debug_retry, monkeypatch):
+    """验证局 1-c：watch 停在敗退框时重启，没经过结果页、不知道轮次：原来按用满 3 次算，要点「プロデュース終了」
+    （按钮 OCR 拆成「xプロデョース」「終了」才没点下去）。轮次不知道时只看「あと0回」。"""
+    monkeypatch.setitem(B.DEBUG_RETRY, "plan", None)
+    monkeypatch.setitem(B.DEBUG_RETRY, "auto", True)
+    monkeypatch.setitem(B.DEBUG_RETRY, "tickets", True)
+    monkeypatch.setitem(B.DEBUG_RETRY, "end_when_exhausted", True)
+    monkeypatch.setitem(B.DEBUG_RETRY, "auto_used", {})
+    real = [_b("再挑戦確認", 140, 860), _b("プロデュース終了を選択した場合は失敗となります", 330, 1000), _b("xプロデョース", 233, 1195), _b("終了", 233, 1225), _b("再挑戦", 533, 1210),
+            _b("あと3回", 520, 1240)]
+    assert B.debug_retry_step(real, dialog=True) == ("auto_defeat_retry", (533, 1210))
+    B.DEBUG_RETRY.update(pending=None, ending=None)
+    debug_retry["t"] += 20
+    grey = real[:-1] + [_b("あと0回", 520, 1240)]
+    assert B.debug_retry_step(grey, dialog=True) == ("auto_defeat_end", (233, 1225))
