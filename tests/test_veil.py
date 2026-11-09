@@ -1486,3 +1486,26 @@ def test_play_condition_from_master_text():
     state.statuses = []  # 姿态不明：不按姿态拦
     gata_only = play_condition_blocked(state, mem, data)
     assert 1 not in gata_only
+
+
+def test_plus_misread_matched_to_sibling_version():
+    """codex-20261108-1-b：トレーニングの成果 / トレーニングの成果+ 同卡 ID，画面把「+」读错。
+    R1 T3：抽到的是 +（山札里那张），读成基础版（基础版上回合在手里、已进捨札）；R2 T7：读成 ++（账本里没有）。"""
+    from collections import Counter
+
+    from hiro.produce.veil_exam import fix_plus_misread
+
+    deck = Counter({"トレーニングの成果": 1, "トレーニングの成果+": 1, "達成感+": 1, "眠気": 1})
+    data = {"veil_piles": {"turn": 2, "hand": ["トレーニングの成果", None, None, None, None],
+                           "deck": {"トレーニングの成果+": 1, "達成感+": 1, "眠気": 1}, "grave": {}, "unlocated": {}}}
+    hand = [card(0, "達成感+"), card(1, "トレーニングの成果"), card(2, "眠気")]
+    fixed = fix_plus_misread(hand, data, 3, deck)
+    assert [c.name for c in fixed] == ["達成感+", "トレーニングの成果+", "眠気"]
+    assert data["veil_name_fix_log"][-1] == {"turn": 3, "slot": 1, "read": "トレーニングの成果", "as": "トレーニングの成果+"}
+    # 读成 ++（账本没有）：按「+」个数最接近、还有富余的版本
+    fixed = fix_plus_misread([card(0, "トレーニングの成果++")], data, 3, deck)
+    assert fixed[0].name == "トレーニングの成果+"
+    # 读对了不改；两个版本都没富余也不改
+    assert fix_plus_misread([card(0, "トレーニングの成果+")], data, 3, deck)[0].name == "トレーニングの成果+"
+    data["veil_piles"]["deck"] = {"達成感+": 1}
+    assert fix_plus_misread([card(0, "トレーニングの成果")], data, 3, deck)[0].name == "トレーニングの成果"

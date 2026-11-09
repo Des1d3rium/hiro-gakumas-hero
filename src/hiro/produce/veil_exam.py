@@ -375,6 +375,52 @@ def strict_shuffle():
     return os.environ.get("HIRO_VEIL_STRICT_SHUFFLE") == "1"
 
 
+def _base(name):
+    return norm(name).rstrip("+")
+
+
+def fix_plus_misread(hand, data, turn, deck):
+    """同名不同强化的牌（トレーニングの成果 / トレーニングの成果+）卡 ID 一样，只靠名字后面「+」的个数分，画面常读错个数
+    （codex-20261108-1-b：R1 T3 把 + 读成基础版、R2 T7 读成 ++，账本判「抽到牌堆里没有的牌」，整场位置不明、进不了循环）。
+    手里某个名字比它能来的地方多（或账本里根本没有这个名字），而同名的另一个版本那里还有富余，就按那个版本记。
+    能来的地方：同回合 = 上一帧手牌 + 山札；换回合 = 山札（不够抽才算上捨札和上回合手牌）；位置不明的都算。
+    候选不止一个时取「+」个数最接近的。只改记账用的名字，改了的记 veil_name_fix_log。"""
+    previous = data.get("veil_piles")
+    if previous is None:
+        return hand
+    siblings = {}
+    for name in deck:
+        siblings.setdefault(_base(name), []).append(name)
+    if not any(len(siblings.get(_base(c.name), [])) > 1 or norm(c.name) not in deck for c in hand if c.card_id):
+        return hand
+    old_hand = Counter(c for c in previous["hand"] if c)
+    piles = {k: Counter(previous.get(k) or {}) for k in ("deck", "grave", "unlocated")}
+    sources = piles["deck"] + piles["unlocated"] + Counter(previous.get("born") or {})
+    if turn == previous["turn"]:
+        sources += old_hand
+        if previous.get("swap"):
+            sources += piles["grave"]
+    elif piles["deck"].total() < len([c for c in hand if c.card_id]):
+        sources += piles["grave"] + old_hand
+    seen = Counter(norm(c.name) for c in hand if c.card_id)
+    spare = sources - seen
+    out = []
+    for card in hand:
+        name = norm(card.name) if card.card_id else None
+        family = siblings.get(_base(card.name), []) if name else []
+        if name and (seen[name] > sources[name] or name not in deck) and len(family) >= (1 if name not in deck else 2):
+            options = [n for n in family if n != name and spare[n] > 0]
+            if options:
+                pick = min(options, key=lambda n: abs(n.count("+") - name.count("+")))
+                seen[name] -= 1
+                seen[pick] += 1
+                spare[pick] -= 1
+                data.setdefault("veil_name_fix_log", []).append({"turn": turn, "slot": card.slot, "read": name, "as": pick})
+                card = replace(card, name=pick)
+        out.append(card)
+    return out
+
+
 def track_piles(data, turn, slots, outside):
     """Reconcile known piles against the observed hand without reading pile UI."""
     previous = data.get("veil_piles")
@@ -772,6 +818,7 @@ def note_commit(data, memory, state, decision) -> None:
 
 
 SWAP_WAIT = 12  # 换手牌（手札をすべて入れ替える）后最多等这么多帧手牌变化，等不到就记一笔照常走
+SWAP_FLOAT = 3  # 换手牌本身还在手里时只等这么多帧（多半没打出去）
 
 
 def swap_pending(data, memory, hand) -> bool:
@@ -786,8 +833,19 @@ def swap_pending(data, memory, hand) -> bool:
         return False
     base = lambda names: Counter(n.rstrip("+") for n in names)  # noqa: E731
     now = base(hand.elements())
-    now.pop((wait.get("card") or "").rstrip("+"), None)  # 打出去的那张还飘在手牌位置上时也算旧手牌
+    card = (wait.get("card") or "").rstrip("+")
+    still = now.pop(card, None)  # 打出去的那张还飘在手牌位置上时也算旧手牌
     if now == base(wait["before"]):
+        if still:
+            # 换手牌本身一直还在手里：多半是没打出去（点了没落地），不是动画没播完。只等 SWAP_FLOAT 帧，
+            # 之后交给「上一手没落地」的核对（read_position → 撤销重来）。codex-20261108-1-b R1 T9：仕切り直し+ 没落地，
+            # 按换手动画等满 SWAP_WAIT 帧，白等约 40 秒
+            wait["float"] = wait.get("float", 0) + 1
+            if wait["float"] > SWAP_FLOAT:
+                data.setdefault("veil_swap_log", []).append({"turn": memory.turn, "op": "换手牌还在手里，按没落地处理",
+                                                            "card": wait.get("card")})
+                data.pop("veil_swap_wait", None)
+                return False
         return True
     data.pop("veil_swap_wait", None)
     return False
@@ -1293,6 +1351,7 @@ class VeilScreen(ScreenExamStateSource):
         if uncertain and sorted(set(uncertain)) != self.custom_uncertain:
             self.custom_uncertain = sorted(set(uncertain))
             self._log("veil_custom_uncertain", items=self.custom_uncertain)  # 同名多张、只有部分做过这项：版本不确定，没补
+        state.hand = fix_plus_misread(state.hand, data, memory.turn, deck)
         names = Counter(norm(c.name) for c in state.hand if c.card_id)
         if len(state.hand) != names.total():
             raise ResumeBlocked("VEIL 手牌未读全，暂停以免错牌")

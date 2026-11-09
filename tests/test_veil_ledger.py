@@ -721,3 +721,24 @@ def test_undo_of_ledger_unlocked_card_drops_fp_ledger():
     assert data["veil_fp"] is None and "アイドルになります+" in data["veil_fp_gap"]
     data2 = {"veil_fp": 6, "veil_fp_log": [{"turn": 7, "op": "按账本解灰", "cards": ["アイドルになります+"]}]}
     assert distrust_fp_after_undo(data2, mem, "アイドルになります+") is False
+
+
+def test_swap_card_still_in_hand_stops_waiting_early():
+    """codex-20261108-1-b R1 T9：仕切り直し+ 没落地，一直在手里，按换手动画等满 12 帧（约 40 秒）。
+    换手牌本身还在手里时只等 SWAP_FLOAT 帧，之后交给「上一手没落地」处理。"""
+    from collections import Counter
+    from types import SimpleNamespace
+
+    from hiro.produce.veil_exam import SWAP_FLOAT, swap_pending
+
+    data = {"veil_swap_wait": {"turn": 9, "card": "仕切り直し+", "before": ["アイドルになります+"]}}
+    mem = SimpleNamespace(turn=9, strategy_data=data)
+    hand = Counter(["仕切り直し+", "アイドルになります+"])
+    for _ in range(SWAP_FLOAT):
+        assert swap_pending(data, mem, hand)
+    assert swap_pending(data, mem, hand) is False and "veil_swap_wait" not in data
+    assert data["veil_swap_log"][-1]["op"].startswith("换手牌还在手里")
+    # 换手牌不在手里（真在播动画）：照旧等
+    data["veil_swap_wait"] = {"turn": 9, "card": "仕切り直し+", "before": ["アイドルになります+"]}
+    for _ in range(SWAP_FLOAT + 2):
+        assert swap_pending(data, mem, Counter(["アイドルになります+"]))
