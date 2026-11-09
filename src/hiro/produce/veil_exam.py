@@ -494,6 +494,13 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
         if new_turn:
             delayed = delayed_level = None
 
+    # 一番星剩余次数以状态栏为准（画面读到数字时）：一番星可能不是本场打出的（回忆 / 开场带入），账本没记过、按 0 算，
+    # 回合开头不切のんびり，姿态记错（codex-20261108-1 第 1 局 R1 attempt3 T6：画面のんびり、一番星 2→1，账本強気，进循环晚一回合）。
+    # 回合开头那帧状态栏往往读不出：先按账本推（start_turn），之后读到的数字已是触发后的，直接覆盖
+    seen_star = next((s.get("value") for s in state.statuses or [] if norm(s.get("name") or "").startswith(STAR)
+                      and isinstance(s.get("value"), int)), None)
+    if seen_star is not None and seen_star != data.get("veil_star"):
+        data["veil_star"] = seen_star
     data["veil_position"] = {"turn": memory.turn, "stance": current, "stance_level": level,
                              "flower": flower, "next_stance": delayed, "next_stance_level": delayed_level}
     data.pop("veil_pending_play", None)

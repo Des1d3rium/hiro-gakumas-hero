@@ -78,7 +78,7 @@ def test_hold_reason_on_choice_pages():
 @pytest.mark.parametrize("texts, reason", [
     (["残りターツ", "4", "Lst", "強気"], "考试中"),
     (["相談", "持っているスキルカードの強化や削除ができます。", "強化", "削除"], "相談 / 商店"),
-    (["インターバル", "Pポイントで利用するものを選んでください"], "选择页"),
+    (["インターバル", "Pポイントで利用するものを選んでください"], "轮间客制化"),
     (["交換確認", "Pポイントを使用して交換しますか？", "キャンセル", "交換"], "相談 / 商店"),
     (["Pドリンク詳細", "初星ホエイプロテイン", "キャンセル", "使う", "捨てる"], "饮料栏操作"),
     (["Vo.公開レッスン", "烏龍茶", "元気+7", "受け取る"], "领取选择"),
@@ -458,7 +458,7 @@ WALK = Path(__file__).with_name("fixtures") / "walkthrough"
     ("10-card-acquire", "hold", "差し入れ 选技能卡"),
     ("11-consult-action", "hold", "行动页需要代理选择"),
     ("12-consult-shop", "hold", "选择页"),
-    ("14-interval-shop", "hold", "选择页"),
+    ("14-interval-shop", "hold", "轮间客制化"),  # 左上「インターバル」优先（codex-20261108-1）
     ("15-r2-exam", "hold", "考试中"),
     ("13-r1-result", "result_next", (373, 1133)),
     ("16-r2-lost", "result_next", (373, 1133)),
@@ -760,3 +760,10 @@ def test_attempt_env_switches_flag_by_attempt():
     assert B.attempt_env(spec, 1, {"debug_retries_used": {"1": 3}, "retries_used": {"1": 2}}) == {"VEIL_HP_GUARD": "0"}
     assert B.attempt_env(spec, 2, {"debug_retries_used": {"1": 3}}) == {"VEIL_X": "7"}
     assert B.attempt_env(None, 1, {}) == {} and B.attempt_env("r2:VEIL_X=1", 1, {}) == {}
+
+
+def test_interval_header_beats_choice_prompt():
+    """codex-20261108-1 第 1 局：轮间主页面「Pポイントで利用するものを選んでください」先命中「选择页」，自动模式认不出轮间。"""
+    texts = ["インターバル", "審査基準", "Pポイントで利用するものを選んでください", "交換する"]
+    assert B.hold_reason(texts) == "轮间客制化：インターバル"
+    assert B.hold_reason(["Pポイントで利用するものを選んでください"]).startswith("选择页")

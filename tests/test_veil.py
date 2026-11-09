@@ -1440,3 +1440,25 @@ def test_hp_net_lets_genki_card_and_core_through(guard, monkeypatch):
     assert choose(state, mem) == "play:1"
     state.hp = 5  # 打完 0：仍拦
     assert choose(state, mem) == "skip"
+
+
+def test_star_count_synced_from_status_bar(monkeypatch):
+    """codex-20261108-1 第 1 局 R1 attempt3：一番星不是本场打出的，账本 veil_star 一直 0；T5 末強気、一番星 2，
+    T6 开头状态栏读不出，账本记強気（画面のんびり、一番星 2→1），进循环晚一回合。状态栏读到一番星数字时同步账本。"""
+    from collections import Counter
+
+    from hiro.brain.veil import stance
+    from hiro.produce.veil_exam import read_position
+
+    monkeypatch.setenv("HIRO_VEIL_FLOWER_SCREEN", "0")
+    state, mem = case(card(0, DRIVE), status="強気", flower=1)
+    state.statuses.append({"name": "星々を見下ろす一番星", "value": 2})
+    assert read_position(state, mem, Counter(), lambda: 1) is None
+    assert mem.strategy_data["veil_star"] == 2
+    mem.turn += 1
+    state.statuses = []  # 回合开头读不出姿态 / 状态栏
+    assert read_position(state, mem, Counter(), lambda: 1) is None
+    assert stance(state) == "のんびり" and mem.strategy_data["veil_star"] == 1
+    state.statuses = [{"name": "のんびり"}, {"name": "星々を見下ろす一番星", "value": 1}]  # 之后读到的已是触发后的数字
+    assert read_position(state, mem, Counter(), lambda: 1) is None
+    assert mem.strategy_data["veil_star"] == 1

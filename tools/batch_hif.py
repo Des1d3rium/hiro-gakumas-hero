@@ -524,6 +524,10 @@ def hold_reason(texts):
     labels = ["".join(unicodedata.normalize("NFKC", t).split()) for t in texts]
     labels.append("".join(labels))  # 标题被 OCR 拆成两段时也能命中
     memory_page = any("次へ" in t or t == "メモリー" for t in labels[:-1])  # 首页说明文字里也有「…メモリーが獲得できます」
+    if "インターバル" in labels[:-1]:
+        # 轮间主页面左上是「インターバル」，正文「Pポイントで利用するものを選んでください」先命中「选择页」，
+        # 自动模式认不出轮间、一直 hold（codex-20261108-1 第 1 局 R1 后）。左上标题优先
+        return "轮间客制化：インターバル"
     for pattern, reason in HOLD_PATTERNS:
         if pattern == r"再生成" and not memory_page:
             continue
