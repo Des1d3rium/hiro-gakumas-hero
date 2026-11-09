@@ -594,6 +594,10 @@ def _art_one_char_off(base: str, art_top: list[tuple[str, float]]) -> SkillCard 
         for text in (base, base[1:]):
             if len(name) == len(text) and sum(a != b for a, b in zip(name, text)) <= (1 if text is base else 0):
                 return card
+        # 卡名被下一张卡盖住只露出前几个字、其中又读错一个字（验证局 1-c R1：嬉しい誤算 卡面 0.485，批量读名读成「婦しい誤」）：
+        # 和卡名开头等长的部分只差一个字也算（仍要求这张卡在卡面前几名里）
+        if NAME_FUZZY_MIN <= len(base) < len(name) and sum(a != b for a, b in zip(name, base)) <= 1:
+            return card
     return None
 
 

@@ -27,13 +27,22 @@ def test_extra_leading_char_matches_art_candidate():
     assert _card_from_name("1薅しい誤算", [(ART, 0.496)])[0] is None  # 多一个字又错一个字：不认
 
 
+def test_covered_prefix_one_char_off_matches_art_candidate():
+    """验证局 1-c R1：嬉しい誤算 被下一张卡盖住，批量读名读成「婦しい誤」（错一个字、少一个字），卡面 0.485 不够格。"""
+    from hiro.vision.hif import _card_from_name
+
+    if _card_from_name("嬉しい誤算", [])[0] is None:
+        pytest.skip("没有主数据")
+    assert _card_from_name("婦しい誤", [(ART, 0.485)])[0].name == "嬉しい誤算"
+
+
 @pytest.mark.parametrize("text, top", [
     ("薅しい誤算", [("img_general_skillcard_men-3_062", 0.5)]),  # 卡面候选是别的卡：不认
-    ("薅しい誤", [(ART, 0.5)]),                                   # 长度不同：不认
+    ("薅しい誤", [("img_general_skillcard_men-3_062", 0.5)]),   # 被盖住的前缀：卡面候选是别的卡也不认
     ("薅い誤算", [(ART, 0.5)]),
     ("薅し誤", [(ART, 0.5)]),
 ])
-def test_one_char_off_needs_same_card_and_length(text, top):
+def test_one_char_off_needs_same_card_and_prefix(text, top):
     from hiro.vision.hif import _card_from_name
 
     if _card_from_name("嬉しい誤算", [])[0] is None:
@@ -68,3 +77,17 @@ def test_real_hand_with_leading_digit():
         pytest.skip("缺样例")
     hand, missing = read_hand(load(cv2.imread(str(path))), cache=None, batch_names=True)
     assert missing == 0 and hand[1]["name"].startswith("嬉しい誤算")
+
+
+@pytest.mark.fixtures
+def test_real_hand_covered_prefix_1c():
+    import cv2
+
+    from hiro.vision.hif import read_hand
+    from hiro.vision.offline import load
+
+    path = FRAME.with_name("hand-ureshii-covered-1c.png")
+    if not path.exists():
+        pytest.skip("缺样例")
+    hand, missing = read_hand(load(cv2.imread(str(path))), cache=None, batch_names=True)
+    assert missing == 0 and hand[0]["name"] == "嬉しい誤算"
