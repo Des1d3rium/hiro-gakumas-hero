@@ -127,8 +127,10 @@ def test_default_source_commit_is_plain_brain_commit():
 
 def test_burst_only_for_cycle_decisions():
     adv = VeilAdvisor()
-    assert adv.burst_ok(Decision("play:0", f"{CYCLE_MARK}：エンターテイナー+", "rule"))
-    assert not adv.burst_ok(Decision("play:0", "清牌：眠気", "rule"))
+    # 连打按决策器写的阶段（Decision.plan[0]["phase"]）判，不读理由文字（hiro.brain.play.cycle.PHASE）
+    assert adv.burst_ok(Decision("play:0", f"{CYCLE_MARK}：エンターテイナー+", "rule", plan=[{"phase": "cycle"}]))
+    assert not adv.burst_ok(Decision("play:0", f"{CYCLE_MARK}：エンターテイナー+", "rule"))
+    assert not adv.burst_ok(Decision("play:0", "清牌：眠気", "rule", plan=[{"phase": "clear"}]))
 
 
 def test_run_burst_needs_advisor_burst_hook(monkeypatch):

@@ -9,7 +9,7 @@ from hiro.brain.rules import Decision
 from hiro.brain.state import BattleState, ExamMemory
 from hiro.brain.veil import DRIVE, ENTERTAINER, REBOUND, TEACH, VeilAdvisor, norm, stance
 from hiro.contracts import Action
-from hiro.exec.cycle_tap import CARD_H, CARD_W, tap_point
+from hiro.exec.cycle_tap import CARD_H, CARD_W, is_cycle_play, tap_point
 from hiro.vision.hif import HAND_LAYOUT
 
 TEXT = {
@@ -106,7 +106,7 @@ def test_burst_ledger_matches_full_read_path(tap_on):
         contract, d = decide(st, memory)
         if d.kind != "play":
             break
-        assert "五卡循环" in contract.reason
+        assert "五卡循环" in contract.reason and is_cycle_play(contract)
         burst.append(norm(st.hand[d.slot].name))
         brain.commit(st, memory, d)
         if memory.actions_left <= 0:
@@ -132,7 +132,7 @@ def test_burst_settle_greys_and_stance(tap_on):
     assert stance(st) == "強気" and not st.hand[0].available
     # 下一张（巻き返し+）画面发灰：决策不再是循环出牌 → 执行器会退回整帧读取
     contract, nxt = decide(st, memory)
-    assert not (nxt.kind == "play" and "五卡循环" in contract.reason)
+    assert not (nxt.kind == "play" and is_cycle_play(contract))
 
 
 def test_burst_not_started_when_card_draws_or_turn_spent(tap_on):
@@ -195,3 +195,13 @@ def test_run_burst_stops_when_hand_count_differs(tap_on, monkeypatch):
     brain.commit(state, memory, d)
     assert cycle_tap.run_burst(state, memory, d, brain=brain, source=VeilScreen({}, set()), advisor=VeilAdvisor(), exam="r1") == 0
     assert memory.strategy_data["veil_pending_play"]["card"] == DRIVE
+
+
+def test_cycle_play_is_marked_by_phase_not_reason():
+    """连打只认决策器写的阶段（Decision.plan[0]["phase"] == "cycle"），理由文字里有「五卡循环」不算。"""
+    from hiro.contracts import Decision
+
+    act = Action.from_legal("play:0")
+    assert is_cycle_play(Decision(act, "随便写的理由", "rule", plan=[{"phase": "cycle"}]))
+    assert not is_cycle_play(Decision(act, "五卡循环：エンターテイナー+", "rule"))
+    assert not is_cycle_play(Decision(act, "清牌", "rule", plan=[{"phase": "clear"}]))

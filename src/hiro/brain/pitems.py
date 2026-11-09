@@ -33,6 +33,9 @@ UNKNOWN_SUFFIX = "_Unknown"
 # ProduceExamFieldStatusType → 只认这些；其余条件 holds() 返回 None
 NO_STANCE_NAMES = frozenset({None, "指針なし", "指針解除"})  # 没有指针不算指针（使用者 2026-11-09）
 
+LESSON_OF = {"ProduceStepLessonType_LessonVocal": "Vo", "ProduceStepLessonType_LessonDance": "Da",
+             "ProduceStepLessonType_LessonVisual": "Vi"}
+
 PLAY_COUNT_PHASES = frozenset({
     "ProduceExamPhaseType_ExamPlayCountInterval",
     "ProduceExamPhaseType_ExamPlayCountIntervalAfter",
@@ -215,6 +218,7 @@ class Trigger:
     search: CardSearch | None
     upper: int | None = None
     lower: int | None = None
+    lesson: str | None = None  # 只在这个属性的回合触发（支援卡道具【ダンスターンのみ】）：Vo / Da / Vi
 
     @property
     def play_interval(self) -> int | None:
@@ -265,6 +269,7 @@ def trigger(trigger_id: str) -> Trigger | None:
         search=card_search(r.get("produceCardSearchId")) if r.get("produceCardSearchId") else None,
         upper=r.get("upperSearchCount") or None,
         lower=r.get("lowerSearchCount") or None,
+        lesson=LESSON_OF.get(r.get("lessonType") or ""),
     )
 
 
@@ -304,6 +309,7 @@ class Enchant:
     trigger: Trigger | None
     effects: tuple[Effect, ...]
     turns: int = -1  # ProduceItemEffect.effectTurn：-1 = 整场
+    limit: int | None = None  # 次数上限（P 道具「レッスン内N回」= ProduceItemEffect.effectCount；牌「以降N回まで」）；None = 不限
     missing: tuple[str, ...] = ()  # 主数据里引用了、却查不到的 id
 
 
@@ -352,6 +358,7 @@ def load_pitem(item_id: str) -> PItem | None:
                 lost.append(tid)
             enchants.append(Enchant(en["id"], description_text(en.get("produceDescriptions")), tr, tuple(effects),
                                     turns=ie.get("effectTurn") if ie.get("effectTurn") is not None else -1,
+                                    limit=ie.get("effectCount") if (ie.get("effectCount") or 0) > 0 else None,
                                     missing=tuple(lost)))
         else:
             produce.append(ie.get("produceEffectId") or eid)

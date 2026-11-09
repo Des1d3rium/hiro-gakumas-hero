@@ -22,9 +22,12 @@ from hiro.brain.veil import (
     NEUTRAL, STAR, after_play, destination, flower_count, keeps_nonbiri, full_power_count, keep_warm, next_stance_change, norm,
     stance, stance_level, stance_change_level, start_turn, level_after, swaps_hand,
 )
+from hiro.brain.play.sim import release, resolve
 
 
-SLEEP_GENERATORS = {DRIVE, "フルスロットル", "フルスロットル+"}
+from hiro.brain.play.profile import VEIL as _PROFILE
+
+SLEEP_GENERATORS = set(_PROFILE.sleep_generators)
 
 
 def track_extra(data, memory, keep):
@@ -831,16 +834,16 @@ import re as _re
 
 from hiro.brain.veil import fp_delta, fp_effect  # noqa: F401  fp_delta 供测试 / 旧调用方从这里取
 
-FULL_POWER_AT = 10  # 主数据：ターン終了時に全力値が10以上なら、次のターン開始時に全力値を10消費して、指針を全力に変更
+from hiro.brain.play.profile import FULL_POWER_AT  # noqa: E402  主数据：ターン終了時に全力値が10以上なら、次のターン開始時に全力値を10消費して、指針を全力に変更
 FP_REREAD = 2  # 账本说付得起、画面还是灰：先换帧重读这么多次，再按账本当作可打
 HISTORY_CAP = 30  # ExamMemory.history 只留最近 30 条（hiro.brain.state.ExamMemory._log）
 _FP_PER_TURN = _re.compile(r"以降、ターン開始時、全力値\+(\d+)")
 _HISTORY = _re.compile(r"T(\d+) (打|喝) (.+)")
 
 
-def _fp_record(obj) -> dict:
-    """牌 / 饮料 → 记账用的全力値效果（可存进 JSON）。"""
-    eff = fp_effect(obj)
+def _fp_record(obj, stance=None) -> dict:
+    """牌 / 饮料 → 记账用的全力値效果（可存进 JSON）。stance：打出时的姿态（带姿态条件的全力値，见 sim.fp_effect）。"""
+    eff = fp_effect(obj, stance)
     per_turn = _FP_PER_TURN.search(norm(getattr(obj, "text", "") or ""))
     return {"gain": eff["gain"], "cost": eff["cost"], "boost": list(eff["boost"]) if eff["boost"] else None,
             "per_turn": int(per_turn[1]) if per_turn else 0}
@@ -881,27 +884,8 @@ def note_fp_cards(data, state) -> None:
                 cards.setdefault(f"{kind} {norm(x.name)}", _fp_record(x))
 
 
-def _fp_apply(fp, boosts, turn, rec):
-    """一次出牌 / 喝饮料：先扣消費，再加获得（获得吃本回合生效的全力値増加量増加），最后挂上这张给的増加量増加。
-    増加量増加的取整方式未在主数据里核实，按向上取整（宁高勿低会让账本偏乐观，所以 log 里记 pct 供实机核对）。"""
-    pct = sum(b["pct"] for b in boosts if b["until"] >= turn)
-    gain = math.ceil(rec["gain"] * (100 + pct) / 100) if rec["gain"] and pct else rec["gain"]
-    fp = max(0, fp - rec["cost"]) + gain
-    if rec.get("boost"):
-        boosts = [*boosts, {"pct": rec["boost"][0], "until": turn + rec["boost"][1] - 1}]  # （Nターン）含本回合
-    return fp, boosts, gain, pct
-
-
-def _fp_next_turn(fp, boosts, per_turn, turn):
-    """进入 turn：上回合结束 ≥10 → 扣 10（进全力）；再加「以降、ターン開始時、全力値+N」；去掉过期的増加量増加。"""
-    ops = []
-    if fp >= FULL_POWER_AT:
-        fp -= FULL_POWER_AT
-        ops.append("全力")
-    if per_turn:
-        fp += per_turn
-        ops.append(f"开局+{per_turn}")
-    return fp, [b for b in boosts if b["until"] >= turn], ops
+# 全力値加减和跨回合结算统一在 hiro.brain.play.sim（推演和记账同一份）
+from hiro.brain.play.sim import fp_apply as _fp_apply, fp_next_turn as _fp_next_turn  # noqa: E402
 
 
 def history_plays(memory):
@@ -960,12 +944,12 @@ def track_full_power(data, memory) -> int | None:
     return fp
 
 
-def commit_full_power(data, memory, card, kind="打") -> None:
+def commit_full_power(data, memory, card, kind="打", stance=None) -> None:
     """打出一张牌 / 喝一瓶饮料后：记进不截断的出牌记录（veil_log），再按牌面记全力値（先扣消費、再加获得）。"""
     name = norm(card.name)
     data.setdefault("veil_log", []).append([memory.turn, kind, name])
-    rec = _fp_record(card)
-    data.setdefault("veil_fp_cards", {}).setdefault(f"{kind} {name}", rec)
+    rec = _fp_record(card, stance)
+    data.setdefault("veil_fp_cards", {}).setdefault(f"{kind} {name}", _fp_record(card) if stance is not None else rec)
     data["veil_fp_per_turn"] = (data.get("veil_fp_per_turn") or 0) + rec["per_turn"]
     fp = data.get("veil_fp")
     if fp is None or not _fp_relevant(rec):
@@ -1912,90 +1896,8 @@ def count_stance_change(data, before, after):
         counts["full"] += 1
 
 
-_CONDITIONS = (
-    (re.compile(r"温存になった回数が(\d+)回以上の場合、使用可"), "warm"),
-    (re.compile(r"指針を変更した回数が(\d+)回以上の場合、使用可"), "changes"),
-    (re.compile(r"全力になった回数が(\d+)回以上の場合、使用可"), "full"),
-)
-
-
-_TEXT_STANCE_CONDITIONS = (
-    (re.compile(r"強気(\d)段階目の場合、使用可"), "強気"),
-    (re.compile(r"強気の場合、使用可"), "強気"),
-    (re.compile(r"温存の場合、使用可"), "温存"),
-    (re.compile(r"全力の場合、使用可"), "全力"),
-)
-
-
-def play_condition(card) -> dict | None:
-    """这张牌的使用条件，格式同 card_fx.trigger：{kind, value, not, text[, level]}。结构化效果为准（使用者 2026-11-09），
-    没有结构化效果时按牌面文字认（认得的几种），都没有返回 None。"""
-    from hiro.brain import card_fx
-
-    if (fx := card_fx.of(card)) is not None:
-        return fx.get("condition")
-    text = norm(card.text or "")
-    if "使用可" not in text:
-        return None
-    for pattern, key in _CONDITIONS:
-        if m := pattern.search(text):
-            return {"kind": key, "value": int(m.group(1)), "not": False, "text": m.group(0)}
-    if m := re.search(r"(\d+)ターン目以降の場合、使用可", text):
-        return {"kind": "turn", "value": int(m.group(1)), "not": False, "text": m.group(0)}
-    for pattern, value in _TEXT_STANCE_CONDITIONS:
-        if m := pattern.search(text):
-            out = {"kind": "stance", "value": value, "not": False, "text": m.group(0)}
-            if m.groups():
-                out["level"] = int(m.group(1))
-            return out
-    if "いずれかの指針の場合、使用可" in text:
-        return {"kind": "stance", "value": "なし", "not": True, "text": "いずれかの指針の場合、使用可"}
-    return {"kind": "other", "value": None, "not": False, "text": text}
-
-
-def condition_met(cond, state, memory, counts, current) -> bool | None:
-    """使用条件按账本 / 画面成不成立：True / False；判断不了（姿态不明、计数没记、认不出的条件）None。"""
-    if not cond:
-        return True
-    kind, value = cond["kind"], cond.get("value")
-    if kind in ("warm", "changes", "full", "strong"):
-        if kind not in counts and kind == "strong":
-            return None
-        ok = counts.get(kind, 0) >= int(value or 0)
-    elif kind == "turn":
-        ok = memory.turn >= int(value or 0)
-    elif kind == "stance":
-        if current is None:
-            return None
-        if value == "なし":
-            ok = current == NEUTRAL
-        elif value == "温存":
-            ok = current in WARM
-        else:
-            ok = current == value
-            if ok and cond.get("level") in (1, 2):
-                level = stance_level(state, current)
-                ok = level in (None, cond["level"])
-    else:
-        return None
-    return not ok if cond.get("not") else ok
-
-
-def play_condition_blocked(state, memory, data) -> dict:
-    """手牌里按主数据使用条件肯定打不了的牌 {槽位: 原因}。只判账本 / 画面确定的（计数往多里算、姿态不明不判），
-    宁可漏判（照旧按画面）也不误拦。使用条件以结构化效果为准（card_fx），没有时按牌面文字。"""
-    counts = data.get("veil_stance_counts") or {}
-    current = stance(state)
-    out = {}
-    for card in state.hand:
-        if not card.available:
-            continue
-        cond = play_condition(card)
-        if condition_met(cond, state, memory, counts, current) is False:
-            seen = counts.get(cond["kind"], 0) if cond["kind"] in ("warm", "changes", "full", "strong") else None
-            where = f"账本 {seen} 次" if seen is not None else (f"第 {memory.turn} 回合" if cond["kind"] == "turn" else f"现在 {current}")
-            out[card.slot] = f"{cond['text']}（{where}）"
-    return out
+# 使用条件（主数据 playCondition）的判定在 hiro.brain.play.guards，决策和记账共用
+from hiro.brain.play.guards import condition_met, play_condition, play_condition_blocked  # noqa: E402,F401
 
 
 def star_count(card) -> int:
@@ -2058,11 +1960,7 @@ def _commit_ledger(state, memory, decision, base):
     before = stance(state)
     if before is None and memory.turn == 1 and (data.get("veil_position") or {}).get("stance") in (None, NEUTRAL):
         before = NEUTRAL  # 第 1 回合还没切过姿态：切強気不推夜空（原来记成 None、夜空不明）
-    current, flower = after_play(before, state.pitem_charges, card)
-    level = (level_after(before, stance_level(state, before), current, stance_change_level(card))
-             if destination(card) == current else None)
-    if current == before and destination(card) != current:
-        level = stance_level(state, before)
+    current, level, flower = resolve(before, stance_level(state, before), state.pitem_charges, card)
     if norm(card.name).startswith(STAR):
         data["veil_star"] = star_count(card)
     delayed, delayed_level = next_stance_change(card)
@@ -2072,9 +1970,9 @@ def _commit_ledger(state, memory, decision, base):
         "stance": current, "stance_level": level, "flower": flower,
         "next_stance": delayed, "next_stance_level": delayed_level,
     }
-    if destination(card) == "強気" and stance(state) in WARM:
-        memory.actions_left += 1
-    commit_full_power(data, memory, card)
+    if release(card, stance(state), state.pitem_charges, mode="dest"):
+        memory.actions_left += 1  # 温存解除（牌自己的切换，夜空覆盖不影响）
+    commit_full_power(data, memory, card, stance=before)
     deck = data["veil_deck"]
     if variant:  # 分版本：一次性按这一张的版本（账本记的），不按同名
         lost = name in data.get("veil_initial_once", ())

@@ -100,3 +100,82 @@
 6. **第二个偶像**：拿一位循环流派的偶像只写 profile，看循环求解能不能直接用。
 
 注意：睡眠流程正在实机跑（1-p），而且上面所有改动都没提交。重构应该先提交现有改动，再新开分支或 worktree 去做，不要动正在跑的那份代码。
+
+## 六、通用附魔引擎与三个流派（2026-11-09）
+
+主数据里 P 道具（756 个，考试开始装上）、技能卡附魔（330 条，打出时装上，次数 = 以降 N 回まで）、支援卡道具（50 个）
+是同一种结构：触发（26 种时机）+ 条件（约 25 种）+ 效果列表（约 90 种）+ 次数上限（`ProduceItemEffect.effectCount`，0 = 不限）。
+支援卡道具多一个条件：只在对应属性的回合（`ProduceExamTrigger.lessonType`，【ダンスターンのみ】）。
+
+分层（`hiro.brain.play`）：
+
+- `enchants`：通用附魔引擎。附魔实例（剩余次数、计数器、本回合计数、截止回合）；推演在固定时机发事件，引擎判触发、
+  判条件、执行效果。条件和效果按字段 / 效果类型登记；没登记的条件判「不知道」，没登记的效果记进 `unknown`，不猜。
+- `anomaly`：アノマリー资源模块，登记姿态条件、姿态切换（全力下切不了）、全力値。センス / ロジック 以后各加一个模块。
+- `sim.TurnState`：VEIL_ENCHANT_RUNTIME=1 时夜空、一番星和打出的牌装上的附魔都走引擎（夜空 / 一番星的剩余次数仍是
+  `flower` / `star` 两个整数，因为画面读的就是它们）。
+
+TODO：
+
+- 回合属性：开考时左上角轮盘逆时针显示之后每回合的属性（Vo/Da/Vi），开考读一次记账，给支援卡道具的属性条件用。
+- センス（好調、集中、絶好調）、ロジック（好印象、やる気）的资源模块和画面识别；这两个流派还没有 trace 可以对账。
+- 推演算分（不一定需要，先记着）。
+- 其余触发时机（姿态切换、资源增加、消耗强化状态、体力减少、除外等）的事件要在推演对应的地方发出来；现在发的是
+  开考、回合开始（抽牌前 / 后）、出牌时、出牌后、回合结束。
+
+## 七、抽牌概率（2026-11-09）
+
+`draws`：按牌堆账（`hiro.brain.piles` 的山札 / 捨札 / 位置不明 / 存疑 / 暗抽）精确算下回合开局抽到哪些牌的概率——
+山札够抽时超几何分布，不够时山札全到、余下从「捨札 + 回合末手牌」洗牌后抽；账本不确定的部分分情况给区间，不猜。
+洗牌是均匀的，随机数实现（上游 NativeRandom）不影响概率，只影响知道种子时的逐帧重放。
+
+- 校准：`tools/audit/draw_calibration.py`。11-09 全部 trace 2682 个预测，分档预测与实际抽到比例一致，Brier 0.099（朴素均匀 0.118）；
+  16 个「不可能事件」是牌堆账本身的错（1-1 R2 トレーニングの成果+ 等），可以用它反查账本。
+- 决策：`VEIL_DRAW_PROB=1`（默认关）时，过渡里预约下回合多抽（教えてあげる+）按「预约后核心齐手概率比不预约高 1% 以上」判，
+  理由里写出两个概率。11-09 回放 2000 帧动作 0 处变化（9 次预约都是 0% → 100%，和原规则一致）。
+- 牌堆账本就是推演引擎的牌区状态：引擎抽牌时从账本组成出发，确定化世界里按 NativeRandom 洗，概率问题直接用 `draws`。
+
+## 八、搬到 claude/verify-run（2026-11-09）
+
+重构原来写在 e959d7c（落后 verify-run 103 个提交）上、没提交，搬到 verify-run 1eaa063 上，分支 `claude/play-modules-port`。
+
+冲突怎么解（verify-run 上的新行为为准，再把重构的意图落上去）：
+
+- **偶像档案**：verify-run 已经把 VEIL 的牌名 / 顺序 / 阈值 / 开关默认值挪进 `hiro/strategies/data/idols/<偶像>.json`。
+  `play/profile.py` 改成从档案读（同一个 `_load_profile`，批次绑定的快照优先），`PlayProfile` 由档案装出来；
+  `STANCE_LIMITED`、`PLAY_LATER`、`in_stance`（放在 `play/sim.py`）、`IDOL_CARD` 跟着搬进 phase / objectives / cycle / guards，
+  不再按牌名写死。新开关（SIM_UNIFIED、FP_PLAY_STANCE、ENCHANT_RUNTIME、DRAW_PROB、FULL_PLAN）写进档案 `flags.known`，
+  旧快照里没有时 `profile.PLAY_FLAGS` 补上。
+- **连打**：verify-run 已经把「认理由文字」改成决策器钩子 `burst_ok`；重构把循环阶段写进 `Decision.plan[0]["phase"]`。
+  两者合起来：执行器照旧只问 `advisor.burst_ok`，`VeilAdvisor.burst_ok` 改看阶段（`exec.cycle_tap.is_cycle_play`）。
+- **记账**：verify-run 把 `VeilBrain._commit` 挪成 `veil_exam._commit_ledger`（插件钩子）；重构对它的改动
+  （`sim.resolve` 算姿态 / 段階 / 夜空、`sim.release(mode="dest")` 算温存解除、全力値带打出时姿态）落在新函数上，口径和原来逐字相同。
+
+核对：`tools/audit/veil_replay.py`（加了 `--flags live` = 默认开 + 睡眠流程 11 个出牌开关、`组名+开关`、同回合带 `veil_full`），
+126 份 batch trace、每组 5,030 个决策点：verify-run 与本分支在 default / live 两组下输出逐字节相同。
+`pitem_replay`（账本对上的 42 份，2,127 帧夜空计数对上、0 处不一致）、`pile_replay`（11-09 的 37 份）两边输出也逐字节相同。
+
+开关打开时的变化（live 组上再开一个，5,030 个决策点）：
+
+| 开关 | 动作不同 | 只理由不同 |
+|---|---|---|
+| SIM_UNIFIED / FP_PLAY_STANCE / ENCHANT_RUNTIME | 0 | 0 |
+| DRAW_PROB | 0 | 10（理由里加了齐手概率） |
+| FULL_PLAN | 10（7 份 trace） | 5 |
+
+## 九、全力过渡按规划打完（VEIL_FULL_PLAN，1-q R2）
+
+codex-20261109-1-q R2 剩 2（夜空 1，规划 OD → 教えてあげる+ → 眠気）：OD 生成一张眠気，牌库 6 张、`small_deck` 不成立，
+下一手掉到清牌打了眠気；再下一手按「已打张数」取第 3 步收尾，眠気没了，打了巻き返し+，教えてあげる+（下回合抽 2）没打。
+
+`VEIL_FULL_PLAN=1`（默认关）：
+
+- 小牌组条件只管「进不进」全力过渡；本回合已经进了（`veil_full` 记的回合 = 本回合、夜空 1 / 2）就接着按规划打。
+- 接续按规划里哪几步已经打出（`cycle.full_plan_done`：按出牌记录逐步对名字，规划外的牌不算一步），不按张数。
+
+用例：`examples/cases/veil-1q-r2-full.json` + `tests/test_play_modules.py::test_full_power_transition_keeps_plan`
+（关时复现实机的眠気 / 巻き返し+，开时打 教えてあげる+ 再收尾眠気）。
+
+回放（`veil_replay --flags live --flags live+FULL_PLAN`）：同一类打断出现在 7 份 trace（3-c-3 R2 attempt1、1-e R2、1-j R1 / R2、
+1-o R2、1-p R2、1-q R2），开关打开后 10 个决策点改成按规划打 教えてあげる+。其中 1-e / 1-j R2 / 1-o / 1-p 原来是
+OD → 眠気（清牌）→ 教えて（当收尾），只是顺序不同；1-q R2、1-j R1 原来教えて 整回合没打；3-c-3（夜空 2）原来打完眠気就结束回合。

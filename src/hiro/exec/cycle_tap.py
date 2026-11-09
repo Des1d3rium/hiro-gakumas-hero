@@ -29,6 +29,15 @@ CARD_W, CARD_H = 57, 148  # KAA play_cards.ui.CARD_OFFSET：卡名首字母框�
 GREY = "#7a7d7d"  # 首字母角标发灰色（KAA locate_cards 判 available 用的同一个颜色）
 SETTLE_S = 4.0  # 等手牌摆到 n 张布局的上限（同 exam.SETTLE_FAST_MAX）
 SETTLE_GAP = 0.15
+CYCLE = "cycle"  # 循环出牌的决策在 Decision.plan[0]["phase"] 标这个（hiro.brain.play.cycle.PHASE）
+
+
+def is_cycle_play(contract) -> bool:
+    """这个决策是不是循环出牌：看决策器显式写的阶段（Decision.plan[0]["phase"]），不看理由文字。
+    原来认理由里的「五卡循环」几个字，改文案就会悄悄关掉连打。"""
+    plan = getattr(contract, "plan", None) or []
+    first = plan[0] if plan else None
+    return isinstance(first, dict) and first.get("phase") == CYCLE
 
 
 def tap_point(n: int, index: int, letter_top: int) -> tuple[int, int]:

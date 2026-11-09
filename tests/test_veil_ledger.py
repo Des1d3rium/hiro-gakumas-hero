@@ -94,13 +94,13 @@ def test_reserve_not_applied(reserve, kw):
 
 def test_reserve_never_blocks_idol_itself(reserve, monkeypatch):
     """アイドルになります+ 自己花 3 不受预留限制（它的打出条件：手里另有两张 エンターテイナー+／オーバードライブ+／教えてあげる+）。"""
-    import hiro.brain.veil as veil
+    import hiro.brain.play.guards as guards  # 全力値预留在约束模块（play.guards.Gates.filter）
 
     from hiro.brain.veil import ENTERTAINER, TEACH
 
     seen = []
-    real = veil.fp_delta
-    monkeypatch.setattr(veil, "fp_delta", lambda c: seen.append(c.name) or real(c))
+    real = guards.fp_delta
+    monkeypatch.setattr(guards, "fp_delta", lambda c, *a: seen.append(c.name) or real(c, *a))
     state, mem = case(card(0, IDOL_P), card(1, ENTERTAINER), card(2, TEACH), fp=0, deck={IDOL_P: 1})
     d = choose(state, mem)
     assert d.action.legal_key().startswith("play:") and "预留" not in d.reason and IDOL_P in seen

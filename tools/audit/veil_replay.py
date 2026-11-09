@@ -5,7 +5,10 @@
     PYTHONPATH=src .venv/bin/python tools/audit/veil_replay.py traces/batch-codex-* > after.jsonl
     diff before.jsonl after.jsonl
 
---flags default（默认）= 偶像档案的 default_on；all = 全部开关打开；可重复给，逐组输出。
+--flags default（默认）= 偶像档案的 default_on；all = 全部开关打开；live = default_on + 睡眠流程测试局打开的出牌开关
+（LIVE_FLAGS）；可重复给，逐组输出。组名后可以用「+开关」再打开几个（如 --flags live+FULL_PLAN）；
+--on FLAG 在每一组上再打开一个开关（可重复）。
+全力过渡的规划（veil_full）trace 的 context 里没有：同一组开关下按上一步重放的决策带到下一步（同一回合才用得上）。
 只读 traces/，不连游戏。改写自会话 scratchpad 的 replay_veil.py。
 """
 
@@ -73,6 +76,11 @@ def _build(s, ctx, played, sd, star_seen):
     return state, mem
 
 
+# 睡眠流程测试局一直打开的出牌决策开关（记忆 test-switches，2026-11-09）
+LIVE_FLAGS = frozenset({"CYCLE_PLAN", "IDOL_CLEAR", "STRONG_TEACH", "CYCLE_WHEY", "DRIVE_CHECK", "STANCE_LATER", "HP_ZERO",
+                        "STANCE_SCREEN", "CYCLE_TAP", "IDOL_FP_GATE", "STANCE_UNLOCK"})
+
+
 def _setflags(on: set[str], known) -> None:
     for f in known:
         os.environ[f"VEIL_{f}"] = "1" if f in on else "0"
@@ -85,6 +93,7 @@ def replay(run: Path, flag_sets: dict[str, set[str]], known):
 
     sd = json.loads((run / "exam_memory.json").read_text())["memory"]["strategy_data"] if (run / "exam_memory.json").exists() else {}
     turn, played, star = None, [], [None]
+    carried = {name: {} for name in flag_sets}  # 每组开关重放出的 veil_full（全力过渡规划）
     for line in (run / "steps.jsonl").read_text(encoding="utf-8").splitlines():
         s = json.loads(line)
         d = s.get("decision") or {}
@@ -99,8 +108,11 @@ def replay(run: Path, flag_sets: dict[str, set[str]], known):
             os.environ.pop("VEIL_HP_FLOOR", None)
             try:
                 state, mem = _build(s, ctx, played, sd, star)
+                if carried[name].get("turn") == ctx["turn"]:
+                    mem.strategy_data["veil_full"] = dict(carried[name])
                 r = VeilAdvisor().decide(state, mem, None, [Action.from_legal(a) for a in state.legal_actions()])
                 got = [r.action.legal_key(), r.reason]
+                carried[name] = dict(mem.strategy_data.get("veil_full") or {})
             except Exception as e:  # noqa: BLE001
                 got = ["ERR", f"{type(e).__name__}: {e}"[:160]]
             yield {"run": run.name, "seq": s["seq"], "flags": name, "decision": got}
@@ -119,13 +131,20 @@ def replay(run: Path, flag_sets: dict[str, set[str]], known):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("runs", nargs="+", type=Path)
-    ap.add_argument("--flags", action="append", choices=("default", "all", "none"))
+    ap.add_argument("--flags", action="append", help="default / all / none / live，可加「+开关」")
+    ap.add_argument("--on", action="append", default=[], metavar="FLAG", help="每组开关上再打开它（可重复）")
     args = ap.parse_args(argv)
     from hiro.brain import veil
 
     known = tuple(veil.STRATEGY_FLAGS)
-    sets = {"default": set(veil.DEFAULT_ON), "all": set(known), "none": set()}
-    chosen = {k: sets[k] for k in (args.flags or ["default"])}
+    sets = {"default": set(veil.DEFAULT_ON), "all": set(known), "none": set(), "live": set(veil.DEFAULT_ON) | LIVE_FLAGS}
+    chosen = {}
+    for spec in args.flags or ["default"]:
+        base, *more = spec.split("+")
+        extra = set(args.on) | set(more)
+        if base not in sets or extra - set(known):
+            ap.error(f"不认识的开关组 / 开关：{spec}")
+        chosen[spec] = sets[base] | extra
     n = 0
     for run in args.runs:
         if not (run / "steps.jsonl").is_file():

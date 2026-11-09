@@ -141,7 +141,7 @@ def build(effects, *, cost_type=None, cost_value=0, move=None, condition_id=None
     fx = {"effects": [list(e) for e in effects], "stance": None, "stance_level": None, "next_stance": None,
           "next_stance_level": None, "fp_gain": 0, "fp_cost": int(cost_value or 0) if "FullPowerPoint" in str(cost_type or "") else 0,
           "fp_boost": None, "extra_actions": 0, "draws": 0, "next_draws": 0, "genki": 0, "makes_sleep": False,
-          "once": "Lost" in str(move or ""), "condition": trigger(condition_id), "unknown": []}
+          "once": "Lost" in str(move or ""), "condition": trigger(condition_id), "unknown": [], "fp_cond": []}
     current = None  # 本张牌里已经切到的姿态（结算顺序）
     for trig_id, eid in effects:
         row = effect_row(eid)
@@ -172,8 +172,13 @@ def build(effects, *, cost_type=None, cost_value=0, move=None, condition_id=None
                 fx["stance"], fx["stance_level"] = st
             current = st[0]
         elif etype == T + "ExamFullPowerPoint":
-            if _cond_ok(cond, current):
+            counted = _cond_ok(cond, current)
+            if counted:
                 fx["fp_gain"] += int(v1 or 0)
+            if cond and cond.get("kind") == "stance":
+                # 带姿态条件的全力値（涙の思い出「強気の場合、全力値+3」）：[条件, 数值, 是否已算进 fp_gain]。
+                # 实机按打出时的姿态判（play.sim.fp_effect，VEIL_FP_PLAY_STANCE），fp_gain 是按本张牌先切的姿态判的旧口径
+                fx["fp_cond"].append([cond, int(v1 or 0), counted])
         elif etype == T + "ExamFullPowerPointAdditive":
             fx["fp_boost"] = (int(v1 or 0) // 10, int(turns or 0))
         elif etype == T + "ExamPlayableValueAdd":
