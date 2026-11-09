@@ -380,8 +380,8 @@ def _base(name):
 
 
 def name_probe():
-    """HIRO_VEIL_NAME_PROBE（默认开，=0 关）：同名不同强化的牌拿不准是哪个版本时，点按一次（只选中、不打出），
-    读浮起来的全名再定；读不出再按账本推断（使用者 2026-11-08：作为兜底）。"""
+    """HIRO_VEIL_NAME_PROBE（默认开，=0 关）：同名不同强化的牌读数和账本对不上、账本也定不下是哪个版本时，点按一次
+    （只选中、不打出），读浮起来的全名再定；读不出按「+」个数最接近的版本（使用者 2026-11-08：只作完全无法确定时的兜底）。"""
     return os.environ.get("HIRO_VEIL_NAME_PROBE", "1") != "0"
 
 
@@ -424,13 +424,12 @@ def fix_plus_misread(hand, data, turn, deck, probe=None):
         name = norm(card.name) if card.card_id else None
         family = siblings.get(_base(card.name), []) if name else []
         wrong = name and (seen[name] > sources[name] or name not in deck) and len(family) >= (1 if name not in deck else 2)
-        # 读到的版本对得上、但同名另一个版本也可能在手里：有点按兜底时去核对，没有就信读数
-        doubtful = wrong or (name and probe is not None and len(family) >= 2
-                             and sum(spare[n] > 0 for n in family if n != name) >= 1)
-        if doubtful:
+        if wrong:
             options = [n for n in family if n != name and spare[n] > 0]
             pick = None
-            if probe is not None:
+            # 点按一次约 2–3 秒（选中、等浮起、整屏 OCR、取消选中）：只在账本也定不下来时用（使用者 2026-11-08）——
+            # 读数对不上、而同名能补上的版本不是正好一个（没有 / 好几个）。读数对得上就信读数，账本能唯一定下就按账本
+            if probe is not None and len(options) != 1:
                 cache = data.setdefault("veil_name_probe", {})
                 if cache.get("turn") != turn:
                     cache.clear()
@@ -445,7 +444,7 @@ def fix_plus_misread(hand, data, turn, deck, probe=None):
                 if pick == name:
                     out.append(card)
                     continue
-            if pick is None and wrong and options:
+            if pick is None and options:
                 pick = min(options, key=lambda n: abs(n.count("+") - name.count("+")))
             if pick is not None and pick != name:
                 seen[name] -= 1
