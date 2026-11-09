@@ -6,7 +6,7 @@
 3. 还有次数就点再生成 → 「メモリー再生成確認」框：消耗「メモリー再生成チケット」（所持 332→331），残り再生成回数 2/2；
    「再生成する」在标题条下方固定偏移 (498, 标题顶 + 621)。框里出现ジュエル / 有償 / 購入就不点，停下；
 4. 回到第 1 步（又是生成页）。次数用完后在挑选页「獲得するメモリーを選択してください」用 < (220,1027) / > (498,1027)
-   逐个看每个版本（中间标签「再生成N回目」），按 batch_memory.PRIORITY 挑命中的一份，翻到它再点「決定」(360,1160)。
+   逐个看每个版本（中间标签「再生成N回目」），按回忆档案 memory_regen（batch_memory.priority()）挑命中的一份，翻到它再点「決定」(360,1160)。
    都没命中就停下，把每个版本的评估交给代理。
 """
 
@@ -56,7 +56,7 @@ def regen_left(texts):
 
 
 def rank(ev):
-    rules = [r for r, *_ in batch_memory.PRIORITY]
+    rules = [r for r, *_ in batch_memory.priority()]
     return rules.index(ev["hit"]) if ev.get("hit") in rules else len(rules)
 
 

@@ -1,0 +1,141 @@
+{
+  "schema": "memory-profile/1",
+  "memory": "veil-senbatsu",
+  "idol": "i_card-skin-hmsz-3-016",
+  "note": "示例：VEIL 选拔回忆。复制到 conf/strategies/memories/<回忆ID>.json 后改；卡 / 饮料写 ID（name 只是显示名缓存）",
+  "customize": [
+    {
+      "card": {
+        "id": "p_card-03-men-2_080",
+        "name": "インフルエンサー+",
+        "upgrade": 1
+      },
+      "item": "強気追加"
+    },
+    {
+      "card": {
+        "id": "p_card-03-men-1_050",
+        "name": "巻き返し+",
+        "upgrade": 1
+      },
+      "item": "成長追加",
+      "need_maxed": "制限削除"
+    }
+  ],
+  "change": {
+    "in": {
+      "rule": "once",
+      "column": 3
+    },
+    "out": [
+      {
+        "id": "p_card-03-men-1_039",
+        "name": "ハッピー♪"
+      }
+    ],
+    "out_swapped": true,
+    "out_duplicate": true,
+    "fp_balance": true,
+    "gift_card": {
+      "prefer": [],
+      "avoid": [],
+      "fallback": "once",
+      "column": 3
+    }
+  },
+  "drinks": {
+    "high_value": [
+      {
+        "id": "pdrink_00-2-008",
+        "name": "ブーストエキス"
+      },
+      {
+        "id": "pdrink_00-2-010",
+        "name": "センブリソーダ"
+      },
+      {
+        "id": "pdrink_00-3-001",
+        "name": "初星ホエイプロテイン"
+      }
+    ],
+    "priority": [
+      {
+        "id": "pdrink_00-2-010",
+        "name": "センブリソーダ"
+      },
+      {
+        "id": "pdrink_00-2-008",
+        "name": "ブーストエキス"
+      },
+      {
+        "id": "pdrink_00-3-001",
+        "name": "初星ホエイプロテイン"
+      },
+      {
+        "id": "pdrink_03-3-011",
+        "name": "初星湯"
+      },
+      {
+        "id": "pdrink_03-3-009",
+        "name": "初星スーパーソーダ"
+      },
+      {
+        "id": "pdrink_03-1-009",
+        "name": "ジンジャーエール"
+      },
+      {
+        "id": "pdrink_03-3-008",
+        "name": "厳選初星チャイ"
+      }
+    ],
+    "fallback": "rightmost"
+  },
+  "memory_regen": [
+    {
+      "name": "エンターテイナー+：パラメータ+12",
+      "card": {
+        "id": "p_card-03-act-3_188",
+        "name": "エンターテイナー"
+      },
+      "need": [
+        "パラメータ+12"
+      ],
+      "forbid": []
+    },
+    {
+      "name": "インフルエンサー+：強気に変更",
+      "card": {
+        "id": "p_card-03-men-2_080",
+        "name": "インフルエンサー"
+      },
+      "need": [
+        "強気に変更"
+      ],
+      "forbid": []
+    },
+    {
+      "name": "仕切り直し+：消費体力減少+2",
+      "card": {
+        "id": "p_card-00-men-3_005",
+        "name": "仕切り直し"
+      },
+      "need": [
+        "消費体力減少+2"
+      ],
+      "forbid": []
+    },
+    {
+      "name": "巻き返し+：パラメータ値増加+1・制限削除",
+      "card": {
+        "id": "p_card-03-men-1_050",
+        "name": "巻き返し"
+      },
+      "need": [
+        "パラメータ値増加+1"
+      ],
+      "forbid": [
+        "レッスン中1回"
+      ]
+    }
+  ]
+}

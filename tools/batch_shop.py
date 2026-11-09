@@ -12,14 +12,13 @@ import time
 
 from batch_ledger import norm
 
-HIGH_VALUE = ("ブーストエキス", "センブリソーダ", "初星ホエイプロテイン")
 FAST_SKIP = 0.4  # 获得动画的跳过点击间隔（执行器默认 1s）
 
 
 def high_value(name: str | None) -> bool:
-    import batch_rules
+    from hiro.strategies import profiles
 
-    wanted = batch_rules.get("shop.high_value", list(HIGH_VALUE))
+    wanted = profiles.get("drinks.high_value", [])  # 回忆档案（docs/strategies.md）
     return bool(name) and any(norm(name).startswith(norm(h)) for h in wanted)
 
 

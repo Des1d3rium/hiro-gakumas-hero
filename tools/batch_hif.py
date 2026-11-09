@@ -159,6 +159,21 @@ SETTLE_FAST_GAP = 0.3  # 回忆定下后只点不读时的间隔
 # 批量开局自动点「プロデュース開始」（HIRO_BATCH_AUTO_START=0 关掉）。命中这些字样一律不点
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import batch_rules  # noqa: E402  周回模式默认规则（conf/batch-rules.json，使用者可随时改）
+from hiro.strategies import profiles as SP  # noqa: E402  回忆档案 / 偶像档案（docs/strategies.md）
+
+
+def bind_profile(state: dict | None) -> None:
+    """批次文件里有档案快照就绑定它（本局按快照打）；旧批次没有快照时现场合并，和原来每次读 batch-rules.json 一样。"""
+    SP.bind((state or {}).get("profile"))
+
+
+def refresh_profile(state: dict) -> dict:
+    """首检 / 每局开局：按首检的偶像和回忆重新合并档案、快照进批次文件（改档案下一局生效）。不合法抛 ProfileError。"""
+    pre = state.get("preflight") or {}
+    snap = SP.snapshot(pre.get("idol"), pre.get("memory"), state.get("profile_overrides"))
+    state["profile"] = snap
+    SP.bind(snap)
+    return snap
 
 
 def _env_flag(name, rule):
@@ -1331,6 +1346,7 @@ def change(state, args, *, persist=None):
             raise ValueError("必须记录实测 AP、偶像和回忆")
         state["preflight"] = {"frame": "MaaTools 1717", "ap": args.ap, "skip": "verified",
                               "idol": args.idol, "memory": args.memory}
+        refresh_profile(state)
         return
     if not state["preflight"]:
         raise ValueError("先完成并记录首检")
@@ -1362,6 +1378,7 @@ def change(state, args, *, persist=None):
         if active or len(state["completed"]) == state["total"]:
             raise ValueError("已有未结算局，或已达到总次数")
         state["active"] = {"run": len(state["completed"]) + 1, "phase": "opening"}
+        state["active"]["profile_sha"] = refresh_profile(state)["sha256"]
         return
     if cmd in {"complete", "settle"}:
         previous = next((r for r in state["completed"] if r["run"] == args.run), None)
@@ -1665,10 +1682,14 @@ def change(state, args, *, persist=None):
             record["ledger"] = active["ledger"]  # 本局账本（含逐条日志）随结算记录存档，复盘用（验证局 1-i 结算后账本丢了）
         if outcome and outcome.get("memories"):
             record["memories"] = outcome["memories"]  # 结算里每份回忆的评估（交接提示词优先级），最后一份是保存的
+        if active.get("profile_sha") or state.get("profile"):
+            record["profile_sha"] = active.get("profile_sha") or state["profile"]["sha256"]  # 这局按哪版档案打的（审计分组）
         state["completed"].append(record)
         state["active"] = None
         if cmd == "settle" and len(state["completed"]) < state["total"]:
             state["active"] = {"run": args.run + 1, "phase": "opening"}
+            if state.get("profile"):
+                state["active"]["profile_sha"] = refresh_profile(state)["sha256"]
             persist()
             return device_action("open")
     else:
@@ -1889,7 +1910,7 @@ def watch(path, run, *, auto=False):
         print(json.dumps({"t": round(time.time(), 2), **line}, ensure_ascii=False), flush=True)
 
     def auto_rules():
-        rules = batch_rules.load()
+        rules = batch_rules.with_profile(batch_rules.load())  # 客制化清单来自回忆档案
         if auto:
             rules["driver"]["enabled"] = True
         return rules
@@ -1904,6 +1925,7 @@ def watch(path, run, *, auto=False):
             with (STATE_DIR / ".lock").open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 state = json.loads(path.read_text(encoding="utf-8"))
+                bind_profile(state)
                 ok = RT.finish_hold(state, action, out, lambda: save(path, state))
                 err = (state.get("active") or {}).get("driver", {}).get("error")
                 emit({"run": action["run"], "action": "auto", "command": action["command"], "ok": ok,
@@ -1932,6 +1954,7 @@ def watch(path, run, *, auto=False):
             except BlockingIOError:
                 return True
             state = json.loads(path.read_text(encoding="utf-8"))
+            bind_profile(state)
             active = state.get("active") or {}
             if len(state["completed"]) >= state["total"] or (run is not None and active.get("run") != run):
                 return False
@@ -2056,6 +2079,32 @@ def watch(path, run, *, auto=False):
     return 0
 
 
+def profile_command(path: Path, args) -> int:
+    """profile show / validate / migrate（只读批次文件，不碰游戏）。"""
+    state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    pre = state.get("preflight") or {}
+    idol, memory = args.idol or pre.get("idol"), args.memory or pre.get("memory")
+    if args.action == "migrate":
+        if not memory:
+            raise ValueError("migrate 要 --memory（或批次首检记录的回忆）")
+        body = SP.from_legacy(memory, idol, ids=args.ids)
+        target = SP.memory_path(memory)
+        if args.write:
+            if target.exists():
+                raise ValueError(f"{target} 已存在，不覆盖")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(body, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps({"file": str(target), "written": bool(args.write), "profile": body}, ensure_ascii=False, indent=2))
+        return 0
+    use_batch = state.get("profile") and not (args.idol or args.memory)
+    snap = state["profile"] if use_batch else SP.snapshot(idol, memory, state.get("profile_overrides"))
+    if args.action == "validate":
+        print(json.dumps({"ok": True, "sha256": snap["sha256"], "layers": snap["layers"]}, ensure_ascii=False))
+        return 0
+    print(json.dumps({"source": "批次快照" if use_batch else "现场合并", **snap}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--batch", required=True, help="当前对话批次 ID")
@@ -2068,6 +2117,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("init")
     p.add_argument("total", type=int)
     p.add_argument("--debug-retries", help="debug：本战每局主动再挑戦几次「R1,R2」（如 2,1 = 打 3 次 R1、2 次 R2，攒 trace）")
+    p.add_argument("--set", action="append", metavar="键=值",
+                   help="批次覆盖回忆档案的一项（可重复），如 --set change.in.column=2 --set 'drinks.priority=[\"初星湯\"]'")
+    p = sub.add_parser("profile", help="策略档案：show = 打印本批次合并后的档案（代理以它为准）；validate = 只校验；"
+                                       "migrate = 把现在生效的规则写成回忆档案")
+    p.add_argument("action", choices=("show", "validate", "migrate"))
+    p.add_argument("--idol", help="不看批次首检，指定偶像")
+    p.add_argument("--memory", help="不看批次首检，指定回忆")
+    p.add_argument("--ids", action="store_true", help="migrate：卡 / 饮料名字经 game.db 换成 ID")
+    p.add_argument("--write", action="store_true", help="migrate：写到 conf/strategies/memories/<回忆>.json（已有就不写）")
     sub.add_parser("debug-retries", help="debug：改本批次的主动再挑戦计划「R1,R2」，off 关掉").add_argument("plan")
     sub.add_parser("status")
     p = sub.add_parser("preflight", help="实际核对实时画面、AP、跳过选项、偶像和回忆后才记录")
@@ -2199,9 +2257,14 @@ def main():
                 state = {"total": args.total, "preflight": None, "active": None, "completed": []}
                 if args.debug_retries and (plan := parse_debug_retries(args.debug_retries)):
                     state["debug_retries"] = plan
+                if args.set:
+                    state["profile_overrides"] = SP.parse_set(args.set)  # 批次覆盖：合并顺序最后一层
                 save(path, state)
+            elif args.command == "profile":
+                return profile_command(path, args)
             else:
                 state = json.loads(path.read_text(encoding="utf-8"))
+                bind_profile(state)
                 if args.command != "status":
                     result = change(state, args, persist=lambda: save(path, state))
                     if result is not None:
@@ -2217,6 +2280,9 @@ def main():
         }
         print(json.dumps(summary, ensure_ascii=False))
         return 0
+    except SP.ProfileError as e:
+        print(f"批量育成停止（策略档案）：{e}", file=sys.stderr)
+        return 2  # 同编成号没设：碰游戏前退出
     except (OSError, ValueError) as e:
         print(f"批量育成停止：{e}", file=sys.stderr)
         return 1

@@ -272,6 +272,17 @@ def _isolate_batch_rules(tmp_path, monkeypatch):
     要测覆盖的用例自己再设 HIRO_BATCH_RULES。"""
     if "HIRO_BATCH_RULES" not in os.environ:
         monkeypatch.setenv("HIRO_BATCH_RULES", str(tmp_path / "batch-rules.none.json"))
+    # 策略档案（hiro.strategies）：不读使用者本机的 conf/strategies，也不让上一个用例绑定的批次快照漏过来
+    if "HIRO_STRATEGIES" not in os.environ:
+        monkeypatch.setenv("HIRO_STRATEGIES", str(tmp_path / "strategies.none"))
+    try:
+        from hiro.strategies import profiles
+
+        profiles.bind(None)
+        yield
+        profiles.bind(None)
+    except ImportError:
+        yield
 
 
 @pytest.fixture(autouse=True)

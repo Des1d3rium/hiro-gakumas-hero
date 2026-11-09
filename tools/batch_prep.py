@@ -3,9 +3,9 @@
 使用者 2026-11-07：「给前六周定下固定流程。永远选支给（差し入れ），和最后的商店。这样都不需要唤醒了。」
 - 行动页：有「差し入れ」就选它；只剩「相談」（最后一天）就进相談。
 - 相談：shop-auto 补高价值饮料（结束时自带 deck-sync 整副牌组对账，shop.deck_sync），然后「終了」。
-- 差し入れ 选饮料：逐个点开读名字，按 DRINK_PRIORITY 选；都不在表里选最右（稀有度最高）。
+- 差し入れ 选饮料：逐个点开读名字，按回忆档案 drinks.priority 选；都不在表里选最右（稀有度最高）。
 - 差し入れ 选技能卡：默认停下交给代理（使用者 2026-11-07：「选技能卡暂时还是先唤起你，但是留下一个接口」）。
-  接口：conf/batch-rules.json 的 prep.card_prefer / prep.card_avoid（tools/batch_rules.py），
+  接口：回忆档案的 change.gift_card.prefer / avoid（hiro.strategies.profiles，docs/strategies.md），
   prefer 按顺序找，第一张命中的就选；卡名不带「+」也能匹配强化版。
   没有规则或没命中时，优先选一次性卡（第三张是一次性就选它，否则第一张一次性卡）；认不出一次性卡才停下。
 - 「受け取らないで次へ進みます」确认页：点底部确认。
@@ -22,7 +22,8 @@ import time
 import unicodedata
 from argparse import Namespace
 
-import batch_rules  # 所有挑选规则都在 conf/batch-rules.json 的 prep 段，使用者可随时改
+import batch_rules  # 流程开关（conf/batch-rules.json 的 prep 段）
+from hiro.strategies import profiles as S  # 挑选规则（饮料 / 换卡 / 差し入れ技能卡）：回忆档案，见 docs/strategies.md
 
 RECEIVE = (353, 1097)  # 差し入れ「受け取る」/ 确认页「受け取らない」
 DRINK_X, DRINK_Y = (222, 360, 498), 870
@@ -30,10 +31,7 @@ DRINK_NAME_BAND = (480, 560)  # 点开后详情名字所在 y 段
 SHOP_END = (640, 1085)
 BRIEFING_TAP = (360, 300)
 DECLINE = (359, 1006)  # 饮料选择页「受け取らない」（栏满时才有）  # 考前说明页「優勝条件」：点上方空白进入考试
-DRINK_PRIORITY = ("センブリソーダ", "ブーストエキス", "初星ホエイプロテイン", "初星スーパーソーダ", "初星湯",
-                  "ジンジャーエール", "厳選初星チャイ")  # fmt: skip
 CHANGE_PICK = 2  # 换卡阶段 1：第三列优先（是一次性卡时）
-BASIC_OUT = ("立ち回りの基本", "表現の基本", "アピールの基本")  # 换卡阶段 2：N 卡
 
 
 def _norm(t: str) -> str:
@@ -42,15 +40,15 @@ def _norm(t: str) -> str:
 
 def pick_drink(names: list[str | None]) -> int | None:
     """names：从左到右读到的饮料名。按 prep.drink_priority 选；都不在表里按 prep.drink_fallback（rightmost / hold）。"""
-    for want in batch_rules.get("prep.drink_priority", list(DRINK_PRIORITY)):
+    for want in S.get("drinks.priority", []):
         for i, n in enumerate(names):
             if n and _norm(want) in _norm(n):
                 return i
-    return len(names) - 1 if batch_rules.get("prep.drink_fallback", "rightmost") == "rightmost" else None
+    return len(names) - 1 if S.get("drinks.fallback", "rightmost") == "rightmost" else None
 
 
 def load_card_rules(root=None) -> dict:
-    return {"prefer": batch_rules.get("prep.card_prefer", []), "avoid": batch_rules.get("prep.card_avoid", [])}
+    return {"prefer": S.get("change.gift_card.prefer", []), "avoid": S.get("change.gift_card.avoid", [])}
 
 
 def pick_card(cands: list[dict], rules: dict | None) -> int | None:
@@ -69,7 +67,7 @@ def pick_card(cands: list[dict], rules: dict | None) -> int | None:
 def pick_change_in(cands: list[dict], column: int | None = None, rank=None) -> int | None:
     """一次性卡优先：第 column 列（从 1 数，默认 prep.change_column）是一次性就选它，否则第一张一次性卡；没有返回 None（停下）。
     rank(c) → 越小越优先（VEIL 全力値平衡，见 fp_rank），先比 rank 再比列。"""
-    column = column or batch_rules.get("prep.change_column", 3)
+    column = column or S.get("change.in.column", 3)
     once = [c for c in cands if c.get("once")]
     if not once:
         return None
@@ -78,7 +76,7 @@ def pick_change_in(cands: list[dict], column: int | None = None, rank=None) -> i
 
 # ---- VEIL 牌组全力値平衡（使用者 2026-11-07）：账本统计牌组里加全力値的手段；下一次抓卡 / 换卡会让总量超过 FP_HIGH（7）的降低优先级，
 # 总量不到 FP_LOW 且牌组有 アイドルになります（全力値消費3）时加全力値的提高优先级。巻き返し 每次消費1，理想总量 5–7。
-# 循环牌 オーバードライブ 每回合都打、+2 在循环里自己平衡，不计入。关掉：conf/batch-rules.json 的 prep.veil_fp_balance=false。
+# 循环牌 オーバードライブ 每回合都打、+2 在循环里自己平衡，不计入。关掉：回忆档案 change.fp_balance=false。
 VEIL_IDOL = "i_card-skin-hmsz-3-016"
 # 上限按理想区间上沿 7（使用者 2026-11-07：1-e 牌组已有 7 时又选了 モチベ+ +2、换入 成果+ +4，「进入全力不是好事」）
 FP_HIGH, FP_LOW = 7, 3
@@ -122,8 +120,8 @@ def change_out_card(ledger: dict | None) -> str | None:
     if not ledger or not ledger.get("cards"):
         return None
     base = lambda n: _norm(n or "").rstrip("+＋")  # noqa: E731
-    order = [base(n) for n in batch_rules.get("prep.change_out", list(BASIC_OUT))]
-    if batch_rules.get("prep.change_out_swapped", True):
+    order = [base(n) for n in S.get("change.out", [])]
+    if S.get("change.out_swapped", True):
         order += [base(n) for n in swapped_in(ledger)]
     for want in order:
         for name in ledger["cards"]:
@@ -138,8 +136,8 @@ def change_out_upgrade(ledger: dict | None) -> int | None:
     if not ledger or not ledger.get("cards"):
         return None
     base = lambda n: _norm(n or "").rstrip("+＋")  # noqa: E731
-    order = [base(n) for n in batch_rules.get("prep.change_out", list(BASIC_OUT))]
-    if batch_rules.get("prep.change_out_swapped", True):
+    order = [base(n) for n in S.get("change.out", [])]
+    if S.get("change.out_swapped", True):
         order += [base(n) for n in swapped_in(ledger)]
     for want in order:
         for name in ledger["cards"]:
@@ -151,7 +149,7 @@ def change_out_upgrade(ledger: dict | None) -> int | None:
 def fp_rank(ledger: dict | None, veil: bool, *, change: bool = False):
     """候选 → 0（提高）/ 1（照旧）/ 2（降低）。不是 VEIL、没账本、规则关掉时返回 None（不改原顺序）。
     change=True（授業换卡）：候选按换入后的强化算——继承换出那张的「+」（使用者 2026-11-07：强化过的换出、换入的也是强化卡）。"""
-    if not veil or not batch_rules.get("prep.veil_fp_balance", True) or (info := deck_fp(ledger)) is None:
+    if not veil or not S.get("change.fp_balance", True) or (info := deck_fp(ledger)) is None:
         return None
     total, idol = info
     inherit = change_out_upgrade(ledger) if change else None
@@ -189,15 +187,15 @@ def pick_change_out(cards: list[dict], ledger: dict | None = None) -> tuple[int,
     """换卡阶段 2：先换出 N 卡（prep.change_out），再换出本局之前从 N 卡换进来的牌，再换出同名重复卡里没客制化的那张；
     客制化过的卡一律不换，挑不到返回 None（停下）。"""
     base = lambda n: _norm(n or "").rstrip("+＋")  # noqa: E731
-    order = [base(n) for n in batch_rules.get("prep.change_out", list(BASIC_OUT))]
-    if batch_rules.get("prep.change_out_swapped", True):
+    order = [base(n) for n in S.get("change.out", [])]
+    if S.get("change.out_swapped", True):
         order += [base(n) for n in swapped_in(ledger)]
     free = [c for c in cards if c.get("name") and not c.get("customized")]  # 客制化过的卡一律不换
     for want in order:
         for c in free:
             if base(c["name"]) == want:
                 return c["row"], c["col"]
-    if batch_rules.get("prep.change_out_duplicate", True):
+    if S.get("change.out_duplicate", True):
         # 使用者 2026-11-07：换卡后卡组里有两张同名卡时，换掉没客制化的那张没问题——只要不换客制化的卡
         names = [base(c["name"]) for c in cards if c.get("name")]
         for c in free:
@@ -273,7 +271,7 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
 
     stage = batch_change.stage_of(texts)
     if stage == 1:
-        if batch_rules.get("prep.change_in", "once") != "once":
+        if S.get("change.in.rule", "once") != "once":
             return None
         scan = run_cmd("change-scan")
         rank = fp_rank(state["active"].get("ledger"), (state.get("preflight") or {}).get("idol") == VEIL_IDOL, change=True)
@@ -341,13 +339,13 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
             if L.mark_full(ledger, why=f"{source}饮料页"):
                 persist()
         if full:
-            high = [h for h in batch_rules.get("shop.high_value", []) if any(n and _norm(h) in _norm(n) for n in names)]
+            high = [h for h in S.get("drinks.high_value", []) if any(n and _norm(h) in _norm(n) for n in names)]
             if not high:
                 # 交接提示词：栏满、候选全是低价值 → 受け取らない（下一步「受け取らないで次へ進みます」由上面的分支确认）
                 device.click(*DECLINE)
                 return f"{source}饮料：栏满且无高价值，受け取らない（{names}）"
             held = list((state["active"].get("ledger") or {}).get("drinks") or [])
-            rules = batch_rules.get("shop.high_value", [])
+            rules = S.get("drinks.high_value", [])
             if held and all(d and any(_norm(h) in _norm(d) for h in rules) for d in held):
                 # 手里 4 瓶都认得、都是高价值：没有可丢的，不收（1-e 代理手动做的就是这个）。DECLINE 是勾选框，下一页确认
                 device.click(*DECLINE)
@@ -364,7 +362,7 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
                 seen = [L.norm(d["name"]) if d.get("state") == "drink" and d.get("name") else None for d in bar]
                 if ledger is None or seen != [L.norm(n) if n else None for n in ledger.get("drinks") or []]:
                     return None  # 不用旧账本决定丢哪瓶
-                choice = replacement(seen, names, batch_rules.get("prep.drink_priority", []), rules, norm=L.norm)
+                choice = replacement(seen, names, S.get("drinks.priority", []), rules, norm=L.norm)
                 if choice is None:
                     return None
                 # Durable intent: a crash after dropping must not drop a second bottle on restart.
@@ -409,12 +407,12 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
 
         cands = read_change_candidates(img)["candidates"]
         index = pick_card(cands, load_card_rules())
-        if index is None and batch_rules.get("prep.card_fallback", "once") == "once":
+        if index is None and S.get("change.gift_card.fallback", "once") == "once":
             # 使用者 2026-11-07：规则没定之前，能认出一次性卡就优先选一次性的（第三张是一次性时选它）
             rank = fp_rank(state["active"].get("ledger"), (state.get("preflight") or {}).get("idol") == VEIL_IDOL)
             col = pick_change_in([{"col": c["index"], "once": is_once(c.get("card_id")), "card_id": c.get("card_id"),
                                    "upgrade": c.get("upgrade"), "name": c.get("name")} for c in cands],
-                                 batch_rules.get("prep.card_column", 3), rank=rank)
+                                 S.get("change.gift_card.column", 3), rank=rank)
             index = col
         target = next((c for c in cands if c["index"] == index), None) if index is not None else None
         if target is None:

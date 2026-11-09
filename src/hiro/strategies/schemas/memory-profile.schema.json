@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "memory-profile/1",
+  "title": "回忆档案：一份回忆一套客制化 / 换卡 / 饮料 / 结算回忆优先级",
+  "description": "conf/strategies/memories/<回忆ID>.json。没写的项沿用上一层（代码缺省 → 旧 batch-rules.json → 偶像档案 memory_defaults → 本档案 → 批次 --set）。卡写 ID（{\"id\": \"p_card-…\", \"upgrade\": 1}）或名字；名字由 game.db 解析，不唯一时停下。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"type": "string", "enum": ["memory-profile/1"]},
+    "memory": {"type": "string", "description": "回忆 ID（= batch_hif preflight --memory，= reports/memories/<ID>.json）"},
+    "idol": {"type": "string", "description": "这份回忆配的偶像 skin id（只作核对）"},
+    "deck": {"type": "string", "description": "回忆栏牌组文件，只作参考"},
+    "note": {"type": "string"},
+    "customize": {
+      "type": "array",
+      "description": "1 客制化：轮间按顺序做（自动模式）",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["card", "item"],
+        "properties": {
+          "card": {"$ref": "#/$defs/card"},
+          "item": {"type": "string", "description": "客制化菜单项名（ProduceCardCustomize 的显示名，如 強気追加）"},
+          "need_maxed": {"type": "string", "description": "同名多张时：只选已把这一项做满的那张"}
+        }
+      }
+    },
+    "change": {
+      "type": "object", "additionalProperties": false, "description": "2 换卡（授業换卡）和差し入れ技能卡",
+      "properties": {
+        "in": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "rule": {"type": "string", "enum": ["once", "hold"], "description": "阶段 1：once = 一次性卡优先；hold = 停下"},
+            "column": {"type": "integer", "minimum": 1, "maximum": 3}
+          }
+        },
+        "out": {"type": "array", "items": {"$ref": "#/$defs/card"}, "description": "阶段 2 先换出这些（不分强化）"},
+        "out_swapped": {"type": "boolean", "description": "再换出本局之前换进来的牌"},
+        "out_duplicate": {"type": "boolean", "description": "再换出同名重复卡里没客制化的那张"},
+        "fp_balance": {"type": "boolean", "description": "按牌组全力値来源总量调候选优先级（偶像档案有 fp_balance 能力时才生效）"},
+        "gift_card": {
+          "type": "object", "additionalProperties": false, "description": "差し入れ 选技能卡",
+          "properties": {
+            "prefer": {"type": "array", "items": {"$ref": "#/$defs/card"}},
+            "avoid": {"type": "array", "items": {"$ref": "#/$defs/card"}},
+            "fallback": {"type": "string", "enum": ["once", "hold"]},
+            "column": {"type": "integer", "minimum": 1, "maximum": 3}
+          }
+        }
+      }
+    },
+    "drinks": {
+      "type": "object", "additionalProperties": false, "description": "3 饮料",
+      "properties": {
+        "high_value": {"type": "array", "items": {"$ref": "#/$defs/drink"}, "description": "shop-auto 只买这些"},
+        "priority": {"type": "array", "items": {"$ref": "#/$defs/drink"}, "description": "差し入れ 选饮料的优先顺序"},
+        "fallback": {"type": "string", "enum": ["rightmost", "hold"]}
+      }
+    },
+    "memory_regen": {
+      "type": "array", "description": "4 结算回忆优先级：按顺序，第一条命中的版本",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["card"],
+        "properties": {
+          "name": {"type": "string", "description": "规则名（日志里显示）"},
+          "card": {"$ref": "#/$defs/card", "description": "卡（基名，强化版也算）"},
+          "need": {"type": "array", "items": {"type": "string"}, "description": "效果文字里必须有的词"},
+          "forbid": {"type": "array", "items": {"type": "string"}, "description": "效果文字里不能有的词"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "card": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "object", "additionalProperties": false, "required": ["id"],
+         "properties": {"id": {"type": "string", "pattern": "^p_card-"}, "upgrade": {"type": "integer", "minimum": 0, "maximum": 3},
+                        "name": {"type": "string", "description": "显示名缓存，以 id 为准"}}}
+      ]
+    },
+    "drink": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "object", "additionalProperties": false, "required": ["id"],
+         "properties": {"id": {"type": "string", "pattern": "^pdrink_"}, "name": {"type": "string"}}}
+      ]
+    }
+  }
+}
