@@ -31,6 +31,26 @@ def test_review_deck_no_button(monkeypatch):
     assert r["deck"] is None and not r["opened"]
 
 
+def test_review_deck_falls_back_to_fixed_button(monkeypatch):
+    """考试页牌库图标上压着「保留0/2」，模板认不出（codex-20261109-1-c R1）：给了固定位置就点它，再由 is_deck_list 核对。"""
+    import hiro.vision.deck as vd
+
+    state = {"open": False}
+    monkeypatch.setattr(vd, "find_deck_button", lambda img: None)
+    monkeypatch.setattr(vd, "is_deck_list", lambda img: state["open"])
+    monkeypatch.setattr(vd, "read_deck_list", lambda img: {"deck": [], "deck_size": 0, "problems": []})
+    clicks = []
+
+    def click(x, y):
+        clicks.append((x, y))
+        state["open"] = (x, y) == (557, 1205)
+
+    t = [0.0]
+    r = dr.review_deck(shoot=lambda: None, click=click, swipe=lambda *a: None, ocr_texts=lambda img: [("閉じる", (360, 1180))],
+                       sleep=lambda s: t.__setitem__(0, t[0] + s), clock=lambda: t[0], button=(557, 1205))  # fmt: skip
+    assert r["opened"] and r["closed"] and clicks[0] == (557, 1205)
+
+
 def test_review_deck_multi_screen_uses_merge(monkeypatch):
     """一屏不全：每屏截一张往下滑，滑不动了停；整组交给识屏的 merge_deck_list（没有时两两拼）。读完点「閉じる」。"""
     import numpy as np

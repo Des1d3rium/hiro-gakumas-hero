@@ -195,6 +195,26 @@ def test_sync_deck_adds_missing_fixes_upgrade_keeps_extra(monkeypatch):
     assert any("强化 モチベ→モチベ+" in n for n in notes) and any("账本多出 眠気" in n for n in notes)
 
 
+def test_sync_deck_caps_double_plus(monkeypatch):
+    """画面读成 プライド++：按 プライド+ 记，账本已是 プライド+ 时没有差异（1-h R2 开考）。"""
+    monkeypatch.setattr(L, "_now", lambda: "10:00:00")
+    led = L.new_ledger({"memory": "m", "cards": ["プライド+", "眠気"], "once": ["プライド+"], "evidence": "x"})
+    assert L.sync_deck(led, [("プライド++", True), ("眠気", True)], why="R2 开考") == []
+    assert sorted(led["cards"]) == ["プライド+", "眠気"]
+    led = L.new_ledger({"memory": "m", "cards": ["プライド", "眠気"], "once": ["プライド"], "evidence": "x"})
+    assert L.sync_deck(led, [("プライド＋＋", True), ("眠気", True)], why="R2 开考") == ["强化 プライド→プライド+"]
+
+
+def test_sync_deck_in_exam_ignores_temporary_upgrades(monkeypatch):
+    """考试页对账（R2 开考）：支援卡的临时强化不进账本，漏记的卡照补。"""
+    monkeypatch.setattr(L, "_now", lambda: "10:00:00")
+    led = L.new_ledger({"memory": "m", "cards": ["プライド", "眠気"], "once": ["プライド"], "evidence": "x"})
+    monkeypatch.setattr(L, "add_card", lambda ledger, name, once, **kw: ledger["deck"].append({"id": "n", "name": name, "once": once}))
+    notes = L.sync_deck(led, [("プライド+", True), ("眠気", True), ("立ち回りの基本", True)], why="R2 开考", upgrades=False)
+    assert [c["name"] for c in led["deck"]][:2] == ["プライド", "眠気"]
+    assert notes[0].startswith("考试中强化 プライド→プライド+") and "补记 立ち回りの基本" in notes
+
+
 def test_mark_full_fills_empty_slots_with_placeholder(ledger):
     """领取页说栏满、账本有空格：空格记占位（1-e 公開レッスン 白送的 2 瓶漏记）。"""
     assert L.mark_full(ledger, why="P道具饮料页") == 2

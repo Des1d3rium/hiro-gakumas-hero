@@ -454,13 +454,46 @@ STALE_MAX = 3
 STRICT_STALE_MAX = 8
 
 
+# 打出的牌浮在手牌上方结算时，卡名标签在这一带（codex-20261109-1-i R2：オーバードライブ+ 标签 y 820–850、x 279–448）；
+# 平时这一带没有字（右边 SKIP 键 x≈660 不在框内）。手牌已经摆成 n 张布局、签名也稳了，这时点下一张会被游戏吞掉
+FLIGHT_BAND = (200, 805, 520, 865)
+
+
+def card_in_flight(img) -> bool:
+    """上一张打出的牌还浮在手牌上方结算（卡名标签还在）。"""
+    from hiro.produce.ops import ocr_boxes
+
+    if img is None or getattr(img, "shape", (0, 0))[:2] != (1280, 720):
+        return False
+    x1, y1, x2, y2 = FLIGHT_BAND
+    try:
+        boxes = ocr_boxes(img[y1:y2, x1:x2])
+    except Exception:  # noqa: BLE001
+        return False
+    return any(len(t.strip()) >= 3 for t, _, _ in boxes)
+
+
+FLIGHT_WAIT_S = 3.0
+
+
+def wait_flight(img, timeout: float = FLIGHT_WAIT_S):
+    """上一张牌还浮着就原地等它落下（每 0.2s 看一次，最多 timeout 秒），返回最后一帧。codex-20261109-1-e/g/i：
+    オーバードライブ+ 结算中点下一张被吞、记成已打出，下一帧撤回重打（veil_play_undone）。决策帧本身常带浮着的牌，
+    所以不当过时（不重决策），只在点之前等。"""
+    deadline = time.monotonic() + timeout
+    while img is not None and card_in_flight(img) and time.monotonic() < deadline:
+        sleep(0.2)
+        img = device.screenshot()
+    return img
+
+
 def _stale_before_tap(frame) -> str | None:
     """点击前重新截图，与决策帧比剩余回合和手牌位置（_lite_sig，约 25ms）。不一致返回原因，一致或判断不了返回 None。"""
     try:
         a = _lite_sig(frame.img)
         if a is None:
             return None  # 决策帧本身读不出（截图兜底等）：不拦
-        b_img = device.screenshot()
+        b_img = wait_flight(device.screenshot())
         b = _lite_sig(b_img)
     except Exception:
         return None
@@ -470,6 +503,7 @@ def _stale_before_tap(frame) -> str | None:
         return f"剩余回合 {a[0][0]}→{b[0][0]}"
     if a[1] != b[1]:
         return f"手牌位置变了（{len(a[1])}→{len(b[1])} 张）"
+
     if STALE_ART and (moved := _art_changed(frame.img, b_img, a[1])) is not None:
         return f"手牌换了（槽 {moved} 卡面变了，张数没变）"
     return None
@@ -491,9 +525,25 @@ def _art_means(img, letters):
     return out
 
 
+HAND_BAND = (880, 1090)  # 手牌卡面所在的高度
+HAND_SAME_DIFF = 18.0
+# 手牌带按 120px 宽分条，逐像素平均差的最大值。实机：打出后抽牌补到同一格（1-l R1 インフルエンサー+ → アンダンテ）最大 45；
+# 没打出（1-j OD、1-i 教えて）最大 10.1 / 11.5。平均颜色（_art_changed，阈值 40）分不开前一种，误判没打出、漏记账成了幽灵牌。
+# 舞台特效从牌缝透出来只会把差值推高（判成打出），那是撤回能自愈的一侧
+
+
+def _hand_unchanged(img_a, img_b) -> bool:
+    if getattr(img_a, "shape", None) is None or getattr(img_b, "shape", None) is None or img_a.shape != img_b.shape:
+        return False
+    y1, y2 = HAND_BAND
+    a, b = img_a[y1:y2].astype("int16"), img_b[y1:y2].astype("int16")
+    worst = max(float(abs(a[:, x:x + 120] - b[:, x:x + 120]).mean()) for x in range(0, a.shape[1], 120))
+    return worst < HAND_SAME_DIFF
+
+
 def _art_changed(img_a, img_b, letters) -> int | None:
     """两帧同一组角标位置上卡面平均颜色差得多的第一个槽号（从 0 数）；都差不多 None。"""
-    if img_a is None or img_b is None or img_a.shape != img_b.shape:
+    if getattr(img_a, "shape", None) is None or getattr(img_b, "shape", None) is None or img_a.shape != img_b.shape:
         return None
     for i, (x, y) in enumerate(zip(_art_means(img_a, letters), _art_means(img_b, letters))):
         if x is not None and y is not None and float(abs(x - y).max()) > ART_DIFF:
@@ -842,12 +892,34 @@ def _play_not_landed(frame, x: int | None, name: str | None = None) -> str | Non
         device.click(*DESELECT_TAP)
         sleep(DESELECT_WAIT)
         return "卡名仍在原位（选中后没显示 SELECT），没打出，已取消选中"
-    if PLAY_RESULT.get("confirmed"):
-        return None
+    confirmed = PLAY_RESULT.get("confirmed")
     _screen_calm(PLAY_RETAP_CALM_S)
-    a, b = _lite_sig(frame.img), _lite_sig(device.screenshot())
-    if a is not None and b is not None and _lite_same(a, b):
+    after = device.screenshot()
+    a, b = _lite_sig(frame.img), _lite_sig(after)
+    for _ in range(3):  # 结算稳定后偶尔还读不到签名（动画收尾）：再看几次，读不到就没法核对（codex-20261109-1-m R2 T9）
+        if b is not None:
+            break
+        sleep(0.3)
+        after = device.screenshot()
+        b = _lite_sig(after)
+    if not confirmed and a is not None and b is not None and _lite_same(a, b):
         return "点击没被接收（没出现 SELECT，手牌与剩余回合都没变）"
+    same_pos = a is not None and b is not None and len(a[1]) == len(b[1]) and all(
+        abs(p[0] - q[0]) <= 1 and abs(p[1] - q[1]) <= 1 for p, q in zip(a[1], b[1]))  # 角标位置 //8 后差 1 是抖动
+    unchanged = same_pos and a[0][0] == b[0][0] and _hand_unchanged(frame.img, after)
+    if unchanged or b is None:
+        logger.warning("落地核对：confirmed=%s 签名 %s→%s 手牌带不变=%s", confirmed, a and len(a[1]), b and len(b[1]), unchanged)
+    if unchanged:
+        # codex-20261109-1-j R2 T6：选中、确认两下都收到了，オーバードライブ+ 还在手里（下一帧撤回重打）。打出去了手牌一定会变
+        # ——角标位置变（少一张），或抽牌补回同样张数时后面的牌左移、卡面变——结算稳定后位置和卡面都没变 = 没打出
+        return "结算稳定后手牌位置和卡面都没变，没打出"
+    if confirmed:
+        return None
+    if (x is not None and name and a is not None and b is not None and len(a[1]) == len(b[1])
+            and _name_at(after, x, name) and not _select_at(after, x)):
+        # codex-20261109-1-e / 1-g 循环 T7：决策帧上一张 オーバードライブ+ 还浮在手牌上方结算，点 教えてあげる+ 被吞掉；
+        # 上一张的效果让体力 / 元気变了，旧判据当成已打出 → 下一帧 veil_play_undone 撤回重打。手牌张数没变、卡名还在原位 = 没打出
+        return "卡名仍在原位、手牌张数没变（画面变化来自上一张牌的结算），没打出"
     return None
 
 

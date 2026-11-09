@@ -108,6 +108,7 @@ class CardView:
     text: str
     tags: CardTags = field(default_factory=CardTags)
     badge_score: int | None = None  # 手牌左上角游戏给的预计得分（截图读到才有；None = 没有徽章或没读全）
+    fx: dict | None = None  # 主数据结构化效果（hiro.brain.card_fx）：有它时姿态 / 全力値 / 追加行动 / 抽牌 / 使用条件以它为准
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -135,6 +136,9 @@ def card_view(slot: int, card, *, available: bool) -> CardView:
     text = description_text(card.produce_descriptions) or (card.effect_display_text or "")
     once = "Lost" in str(card.play_move_position_type or "")
     extra = {"type": card.cost_type, "value": card.cost_value} if card.cost_value else None
+    from hiro.brain.card_fx import card_fx
+
+    fx = card_fx(card._id, card.upgrade_count or 0)
     return CardView(
         slot=slot,
         name=card.name,
@@ -146,8 +150,20 @@ def card_view(slot: int, card, *, available: bool) -> CardView:
         hp_cost=card.force_stamina or 0,
         extra_cost=extra,
         text=text,
-        tags=parse_tags(card.name, text, once=once),
+        tags=fx_tags(parse_tags(card.name, text, once=once), fx),
+        fx=fx,
     )
+
+
+def fx_tags(tags: CardTags, fx: dict | None) -> CardTags:
+    """结构化效果覆盖文字解析的几个标签（使用者 2026-11-09「以结构化为准」）：追加行动、抽牌（含次回合预约）、生成眠気、一次性。
+    文字解析会把延后 / 有条件的「スキルカード使用数追加」也算成立即的（ヒーローとの出会い 等）。"""
+    if not fx:
+        return tags
+    from dataclasses import replace
+
+    return replace(tags, extra_actions=fx["extra_actions"], draws=fx["draws"] + fx["next_draws"],
+                   makes_sleep=fx["makes_sleep"], once=fx["once"])
 
 
 @dataclass

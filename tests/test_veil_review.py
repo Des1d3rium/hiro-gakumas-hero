@@ -197,3 +197,66 @@ def test_hp_zero_status_makes_next_card_free(monkeypatch):
     assert hp_loss(state, infl, "強気") == 10
     monkeypatch.setenv("VEIL_HP_ZERO", "1")
     assert hp_loss(state, infl, "強気") == 0
+
+
+@pytest.fixture
+def run_1f():
+    import json
+    from pathlib import Path
+
+    return json.loads((Path(__file__).resolve().parents[1] / "examples/cases/veil-1f-r1.json").read_text())
+
+
+def test_1f_memory_custom_changes_stance_and_flower(run_1f, tmp_path, monkeypatch):
+    from tools import batch_ledger as ledger
+    from hiro.brain.veil import after_play
+    from hiro.produce.veil_exam import apply_customs, read_customs
+
+    monkeypatch.setattr(ledger, "MEMORY_DIR", tmp_path)
+    monkeypatch.setenv("HIRO_VEIL_CUSTOM_MASTER", "0")
+    deck = run_1f["memory"]
+    ledger.save_memory("1f", deck, "veil")
+    ledger.save_memory("1f", {k: v for k, v in deck.items() if k != "custom"}, "veil")
+    loaded = ledger.new_ledger(ledger.load_memory("1f"))
+    exam_deck = ledger.to_deck(loaded)
+    assert exam_deck["custom"] == deck["custom"]
+    influencer = card(2, "インフルエンサー+", "スキルカード使用数追加+1スキルカードを引く", once=True)
+    fixed, = apply_customs([influencer], read_customs(exam_deck))
+    event = run_1f["influencer"]
+    before = event["stance"], event["flower"]
+    assert after_play(*before, influencer) == before
+    assert after_play(*before, fixed) == (event["after_stance"], event["after_flower"])
+
+    ledger.remove_card(loaded, influencer.name, why="换出")
+    assert all(r["card"] != influencer.name for r in ledger.to_deck(loaded)["custom"])
+
+
+def test_1f_idol_fp_gate_checks_cost_and_core_cards(run_1f, on):
+    event = run_1f["idol"]
+    pride = card(0, "プライド+", "温存に変更元気+8全力値+3レッスン中1回", once=True)
+    idol = card(3, "アイドルになります+", IDOL_TEXT, once=True)
+    state, mem = case(pride, core(1, TEACH), idol, core(4, ENTERTAINER), flower=2, actions_left=1)
+    mem.strategy_data["veil_fp"] = event["fp_before"]
+    on("IDOL_CLEAR")
+    on("IDOL_FP_GATE", False)
+    assert choose(state, mem) == "play:3"
+    on("IDOL_FP_GATE")
+    assert choose(state, mem) == "play:0"
+    mem.strategy_data["veil_fp"] = event["fp_after"]
+    state.hand.remove(pride)
+    assert choose(state, mem) == "play:3"
+    state.hand = [idol]
+    assert choose(state, mem) == "skip"
+
+
+def test_stance_unlock_switches_for_greyed_stance_card(on):
+    """codex-20261109-1-i R2 attempt1 剩 8→1：のんびり 下 一心不乱+（強気才能打）发灰，「只剩复用牌、不打」连跳 7 回合，
+    牌堆一直 6 张进不了五卡循环、敗退。VEIL_STANCE_UNLOCK：先打能切強気、打完还剩次数的 教えてあげる+，下一手清掉一心不乱+。"""
+    locked = grey(card(0, "一心不乱+", "強気の場合、使用可スキルカード使用数追加+1", once=True))
+    state, mem = case(locked, core(1, TEACH), core(2, ENTERTAINER), status="のんびり", flower=2,
+                      deck=[DRIVE, REBOUND, "眠気"])
+    state.remaining_turns = 8
+    on("STANCE_UNLOCK", False)
+    assert choose(state, mem) == "skip"
+    on("STANCE_UNLOCK")
+    assert choose(state, mem) == "play:1"

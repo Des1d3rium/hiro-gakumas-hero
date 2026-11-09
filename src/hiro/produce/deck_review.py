@@ -80,14 +80,14 @@ def _still(shoot, sleep, clock):
 
 def review_deck(*, shoot: Callable, click: Callable[[int, int], None], swipe: Callable[[int, int, int, int, float], None],
                 ocr_texts: Callable, sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.monotonic,
-                text_reader: Callable | None = None) -> dict:  # fmt: skip
+                text_reader: Callable | None = None, button: tuple[int, int] | None = None) -> dict:  # fmt: skip
     """返回 {deck, deck_size, problems, opened, closed}。deck 为 ProduceState.deck 格式或 None。
     text_reader：给了就在一览打开后改用它读（列表显示 + OCR 卡名，hiro.produce.deck_text），结果放 out["text"]，不读网格。"""
     from hiro.vision.deck import find_deck_button, is_deck_list, merge_deck_pages, read_deck_list
 
     out = {"deck": None, "deck_size": None, "problems": [], "opened": False, "closed": False}
     img = shoot()
-    btn = find_deck_button(img)
+    btn = find_deck_button(img) or button  # button：认不出图标时的固定位置（考试页，图标上压着「保留0/2」）
     if btn is None:
         out["problems"].append("选行动页底栏没找到牌组按钮")
         return out
@@ -102,7 +102,7 @@ def review_deck(*, shoot: Callable, click: Callable[[int, int], None], swipe: Ca
             break
         # 第二十局开局：点了之后一览很晚才出（02:29:59 那帧上还没有），可能第一下被转场吃掉 / 晚生效。
         # RETAP_AFTER 秒后画面还是带牌组按钮的原页面（没在加载、没开别的）就再点一次
-        if not retapped and clock() - start >= RETAP_AFTER and find_deck_button(img) == btn:
+        if not retapped and clock() - start >= RETAP_AFTER and (find_deck_button(img) or button) == btn:
             click(*btn)
             retapped = True
             out["problems"].append("一览没出来，再点了一次牌组按钮")

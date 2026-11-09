@@ -184,7 +184,8 @@ def latest_scan(batch: str, run: int) -> Path | None:
 
 
 def pick(device, batch: str, run: int, *, col: int | None = None, row: int | None = None, commit: bool = False,
-         scan_file: Path | None = None, name: str | None = None, customized: bool | None = None) -> dict:
+         scan_file: Path | None = None, name: str | None = None, customized: bool | None = None,
+         swapped: set[str] | None = None) -> dict:
     """阶段 1 按 --col 选候选；阶段 2 按 --row/--col，或按 --name [--customized 0|1] 在扫描表里自己找格。
     阶段 2 点选后读上方详情栏：卡名对得上（扫描表认错 / 详情栏模板认不出时也能核对）、有没有「レッスン中1回」，
     结果里带 customized / once，记账时用来挑同名的哪一张。"""
@@ -270,6 +271,12 @@ def pick(device, batch: str, run: int, *, col: int | None = None, row: int | Non
     if not (same_cell and same_card):
         return {"ok": False, "stage": 2, "why": "选中框和目标对不上，没点「チェンジ」", "target": info}
     verified = bool(chosen.get("card_id")) or panel["name_ok"]
+    # 本局换卡换进来的牌（swapped，账本「换卡换入」）不受「客制化过的不换」保护：那条保护的是回忆里自己客制化的牌；
+    # 换进来的牌被认成客制化多半是误认（codex-20261109-1-b：カウントダウン 卡图绿色点阵 LED 招牌被当成客制化绿字）
+    base = lambda n: (n or "").rstrip("+＋")  # noqa: E731
+    if customized_seen and base(info.get("name")) in {base(n) for n in swapped or ()}:
+        customized_seen = False
+        info["customized_ignored"] = "本局换卡换进来的牌"
     if commit and (not (target.get("card_id") or name) or customized_seen or not verified):
         # 认不出的卡 / 客制化过的卡不换（AGENTS：认不出就キャンセル，不猜）；扫描表认不出、也没给 --name 时选中框读到什么都不算核对
         #（2026-11-07 验证局 1-i：扫描表 r1c0 是「?」，原来 same_card 直接放行，差点把客制化过的巻き返し+换掉）

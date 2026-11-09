@@ -118,8 +118,11 @@ class ExamMemory:
         if self.last_remaining is not None and remaining > self.last_remaining and self.extra_turns:
             self.extra_turns -= 1  # 加的回合已经体现在剩余回合数里
         elif not new_turn and remaining == self.last_remaining and self.extra_turns and (
-                self.turn_over or (self.actions_left < 1 and hand is not None and self.expected_hand is not None
-                                   and sorted(hand) != sorted(self.expected_hand))):
+                (self.turn_over and (hand is None or self.expected_hand is None or sorted(hand) != sorted(self.expected_hand)))
+                or (self.actions_left < 1 and hand is not None and self.expected_hand is not None
+                    and sorted(hand) != sorted(self.expected_hand))):
+            # 手牌和出牌后预期的一样 = 没重新发牌、还在同一回合（codex-20261109-1-m R1 T5：喝过初星湯，カウントダウン 后账本
+            # 次数 0、turn_over，实际还有一次出牌；原来只看 turn_over 就换回合，牌堆层按回合末弃手牌算错、trust 坏账）
             # 出牌次数用完只看账本不够（VEIL 账本不记留下的再动层数，会少记），还要手牌和出牌后预期的不一样（重新发了牌）
             # 1-h R1 最后一回合喝初星湯：多出的一回合画面剩余回合仍是 1，没换回合 → 沿用上回合的循环记录停机
             self.extra_turns -= 1

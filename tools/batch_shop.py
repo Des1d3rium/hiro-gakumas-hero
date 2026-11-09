@@ -157,6 +157,10 @@ def next_refresh_price(paid: int, tens: int) -> int:
 
 
 def _refresh_price(fields: dict) -> int | None:
+    if "interval" not in fields and "rerolls_left" in fields:
+        # 相談的「リフレッシュ」免费、有次数（角标「あと N回」），没有标价（codex-20261109-1-c：原来读成 None 直接停「P 不够刷新」）
+        left = fields.get("rerolls_left")
+        return 0 if isinstance(left, int) and left > 0 else None
     ref = ((fields.get("interval") or {}).get("refresh") if "interval" in fields else fields.get("refresh")) or {}
     return ref.get("price") if isinstance(ref, dict) else None
 
@@ -209,6 +213,8 @@ def auto(device, *, free_slots, on_buy, max_refresh: int = 10, make_room=None, r
         price = read if read is not None else predicted  # 读不到就用价目表推出来的
         if free_slots() <= 0:
             return {"ok": True, "stop": "饮料栏已满", "page": kind, "steps": steps, "p": p}
+        if kind == "consult" and price is None:
+            return {"ok": True, "stop": "相談刷新次数用完", "page": kind, "steps": steps, "p": p}
         if price is None or p is None or p - reserve_p < price:
             return {"ok": True, "stop": f"P 不够刷新（P {p}，刷新 {price}）", "page": kind, "steps": steps, "p": p}
         if refreshes >= max_refresh:
@@ -221,7 +227,7 @@ def auto(device, *, free_slots, on_buy, max_refresh: int = 10, make_room=None, r
         steps.append({"op": "refresh", "price": price, "p_before": p, "ok": res.ok, "why": res.error})
         expect = p - price
         tens += price == 10
-        predicted = next_refresh_price(price, tens)
+        predicted = next_refresh_price(price, tens) if kind == "interval" else None
         if not res.ok:
             return {"ok": False, "why": f"刷新失败：{res.error}", "steps": steps}
         time.sleep(0.3)

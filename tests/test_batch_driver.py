@@ -430,3 +430,26 @@ def test_interval_end_without_dialog_then_exam_page_counts_as_done():
     assert step == {"command": "exam", "round": 2, "deck": None}
     driver = s["active"]["driver"]
     assert driver["stage"] == "r2" and "pending" not in driver and driver["resolved"][-1]["applied"]
+
+
+def test_interval_end_straight_into_commu_counts_as_done(monkeypatch):
+    """codex-20261109-1-c：点「終了」后没截到确认框、直接进了 R2 前的剧情。看到剧情页（左上不再是インターバル）就算成功。"""
+    import batch_hif as B
+    from hiro.produce import interval
+    from hiro.vision import pages, hif, quick
+    frame, taps = {"value": "interval"}, []
+
+    def click(*xy):
+        taps.append(xy)
+        frame["value"] = "commu"
+    device = NS(screenshot=lambda: frame["value"], click=click)
+    monkeypatch.setattr(interval, "on_interval", lambda img, _: img == "interval")
+    monkeypatch.setattr(pages, "dialog_header", lambda _: None)
+    monkeypatch.setattr(hif, "is_hif_exam", lambda img: False)
+    monkeypatch.setattr(pages, "classify_page", lambda _: None)
+    monkeypatch.setattr(quick, "quick_page", lambda img: {"page": "commu"} if img == "commu" else None)
+    clock = iter(range(20))
+    monkeypatch.setattr(B.time, "time", lambda: next(clock))
+    monkeypatch.setattr(B.time, "sleep", lambda _: None)
+    assert B.interval_end(device) == {"ok": True, "via_commu": True}
+    assert taps == [B.BTN.SHOP_END]

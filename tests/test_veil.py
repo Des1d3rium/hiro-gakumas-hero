@@ -515,6 +515,21 @@ def test_fp_grey_by_stale_frame_only_for_fullpower_cards():
     assert fp_grey_by_stale_frame(state, None) == []  # 账本不知道：照画面
 
 
+def test_stance_grey_by_stale_frame():
+    """1-h R1 剩 7：教えて 切強気的动画中途截帧，一心不乱+ 还是灰 → 先换帧重读，不按「只剩复用牌」Skip。"""
+    from dataclasses import replace
+
+    from hiro.produce.veil_exam import stance_grey_by_stale_frame
+
+    isshin = replace(card(0, "一心不乱+", "強気の場合、使用可温存に変更"), available=False)
+    counted = replace(card(1, "タフネス+", "温存になった回数が2回以上の場合、使用可"), available=False)
+    plain = replace(card(2, "何か", "パラメータ+5"), available=False)
+    state, _ = case(isshin, counted, plain, status="強気")
+    assert stance_grey_by_stale_frame(state) == [isshin]  # 计数条件、无条件发灰的不算
+    state, _ = case(isshin, status="温存")
+    assert stance_grey_by_stale_frame(state) == []  # 姿态不满足：本来就灰
+
+
 def test_draw_last_plays_plain_extra_action_before_drawing_one(monkeypatch):
     """使用者 2026-11-07（验证局 R1 剩 7 回合）：满手时先打不抽牌的再动牌（みずたまりスキップ），带抽牌的（フルスロットル+）留后。"""
     full = card(0, "フルスロットル+", "温存に変更スキルカード使用数追加+1スキルカードを3枚引く", once=True)
@@ -868,20 +883,15 @@ def test_clear_skips_reusable_when_no_once_card_follows(monkeypatch):
     assert choose(state, mem) == "play:0"
 
 
-def test_cycle_keeps_warm_instead_of_last_reusable(monkeypatch):
-    """实机 1-g R2 再挑戦 剩 7：アイドルになります+ 先打，OD → 教えて → 巻き返し 进温存后又打 エンターテイナー+，
-    补的次数没牌接、温存白丢。CLEAR_FIRST：温存下最后一张复用牌后面没牌可接时 Skip。"""
+def test_cycle_plays_last_reusable_after_idol_first(monkeypatch):
+    """循环回合按顺序打完：アイドルになります+ 先打、巻き返し 进温存后，最后一张 エンターテイナー+ 照打
+    （使用者 2026-11-08：留温存只属于清牌阶段；1-g R1 剩 4 曾因此少打一张）。"""
     monkeypatch.setenv("VEIL_CLEAR_FIRST", "1")
     state, mem = case(card(0, ENTERTAINER, "強気に変更パラメータ+5"), deck=[], status="温存", flower=2)
     state.remaining_turns = 7
     mem.turn = state.turn
     mem.strategy_data["veil_cycle"] = {"turn": state.turn, "flower": 1, "fifth": "アイドルになります+", "idol_first": True}
     mem.this_turn = [f"打 {n}" for n in ("アイドルになります+", DRIVE, TEACH, REBOUND)]
-    assert choose(state, mem) == "skip"
-    state.remaining_turns = 1  # 最后一回合照打
-    assert choose(state, mem) == "play:0"
-    monkeypatch.setenv("VEIL_CLEAR_FIRST", "0")
-    state.remaining_turns = 7
     assert choose(state, mem) == "play:0"
 
 
@@ -1010,7 +1020,8 @@ def test_star_turns_nonbiri_at_turn_start():
     assert start_turn("強気", 0) == ("強気", 0)
     assert start_turn("強気", None) == ("強気", None)
     heart = card(1, "心・技・体", "強気2段階目に変更パラメータ+7", once=True)
-    assert after_play(NEUTRAL, 3, heart) == ("強気", 2)
+    assert after_play(NEUTRAL, 3, heart) == ("強気", 3)  # 指針なし 切強気不推夜空（1-g R2 画面核对）
+    assert after_play(NEUTRAL, 1, heart) == ("強気", 1)
 
 
 def test_hand_swap_card_played_last(monkeypatch):
@@ -1075,6 +1086,12 @@ def test_extra_turn_soup_starts_new_turn_at_same_remaining():
     mem3.record_skip()
     assert not mem3.observe_turn(4)
     assert mem3.observe_turn(3)
+    mem4 = ExamMemory("r1")  # codex-20261109-1-m R1 T5：喝初星湯后账本 turn_over，实际还有次数、手牌和预期一样 → 同一回合
+    mem4.observe_turn(5)
+    mem4.record_drink(DrinkView(0, "初星湯", "初星湯", "ターン追加+1"))
+    mem4.turn_over, mem4.actions_left, mem4.expected_hand = True, 0, ["眠気", TEACH]
+    assert not mem4.observe_turn(5, [TEACH, "眠気"])
+    assert mem4.observe_turn(5, ["オーバードライブ+", "巻き返し+"]) and mem4.turn == 2
 
 
 @pytest.mark.parametrize("name, level, hp, cost, expected_loss, expected", [
@@ -1668,3 +1685,17 @@ def test_cycle_fifth_in_hand_but_unplayable_ends_turn():
     mem.strategy_data["veil_fp"] = 3  # 全力値够还发灰：原因不明，照旧停机
     with pytest.raises(ResumeBlocked, match="第五张尚未打出"):
         choose(state, mem)
+
+
+def test_cycle_redrawn_card_after_drink_is_not_unlanded():
+    """循环里打出 OD 后喝センブリソーダ，洗牌把 OD 抽回手里（codex-20261109-1-b R1 T6）：不是没打出，照顺序打下一张。"""
+    order = [DRIVE, REBOUND, TEACH, ENTERTAINER]
+    cards = [card(i, name) for i, name in enumerate(order)]
+    state, mem = case(*cards, deck=[])
+    assert choose(state, mem) == "play:0"
+    mem.this_turn = [f"打 {DRIVE}"]
+    state.hand = cards  # OD 还在手里、上一步是出牌：确认不了打出
+    with pytest.raises(ResumeBlocked, match="仍在手中"):
+        choose(state, mem)
+    mem.this_turn = [f"打 {DRIVE}", "喝 センブリソーダ"]  # 之后喝过饮料：手里这张 OD 是重新抽到的
+    assert choose(state, mem) == "play:1"

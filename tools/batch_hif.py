@@ -208,6 +208,8 @@ def watch_gap(default: float) -> float:
 SETTLE_STUCK = 4  # 连点这么多次画面都没变：整帧读一次（可能是认不出的按钮页）
 SETTLE_FAST_MAX = 200  # 只点不读最多这么多下（约 1 分钟多），之后全部回到逐步读
 SETTLE_POPUP_TAP = (360, 1170)  # 结算后活动弹窗底部按钮（1-e 代理手点这里回到首页）
+# 5s 没等到确认框后再等这么久，只认剧情页 / R2 考试页（codex-20261109-1-d：第 5.7s 才进剧情，又报了 ok:false）
+INTERVAL_COMMU_EXTRA = 7.0
 INTERVAL_GO = (513, 1160)  # 「インターバル終了確認」右「本戦へ」（hiro.produce.interval 实测）
 
 
@@ -231,17 +233,27 @@ def interval_end(device, timeout: float = 15.0, *, guarded: bool = False) -> dic
         # Briefing has no round number. Leaving verified interval into finals briefing establishes R2.
         return bool(page and page[0] == "HIF_EXAM_BRIEFING" and page[1].get("finals") and page[1].get("complete"))
 
+    def left_to_commu(img):
+        from hiro.vision.quick import quick_page
+
+        try:
+            page = quick_page(img)
+        except Exception:  # noqa: BLE001
+            return False
+        return page is not None and page["page"] == "commu" and not interval.on_interval(img, ocr_boxes)
+
     if not interval.on_interval(device.screenshot(), ocr_boxes):
         return {"ok": False, "why": "左上不是「インターバル」，不点"}
     device.click(*BTN.SHOP_END)
     deadline = time.time() + 5
-    while dialog_header(device.screenshot()) is None:
-        if guarded:
-            # Opt-in driver accepts only positively recognized R2 transition, not a missing title.
-            img = device.screenshot()
-            if r2_transition(img):
-                return {"ok": True, "direct_r2": True}
-        if time.time() >= deadline:
+    while dialog_header(img := device.screenshot()) is None:
+        if r2_transition(img):
+            return {"ok": True, "direct_r2": True}
+        if left_to_commu(img):
+            # codex-20261109-1-c：点「終了」后直接进了 R2 前的剧情（没截到确认框，可能被快进吃掉），
+            # 原来 5s 后报 ok:false，watch 接着连点剧情照常进了 R2
+            return {"ok": True, "via_commu": True}
+        if time.time() >= deadline + INTERVAL_COMMU_EXTRA:
             return {"ok": False, "why": "点了「終了」，5s 内没出确认框"}
         time.sleep(0.3)
     if guarded:
@@ -284,16 +296,41 @@ def shop_overlay(kind, page, boxes, img) -> bool:
     if kind not in SHOP_PASS or page is None or page["page"] != "ACQUIRE" or not acquire_bar(img):
         return False
     labels = ["".join(unicodedata.normalize("NFKC", t).split()) for t, _, _ in boxes]
-    if any(t == "交換する" for t in labels):  # 按钮整词；标题「Pポイントと交換するものを…」也含这几个字
-        return False
     if any(w in t for t in labels for w in ("強化や削除", "交換確認", "インターバル", "ジュエル")):
         return False
+    if any(t == "交換する" for t in labels):  # 按钮整词；标题「Pポイントと交換するものを…」也含这几个字
+        # 获得演出的星星层半透明，「交換する」也读得出（codex-20261109-1-c 相談第 2 瓶）：右下「終了」被压暗才是演出，
+        # 选中饮料时「終了」保持原亮度
+        return end_dimmed(img)
     return True
+
+
+def end_dimmed(img) -> bool:
+    """相談右下白色「終了」被获得演出的星星层压暗（主画面 V≈224，演出中 V≈181）。"""
+    from hiro.produce.shop import END_PILL, END_SAT_MAX
+    from hiro.produce.ops import button_sv
+
+    sat, val = button_sv(img, END_PILL)
+    return sat <= END_SAT_MAX and 160 <= val <= 205
 
 
 def acquire_banner(boxes) -> bool:
     """物品条下的效果说明行：中心 y 在 905–1070、左缘 x < 170、宽 > 150。选择页这一带只有图标，没有这种长文字行。"""
     return any(905 <= (b[1] + b[3]) / 2 <= 1070 and b[0] < 170 and b[2] - b[0] > 150 for _, _, b in boxes)
+
+
+def reward_close(boxes):
+    """结算后「受取完了」奖励弹窗（「以下の報酬を受け取りました。」+ 底部「閉じる」）：只是领取完成的通知，点「閉じる」。
+    奖励里有「ジュエル」（领到的，不是要花），原来命中危险词「ジュエル」停下（codex-20261109-1-b 结算）。
+    弹窗里有任何要选择 / 确认的字样（購入・交換・使用・再挑戦 等）不点。"""
+    labels = ["".join(unicodedata.normalize("NFKC", t).split()) for t, _, _ in boxes]
+    if not (any("受取完了" in t for t in labels) and any("報酬を受け取りました" in t for t in labels)):
+        return None
+    if any(re.search(r"購入|交換|使用|使う|再挑戦|破棄|リタイア|キャンセル", t) for t in labels):
+        return None
+    hit = next((b for t, _, b in boxes if "".join(unicodedata.normalize("NFKC", t).split()) == "閉じる"
+                and (b[1] + b[3]) / 2 >= 700), None)
+    return None if hit is None else ((hit[0] + hit[2]) // 2, (hit[1] + hit[3]) // 2)
 
 
 def result_next(boxes, dialog: bool):
@@ -819,6 +856,8 @@ def auto_decide(img, *, ocr, quick, fallback, header):
         return None if step[1] is None else step
     if step := debug_retry_step(boxes, dialog, img):
         return None if step == "wait" else step
+    if tap := reward_close(boxes):
+        return "reward_close", tap
     if tap := result_next(boxes, dialog):
         return None if tap == "wait" else ("result_next", tap)
     if step := briefing_step(boxes, dialog):
@@ -1401,13 +1440,28 @@ def change(state, args, *, persist=None):
         sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa"), str(ROOT / "tools")]
         import batch_ledger as L
 
-        deck = json.loads(args.deck.read_text(encoding="utf-8"))
+        if args.scan:
+            # 使用者 2026-11-08：开局直接打开牌组一览、切到列表显示，同时读卡名、卡图角标和绿字效果，认出客制化后入账
+            from hiro.device import connect
+
+            device = connect("maatools")
+            try:
+                deck = memory_scan(device)
+            finally:
+                device.stop()
+            if not deck.get("ok"):
+                return deck
+        elif args.deck is None:
+            raise ValueError("memory-save 要 --deck <JSON> 或 --scan（开局从牌组一览读）")
+        else:
+            deck = json.loads(args.deck.read_text(encoding="utf-8"))
         if state["preflight"]["idol"] == VEIL_IDOL:
             from hiro.produce.veil_exam import validate_deck
 
             validate_deck(deck)
         path = L.save_memory(args.memory, deck, state["preflight"]["idol"], overwrite=args.overwrite)
-        return {"ok": True, "memory": args.memory, "file": str(path), "size": len(deck["cards"])}
+        return {"ok": True, "memory": args.memory, "file": str(path), "size": len(deck["cards"]),
+                **({k: deck[k] for k in ("once", "rebound_repeatable", "custom", "evidence") if k in deck} if args.scan else {})}
     if cmd == "begin":
         if active or len(state["completed"]) == state["total"]:
             raise ValueError("已有未结算局，或已达到总次数")
@@ -1564,11 +1618,19 @@ def change(state, args, *, persist=None):
                 free = (lambda: ledger["drinks"].count(None)) if ledger is not None else (lambda: 4)
                 out = batch_shop.auto(device, free_slots=free, on_buy=on_buy, max_refresh=args.max_refresh, make_room=make_room,
                                       reserve_p=getattr(args, "reserve_p", 0))
-                if out.get("ok") and ledger is not None and batch_rules.get("shop.deck_sync", True):
-                    # 使用者 2026-11-07：退出商店 / 轮间前记账——补给完、按「終了」前整副牌组对账（相談在 R1 前，轮间在 R2 前）
-                    where = {"interval": "R2 前（轮间）"}.get(out.get("page"), "R1 前（相談）")
+                if (out.get("ok") and ledger is not None and batch_rules.get("shop.deck_sync", True)
+                        and out.get("page") != "interval"):
+                    # 只在第一次 shop-auto（相談，R1 前）后对账，防漏记事件给的卡。轮间不再对：R2 开考时还会再对一次
+                    # （exam.r2_deck_sync），轮间这次重复，1-g 还因为对出一条真强化让 driver 卡在轮间（使用者 2026-11-09）
+                    where = "R1 前（相談）"
                     try:
                         out["deck_sync"] = deck_sync(device, ledger, why=where)
+                        if not out["deck_sync"].get("ok"):
+                            # 使用者 2026-11-08：第一次 shop-auto 后一定要对完账（防漏记事件给的卡）。图标读法没读全时
+                            # 改用列表文字再读一遍（1-e / 1-f 图标对账多次失败，文字读法都读全了）
+                            first = out["deck_sync"]
+                            out["deck_sync"] = deck_sync(device, ledger, why=where, text=True)
+                            out["deck_sync"]["icon_try"] = {k: first.get(k) for k in ("ok", "why", "problems")}
                     except Exception as e:  # noqa: BLE001  对账失败不挡补给
                         out["deck_sync"] = {"ok": False, "why": f"deck-sync 出错：{e}"}
                     if (out["deck_sync"] or {}).get("diff") is not None:
@@ -1602,8 +1664,11 @@ def change(state, args, *, persist=None):
                 return out
             raw = getattr(args, "customized", None)  # watch 的 prep 自己拼 Namespace，可能不带新参数
             customized = None if raw is None else raw == "1"
+            import batch_prep
+
             out = batch_change.pick(device, args.batch, args.run, col=args.col, row=args.row, commit=args.commit,
-                                    scan_file=args.scan, name=getattr(args, "name", None), customized=customized)  # fmt: skip
+                                    scan_file=args.scan, name=getattr(args, "name", None), customized=customized,
+                                    swapped=set(batch_prep.swapped_in(ledger)))  # fmt: skip
             if ledger is not None and out.get("ok"):
                 if out.get("stage") == 1:
                     ledger["pending_add"] = {"name": out["picked"]["name"], "upgrade": out["picked"].get("upgrade"),
@@ -1654,6 +1719,23 @@ def change(state, args, *, persist=None):
                 print(json.dumps({"action": "drink_sync", "round": args.round, "diff": synced}, ensure_ascii=False), file=sys.stderr)
             snaps[str(args.round)] = list(ledger["drinks"])
             persist()
+            if args.round == 2 and batch_rules.get("exam.r2_deck_sync", True) and args.deck is None:
+                # 使用者 2026-11-08：R2 开考时对一次账，找 H.I.F応援棒 开考补进牌堆的「基本」卡（名字账本不知道）。
+                # 考试页的一览按 保留 / 手札 / 山札 分组，只能用列表文字读；读到的新卡补进账本，牌组清单按账本重算
+                from hiro.device import connect
+
+                dev = connect("maatools")
+                try:
+                    sync = deck_sync(dev, ledger, why="R2 开考", text=True, in_exam=True)
+                except Exception as e:  # noqa: BLE001  对账失败不挡考试（HIRO_VEIL_HIF_FILL 的占位照旧兜底）
+                    sync = {"ok": False, "why": f"deck-sync 出错：{e}"}
+                finally:
+                    dev.stop()
+                print(json.dumps({"action": "deck_sync", "round": 2, "ok": sync.get("ok"), "diff": sync.get("diff"),
+                                  "why": sync.get("why") or sync.get("problems")}, ensure_ascii=False), file=sys.stderr)
+                if sync.get("diff") is not None:
+                    persist()
+                    deck = L.to_deck(ledger)
         if set_env := attempt_env(os.environ.get("HIRO_BATCH_ATTEMPT_ENV"), args.round, active):
             os.environ.update(set_env)
             print(json.dumps({"action": "attempt_env", "round": args.round, "env": set_env}, ensure_ascii=False), file=sys.stderr)
@@ -1754,7 +1836,7 @@ def exam_drink_sync(ledger, round_no, read=None) -> list[str]:
     return L.sync_drinks(ledger, observed, why=f"R{round_no} 开考前读饮料栏")
 
 
-def deck_sync(device, ledger, *, why: str) -> dict:
+def deck_sync(device, ledger, *, why: str, text: bool | None = None, in_exam: bool = False) -> dict:
     """第二层（使用者 2026-11-07）：在有牌组按钮的培育页（相談 / 选行动页 / 轮间）打开「所持スキルカード」一览，
     整副读全后和账本对账（batch_ledger.sync_deck：漏记的补、强化差「+」的改、多出的只记）。读不全不改账本。"""
     import batch_ledger as L
@@ -1768,7 +1850,7 @@ def deck_sync(device, ledger, *, why: str) -> dict:
         return {"ok": False, "why": "本局没有账本"}
     from hiro.vision.hif import is_hif_exam
 
-    text = os.environ.get("HIRO_DECK_TEXT") == "1"
+    text = os.environ.get("HIRO_DECK_TEXT") == "1" if text is None else text
     if is_hif_exam(device.screenshot()) and not text:
         # 考试里的一览按 保留 / 手札 / 山札 / 捨札 / 除外 分组，网格读法对不上（1-e R2 出牌页跑过：滑过头、6 张认不出）
         return {"ok": False, "why": "考试页的牌组一览是分组的，网格读法不能对账；在相談 / 选行动页 / 轮间跑，或开 HIRO_DECK_TEXT=1", "diff": None}
@@ -1795,7 +1877,7 @@ def deck_sync(device, ledger, *, why: str) -> dict:
         if not out["ok"]:
             return out  # 读不全不改账本
         screen = [(n, _once_by_name(n)) for n in t["cards"]]
-        out["diff"] = L.sync_deck(ledger, screen, why=why)
+        out["diff"] = L.sync_deck(ledger, screen, why=why, upgrades=not in_exam)
         out["cards"] = len(screen)
         return out
     out = {"ok": r["deck"] is not None and r["closed"], "opened": r["opened"], "closed": r["closed"],
@@ -1811,9 +1893,58 @@ def deck_sync(device, ledger, *, why: str) -> dict:
             out["problems"].append(f"主数据查不到 {c.get('card_id')}+{c.get('upgrade')}，不对账")
             return out
         screen.append((name, is_once(c["card_id"])))
-    out["diff"] = L.sync_deck(ledger, screen, why=why)
+    out["diff"] = L.sync_deck(ledger, screen, why=why, upgrades=not in_exam)
     out["cards"] = len(screen)
     return out
+
+
+def memory_scan(device) -> dict:
+    """回忆牌组从实机读（memory-save --scan）：打开「所持スキルカード」一览 → 列表显示逐屏读（hiro.produce.deck_text）→
+    每屏同时读卡图角标和绿字（hiro.produce.deck_customs）→ 牌组清单 {cards, once, rebound_repeatable, custom, evidence}。
+    卡名没读全、客制化有认不准的卡都不存（ok=False + problems），交代理核对。"""
+    from hiro.produce import deck_customs, deck_review, deck_text
+    from hiro.produce.ops import ocr_boxes
+
+    deck_review.SAVE_DIR = ROOT / "reports" / "live" / "deck-list"
+    saved: dict = {}
+
+    def save(imgs):
+        import cv2
+
+        saved["stamp"] = time.strftime("%Y%m%d-%H%M%S")
+        deck_review.SAVE_DIR.mkdir(parents=True, exist_ok=True)
+        for i, im in enumerate(imgs):
+            cv2.imwrite(str(deck_review.SAVE_DIR / f"{saved['stamp']}-{i:02d}.jpg"), im)
+
+    def ocr_texts(img):
+        return [(t, ((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)) for t, _, b in ocr_boxes(img)]
+
+    swipe = lambda x1, y1, x2, y2, d: device.swipe(x1, y1, x2, y2, d)  # noqa: E731
+    reader = lambda: deck_text.read_list(shoot=device.screenshot, click=device.click, swipe=swipe, ocr_boxes=ocr_boxes,  # noqa: E731
+                                         view_diff=deck_review._view_diff, save=save)
+    r = deck_review.review_deck(shoot=device.screenshot, click=device.click, swipe=swipe, ocr_texts=ocr_texts, text_reader=reader)
+    text = r.get("text") or {}
+    imgs = text.pop("imgs", None) or []
+    out = {"ok": False, "problems": list(r["problems"]), "opened": r["opened"], "closed": r["closed"]}
+    if not (text.get("complete") and r["closed"] and imgs):
+        out["problems"].append("一览没读全或没关掉，不存")
+        return out
+    cards = text["cards"]
+    read = deck_customs.read_customs(imgs, ocr_boxes)
+    if sorted(read["names"]) != sorted(cards):
+        # 同名第几张（copy）按块的拼接顺序数：块序列和卡名序列对不上时 copy 可能错位
+        read["problems"].append(f"客制化读到的卡（{len(read['names'])} 张）和卡名列表（{len(cards)} 张）对不上")
+    if read["problems"]:
+        out["problems"] += read["problems"]
+        out["custom"] = read["custom"]
+        return out
+    removed = {c["card"] for c in read["custom"] if "制限削除" in c["item"]}
+    once = sorted({n for n in cards if n not in removed and _once_by_name(n)})
+    rebound = next((n for n in cards if n.rstrip("+") == "巻き返し"), None)
+    return {"ok": True, "cards": cards, "once": once, "custom": read["custom"], "customs_known": True,
+            "rebound_repeatable": None if rebound is None else rebound in removed,
+            "evidence": f"memory-save --scan：牌组一览列表显示 {len(imgs)} 屏 reports/live/deck-list/{saved.get('stamp')}-*.jpg；"
+                        f"客制化按卡图角标 + 绿字认"}  # fmt: skip
 
 
 def _once_by_name(name: str) -> bool | None:
@@ -1877,7 +2008,7 @@ STAY = _env_flag("HIRO_WATCH_STAY", "watch.stay")  # 常驻：停点不退出（
 HELD = {"reason": None, "prep": None}  # prep：(停点, 已试次数, 上次试的时刻)
 PREP_TRIES = 3
 PREP_RETRY_S = 1.5
-PREP_RETRY_KINDS = ("领取选择", "差し入れ 选饮料")  # 重试最多重新选中一下候选；换卡等会先动手再失败的停点仍只试一次
+PREP_RETRY_KINDS = ("领取选择", "差し入れ 选饮料", "行动页需要代理选择")  # 重试最多重新选中一下候选；换卡等会先动手再失败的停点仍只试一次
 
 
 def replan_due(reason: str, resolved_n: int) -> bool:
@@ -1894,9 +2025,11 @@ def prep_due(reason: str, now: float) -> bool:
     last = HELD["prep"]
     if last is None or last[0] != reason:
         HELD["prep"] = (reason, 1, now)
+        HELD["prep_consult"] = False  # 相談重试只对同一停点有效
         return True
     _, tries, at = last
-    if reason.split("：")[0] not in PREP_RETRY_KINDS or tries >= PREP_TRIES or now - at < PREP_RETRY_S:
+    retryable = reason.split("：")[0] in PREP_RETRY_KINDS or HELD.get("prep_consult")
+    if not retryable or tries >= PREP_TRIES or now - at < PREP_RETRY_S:
         return False
     HELD["prep"] = (reason, tries + 1, now)
     return True
@@ -1915,8 +2048,11 @@ def prep_step(path, state, *, guarded=False):
         from batch_runtime import GuardedDevice
         device = GuardedDevice(device)
     try:
-        return batch_prep.handle(device, ocr_boxes, change, state, path.stem, state["active"]["run"],
+        done = batch_prep.handle(device, ocr_boxes, change, state, path.stem, state["active"]["run"],
                                  persist=lambda: save(path, state), log=lambda m: print(m, file=sys.stderr))
+        # 相談懒处理没等到主画面就绪：同一停点允许再试（PREP_TRIES 次），不然停点不变就再也不交
+        HELD["prep_consult"] = bool(getattr(batch_prep, "RETRY", {}).get("consult"))
+        return done
     except Exception as e:  # noqa: BLE001 —— 固定流程出错就按原样停下交给代理
         if guarded:
             raise  # 调度器保留 pending，不能在部分执行失败后继续点动画
@@ -2138,7 +2274,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scan", type=Path, help="指定 change-scan 的 JSON，默认本局最新一份")
     p = sub.add_parser("memory-save", help="本战开局：把这份回忆带来的整副牌组存进回忆栏（reports/memories/）")
     p.add_argument("--memory", required=True, help="回忆名（自定，整个批次和以后的批次复用）")
-    p.add_argument("--deck", type=Path, required=True, help="牌组清单 JSON（同 deck-base 格式，开局牌组一览核对）")
+    p.add_argument("--deck", type=Path, help="牌组清单 JSON（同 deck-base 格式，开局牌组一览核对）")
+    p.add_argument("--scan", action="store_true",
+                   help="不给 --deck：在有牌组按钮的页面打开一览、切列表显示，读卡名 / 一次性 / 客制化（角标 + 绿字）后存")
     p.add_argument("--overwrite", action="store_true")
     p = sub.add_parser("memory-load", help="开局：从回忆栏载入整副牌组，建本局账本")
     p.add_argument("run", type=int)

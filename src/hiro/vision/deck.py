@@ -655,7 +655,20 @@ def _item_from_name(text: str) -> dict | None:
         if t in _pitems_by_name():
             ids = _pitems_by_name()[t]
             return {"kind": "pitem", "pitem_id": ids[0] if len(ids) == 1 else None, "pitem_ids": ids, "name": t}
+    # 小写假名常被 OCR 读成大写或反过来（codex-20261109-1-c 相談：「初星ホエイプロテイン」读成「…プロティン」）：
+    # 大小写折叠后唯一命中一种饮料才算
+    for t in (text, text[1:]):
+        hits = [n for n in _drinks_by_name() if _fold_kana(n) == _fold_kana(t)] if t else []
+        if len(hits) == 1:
+            return {"kind": "drink", "drink_id": _drinks_by_name()[hits[0]], "name": hits[0]}
     return None
+
+
+_SMALL_KANA = str.maketrans("ァィゥェォャュョッヮヵヶぁぃぅぇぉゃゅょっ", "アイウエオヤユヨツワカケあいうえおやゆよつ")
+
+
+def _fold_kana(text: str) -> str:
+    return text.translate(_SMALL_KANA)
 
 
 def read_acquire_popup(img: MatLike, art: bool = True) -> dict | None:

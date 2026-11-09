@@ -122,9 +122,7 @@ def change_out_card(ledger: dict | None) -> str | None:
     if not ledger or not ledger.get("cards"):
         return None
     base = lambda n: _norm(n or "").rstrip("+＋")  # noqa: E731
-    order = [base(n) for n in batch_rules.get("prep.change_out", list(BASIC_OUT))]
-    if batch_rules.get("prep.change_out_swapped", True):
-        order += [base(n) for n in swapped_in(ledger)]
+    order = change_order(ledger)
     for want in order:
         for name in ledger["cards"]:
             if base(name) == want:
@@ -138,9 +136,7 @@ def change_out_upgrade(ledger: dict | None) -> int | None:
     if not ledger or not ledger.get("cards"):
         return None
     base = lambda n: _norm(n or "").rstrip("+＋")  # noqa: E731
-    order = [base(n) for n in batch_rules.get("prep.change_out", list(BASIC_OUT))]
-    if batch_rules.get("prep.change_out_swapped", True):
-        order += [base(n) for n in swapped_in(ledger)]
+    order = change_order(ledger)
     for want in order:
         for name in ledger["cards"]:
             if base(name) == want:
@@ -177,6 +173,21 @@ def fp_rank(ledger: dict | None, veil: bool, *, change: bool = False):
     return rank
 
 
+def change_order(ledger: dict | None) -> list[str]:
+    """换卡阶段 2 换出的先后（去「+」的基名）：prep.change_out 的卡 → 本局之前换进来的卡（新的在前）。
+    prep.change_out_once（默认开，使用者 2026-11-08：「我只要变一次happy，剩下一次还是变happy变得卡，不是变两次happy」）：
+    change_out 里的每个名字本局只换出一次，换过就跳到换进来的卡。"""
+    base = lambda n: _norm(n or "").rstrip("+＋")  # noqa: E731
+    order = [base(n) for n in batch_rules.get("prep.change_out", list(BASIC_OUT))]
+    if batch_rules.get("prep.change_out_once", True) and ledger:
+        done = {base(e.get("card")) for e in ledger.get("log", [])
+                if e.get("op") == "remove" and str(e.get("why", "")).startswith("换卡换出")}
+        order = [n for n in order if n not in done]
+    if batch_rules.get("prep.change_out_swapped", True):
+        order += [base(n) for n in swapped_in(ledger)]
+    return order
+
+
 def swapped_in(ledger: dict | None) -> list[str]:
     """本局换卡换进来的卡（账本 log 里 why 以「换卡换入」开头的 add），新的在前。"""
     if not ledger:
@@ -189,10 +200,11 @@ def pick_change_out(cards: list[dict], ledger: dict | None = None) -> tuple[int,
     """换卡阶段 2：先换出 N 卡（prep.change_out），再换出本局之前从 N 卡换进来的牌，再换出同名重复卡里没客制化的那张；
     客制化过的卡一律不换，挑不到返回 None（停下）。"""
     base = lambda n: _norm(n or "").rstrip("+＋")  # noqa: E731
-    order = [base(n) for n in batch_rules.get("prep.change_out", list(BASIC_OUT))]
-    if batch_rules.get("prep.change_out_swapped", True):
-        order += [base(n) for n in swapped_in(ledger)]
-    free = [c for c in cards if c.get("name") and not c.get("customized")]  # 客制化过的卡一律不换
+    order = change_order(ledger)
+    # 客制化过的卡一律不换——本局换卡换进来的牌除外（保护的是回忆里自己客制化的牌；换进来的被认成客制化多半是误认，
+    # codex-20261109-1-b：カウントダウン 卡图绿色点阵 LED 招牌被当成客制化绿字，第二次换卡停下）
+    mine = {base(n) for n in swapped_in(ledger)}
+    free = [c for c in cards if c.get("name") and (not c.get("customized") or base(c["name"]) in mine)]
     for want in order:
         for c in free:
             if base(c["name"]) == want:
@@ -253,6 +265,63 @@ def _center(b):
     return (b[0] + b[2]) // 2, (b[1] + b[3]) // 2
 
 
+CONSULT_READY_WAIT_S = 12.0  # 懒处理：等相談主画面就绪最多这么久（两瓶获得演出约 3s）
+CONSULT_READY_GAP_S = 0.8
+RETRY = {"consult": False}  # 本次 handle 是「相談没等到就绪」返回 None：watch 同一停点可以再试（不占普通停点的只试一次）
+
+
+def consult_lazy() -> bool:
+    """相談懒处理（使用者 2026-11-08「等到画面稳定的时候才从 watch 交给 shop-auto」，2026-11-09 定为开关、默认关）：
+    不再判断「是不是获得演出」，只认「相談主画面就绪」才跑 shop-auto；没就绪就点货架空隙跳过盖着的东西再看。
+    HIRO_CONSULT_LAZY=1 或 conf prep.consult_lazy=true 打开。"""
+    import os
+
+    v = os.environ.get("HIRO_CONSULT_LAZY")
+    return bool(batch_rules.get("prep.consult_lazy", False)) if v is None else v != "0"
+
+
+def consult_state(img) -> str:
+    """相談页现在是什么样：ready = 主画面就绪（右下白色「終了」正常亮度、没有获得名称栏、没有白色キャンセル）；
+    covered = 被获得演出盖着（「終了」被星星层压暗，或有获得名称栏），点货架空隙能跳过；other = 别的（弹窗把「終了」提亮等），不点。"""
+    from batch_hif import acquire_bar
+    from hiro.produce.ops import button_sv
+    from hiro.produce.shop import END_PILL, END_SAT_MAX, END_VAL, cancel_visible
+
+    if img is None or img.shape[:2] != (1280, 720):
+        return "other"
+    sat, val = button_sv(img, END_PILL)
+    bar = acquire_bar(img)
+    if sat <= END_SAT_MAX and END_VAL[0] <= val <= END_VAL[1] and not bar and not cancel_visible(img):
+        return "ready"
+    if bar or (sat <= END_SAT_MAX and 150 <= val < END_VAL[0]):
+        return "covered"
+    return "other"
+
+
+def wait_consult_ready(device, img, *, timeout=CONSULT_READY_WAIT_S, gap=CONSULT_READY_GAP_S, clock=time.monotonic,
+                       sleep=time.sleep, log=print):  # fmt: skip
+    """等相談主画面就绪：盖着获得演出就点货架空隙（SHELF_GAP，回到主画面后误点也不选中商品）再看；别的状态只等不点。
+    就绪返回这一帧，超时返回 None（照旧停给代理）。"""
+    from hiro.produce.hif_buttons import SHELF_GAP
+
+    deadline = clock() + timeout
+    taps = 0
+    while True:
+        state = consult_state(img)
+        if state == "ready":
+            if taps:
+                log(f"相談懒处理：点了 {taps} 下才就绪")
+            return img
+        if clock() >= deadline:
+            log(f"相談懒处理：{timeout:.0f}s 没等到主画面就绪（最后状态 {state}，点了 {taps} 下）")
+            return None
+        if state == "covered":
+            device.click(*SHELF_GAP)
+            taps += 1
+        sleep(gap)
+        img = device.screenshot()
+
+
 def acquire_overlay(img) -> bool:
     """获得演出盖在页面上（快识别 ACQUIRE + 名称栏像素）。"""
     from batch_hif import acquire_bar
@@ -269,6 +338,7 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
     """当前画面属于前六周固定流程就做完并返回说明；否则返回 None。change = batch_hif.change（复用记账）。"""
     import batch_change
 
+    RETRY["consult"] = False
     if (state.get("active", {}).get("ledger") or {}).get("pending_drink_replace"):
         return None
 
@@ -446,10 +516,13 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
         # 写账本里的卡名（带「+」），和账本对得上（1-e：这里写「モチベ」、账本记「モチベ+」，审计以为记错）
         return f"差し入れ技能卡：{L.card_name(target['name'], target.get('upgrade')) if target.get('name') else None}"
 
-    action_page = any("本戦まで" in t for t, _, b in boxes if b[1] < 150) and has("選択してください")
+    # 不再要求读到「行動を選択してください」：这行字压在人物身上，实机 codex-20261109-1 第 1 局 4 日只读出「ください」，
+    # 固定路线没认出、watch 停下叫代理（使用者：「去掉第二段吧」）。watch 已按画面布局认出是行动页才会走到这里；
+    # 这里只看顶部倒计时 + 底部按钮名整字相等（不再用包含，选饮料 / 选卡页的「差し入れ」标签不在底部）。
+    action_page = any("本戦まで" in t for t, _, b in boxes if b[1] < 150)
     if action_page:
         bottom = [(t, b) for t, _, b in boxes if b[1] >= 950]
-        gift = next((b for t, b in bottom if batch_rules.get("prep.action", "差し入れ") in t), None)
+        gift = next((b for t, b in bottom if t == batch_rules.get("prep.action", "差し入れ")), None)
         consult = next((b for t, b in bottom if t == batch_rules.get("prep.last_day", "相談")), None)
         if gift is not None:
             device.click(*_center(gift))
@@ -461,7 +534,11 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
 
     consult_page = any(t == "相談" for t, _, b in boxes if b[1] < 80) and has("Pポイントと交換するもの") and has("終了")
     if consult_page:
-        if acquire_overlay(img):
+        if consult_lazy():
+            if wait_consult_ready(device, img, log=log) is None:
+                RETRY["consult"] = True
+                return None
+        elif acquire_overlay(img):
             # 使用者 2026-11-08：P 道具「相談選択時、ランダムな特定のPドリンクを2つ獲得」的获得演出盖在相談页上，
             # 原来在这帧跑 shop-auto（失败「不在相談主画面」）、点「終了」没生效还报 done。交回 watch 连点过去并记账
             return None

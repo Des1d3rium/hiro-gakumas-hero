@@ -80,7 +80,8 @@ def test_switch_on_resolves_unknown_with_insitu_templates(insitu, monkeypatch):
     assert [s["state"] for s in slots] == ["drink", "drink", "empty", "drink"]
     assert [s["name"] for s in slots] == ["初星ホエイプロテイン", "ブーストエキス", None, "初星ホエイプロテイン"]
     assert all(s["method"] == "insitu" and s["confidence"] >= I.INSITU_MIN for s in slots if s["state"] == "drink")
-    assert slots[2]["confidence"] is not None and "insitu_score" not in slots[2]  # 空槽不碰
+    # 空槽也用实机模板复查（使用者 2026-11-08「以后直接用实机模板读」），真空槽分数低、仍是空
+    assert slots[2]["state"] == "empty" and slots[2]["insitu_score"] < I.INSITU_MIN
 
 
 def test_unseen_drink_stays_unknown(insitu, monkeypatch):
@@ -89,13 +90,13 @@ def test_unseen_drink_stays_unknown(insitu, monkeypatch):
     assert slots[0]["state"] == "unknown" and slots[0]["insitu_score"] < I.INSITU_MIN
 
 
-def test_confident_original_result_is_not_overridden(monkeypatch):
-    """原画已经认出的格不再比实机模板，哪怕实机模板认成别的。"""
+def test_insitu_overrides_original_result(monkeypatch):
+    """实机模板为主（使用者 2026-11-08）：原画认成别的，实机模板认准了就以实机模板为准。"""
     entry = {"slot": 0, "state": "drink", "name": "ブーストエキス", "asset": B, "confidence": 0.6}
     lib = I.IconLibrary.from_insitu({A: ICONS[A]}, I.DRINK_SIZE, NAMES)
     out = [dict(entry)]
     I._resolve_insitu(out, [ICONS[A]], lib)
-    assert out == [entry]
+    assert out[0]["asset"] == A and out[0]["method"] == "insitu"
 
 
 @pytest.mark.synthetic

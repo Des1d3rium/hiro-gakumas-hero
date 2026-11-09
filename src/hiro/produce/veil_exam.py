@@ -19,7 +19,7 @@ from hiro.loop.errors import ResumeBlocked
 from hiro.brain.veil import (
     CORE, DRIVE, IDOL, REBOUND, SODA, STANCES, STRATEGY_FLAGS, TEACH, WARM, VeilAdvisor, _flag,
     NEUTRAL, STAR, after_play, destination, flower_count, keeps_nonbiri, full_power_count, keep_warm, next_stance_change, norm,
-    stance, stance_level, stance_change_level, start_turn, level_after,
+    stance, stance_level, stance_change_level, start_turn, level_after, swaps_hand,
 )
 
 
@@ -284,6 +284,92 @@ def resolve_customs(customs, lookup=None, copies=None, uncertain=None) -> dict[s
     return out
 
 
+def support_boost():
+    """HIRO_VEIL_SUPPORT_BOOST=1：手牌效果按「账本档位 + 支援卡临时强化（卡图头像个数）」算（默认关）。
+    使用者 2026-11-09：++ / +++ 不进账本，但打出时效果按 ++ / +++ 算。"""
+    return os.environ.get("HIRO_VEIL_SUPPORT_BOOST", "0") == "1"
+
+
+def apply_boosts(hand, raw_hand, deck, version=None):
+    """卡名的「+」被下一张卡盖住（plus 为 None，画面按基础版给效果）但数得出头像（boost）的牌：
+    效果换成「账本档位 + boost」那一档。账本档位按牌组账本里这张牌的名字定（同名两档都有时分不出，不改）。
+    名字改成账本里的名字（记账键不变），返回 (新手牌, [改动])。卡名「+」看得见时画面已按总档位给效果，不动。"""
+    from dataclasses import replace
+
+    from hiro.brain.cards import card_view
+
+    if version is None:
+        from hiro.vision.cards import card_version as version
+    by_slot = {e.get("slot"): e for e in raw_hand or []}
+    out, changed = [], []
+    for c in hand:
+        e = by_slot.get(c.slot) or {}
+        boost = e.get("boost")
+        if not c.card_id or e.get("plus") is not None or not boost:
+            out.append(c)
+            continue
+        base = norm(c.name).rstrip("+")
+        levels = [n.count("+") for n in (base, base + "+") if n in deck]
+        if len(levels) != 1:
+            out.append(c)
+            continue
+        level = levels[0] + boost
+        card = version(c.card_id, level)
+        if card is None:
+            out.append(c)
+            continue
+        view = card_view(c.slot, card, available=c.available)
+        out.append(replace(view, name=base + "+" * levels[0], badge_score=c.badge_score))
+        changed.append({"slot": c.slot, "card": base + "+" * levels[0], "boost": boost, "level": level})
+    return out, changed
+
+
+# 档位影响决策 / 记账的结构化字段（只差得分的不算）
+BOOST_KEYS = ("stance", "stance_level", "next_stance", "next_stance_level", "fp_gain", "fp_cost", "fp_boost",
+              "extra_actions", "draws", "next_draws", "genki", "makes_sleep", "once", "condition")
+
+
+def boost_matters(card_id, level) -> bool:
+    """这张牌多一档临时强化时，影响决策 / 记账的效果会不会变（只多得分的不点开看）。"""
+    from hiro.brain.card_fx import card_fx
+
+    a, b = card_fx(card_id, level), card_fx(card_id, level + 1)
+    if b is None:  # 没有更高一档（眠気、星々を見下ろす一番星 等）
+        return False
+    if a is None:
+        return True
+    return any(a.get(k) != b.get(k) for k in BOOST_KEYS)
+
+
+def level_from_text(card_id, text, low: int, high: int = 3) -> int | None:
+    """点按选中后读到的 → 档位：有完整卡名（PROBE_NAME 行）时数「+」；否则和主数据 low..high 各档的说明文字比相似度，取最像的（分不出返回 None）。"""
+    import difflib
+
+    from hiro.brain.cards import description_text
+    from hiro.vision.cards import card_version
+
+    if text and text.startswith(PROBE_NAME):
+        label, _, text = text[len(PROBE_NAME):].partition("\n")
+        plus = norm(label).replace("＋", "+")
+        level = len(plus) - len(plus.rstrip("+"))
+        if low <= level <= high:
+            return level  # 选中后完整卡名上的「+」个数就是档位
+    t = norm(text or "")
+    if not t:
+        return None
+    scores = []
+    for level in range(low, high + 1):
+        card = card_version(card_id, level)
+        if card is None:
+            continue
+        ref = norm(description_text(card.produce_descriptions) or "")
+        scores.append((difflib.SequenceMatcher(None, ref, t).ratio(), level))
+    scores.sort(reverse=True)
+    if not scores or (len(scores) > 1 and scores[0][0] - scores[1][0] < 0.02):
+        return None
+    return scores[0][1]
+
+
 def apply_customs(hand, customs, lookup=None, copies=None, uncertain=None):
     """手牌里客制化过的牌：按账本把客制化效果补进牌面文字（同名按去「+」比；已含该文字的不重复加）。
     立即结算的文字加在原文前；「次のターン / ターン開始 / 以降」这类延后的加在原文后
@@ -293,14 +379,54 @@ def apply_customs(hand, customs, lookup=None, copies=None, uncertain=None):
     extra = resolve_customs(customs, lookup, copies, uncertain)
     if not any(extra.values()):
         return hand
+    from hiro.brain import card_fx
+
     out = []
     for card in hand:
-        add = [t for t in dict.fromkeys(extra.get(norm(card.name).rstrip("+"), [])) if t not in norm(card.text or "")]
+        texts = list(dict.fromkeys(extra.get(norm(card.name).rstrip("+"), [])))
+        add = [t for t in texts if t not in norm(card.text or "")]
         if add:
             before = "".join(t for t in add if not _DELAYED.search(t))
             after = "".join(t for t in add if _DELAYED.search(t))
             card = replace(card, text=before + (card.text or "") + after)
+        if texts and card.fx is not None:
+            # 结构化效果也并进客制化追加的效果（主数据效果 id）；有一段对不上 id 就整张退回文字读法（fx=None）
+            index = custom_effect_ids(norm(card.name))
+            card = replace(card, fx=card_fx.add_effects(card.fx, [index.get(t) for t in texts]))
         out.append(card)
+    return out
+
+
+GENERIC_EFFECT_IDS = {"強気に変更": "e_effect-exam_concentration-0001", "温存に変更": "e_effect-exam_preservation-0001"}
+
+
+@lru_cache(maxsize=None)
+def custom_effect_ids(card_name: str) -> dict[str, str]:
+    """客制化「追加」效果的文字 → 主数据效果 id（这张卡的全部客制化项，按 master_customs 同样的读法），
+    外加关键词兜底（CUSTOM_TEXT 的「強気に変更」）。"""
+    import sqlite3
+
+    from hiro.brain.cards import description_text
+    from hiro.state.catalog import CatalogUnavailable, catalog
+
+    out = dict(GENERIC_EFFECT_IDS)
+    try:
+        db = catalog().db
+        for name in dict.fromkeys((card_name, card_name.rstrip("+") + "+", card_name.rstrip("+"))):
+            row = db.execute("SELECT produceCardCustomizeIds FROM ProduceCard WHERE name = ? LIMIT 1", (name,)).fetchone()
+            for cid in json.loads((row[0] if row else None) or "[]"):
+                for (grow_ids,) in db.execute("SELECT produceCardGrowEffectIds FROM ProduceCardCustomize WHERE id = ?", (cid,)).fetchall():
+                    for gid in json.loads(grow_ids or "[]"):
+                        grow = db.execute("SELECT effectType, playProduceExamEffectId, targetPlayProduceExamEffectIds "
+                                          "FROM ProduceCardGrowEffect WHERE id = ?", (gid,)).fetchone()
+                        if grow is None or grow[0] != "ProduceCardGrowEffectType_EffectAdd":
+                            continue
+                        for eid in [grow[1], *json.loads(grow[2] or "[]")]:
+                            effect = db.execute("SELECT produceDescriptions FROM ProduceExamEffect WHERE id = ?", (eid,)).fetchone() if eid else None
+                            if effect is not None and (text := norm(description_text(effect[0]))):
+                                out.setdefault(text, eid)
+    except (CatalogUnavailable, sqlite3.Error, ValueError, TypeError):
+        pass
     return out
 
 
@@ -667,6 +793,9 @@ def apply_ability(data, memory, played):
         return None
     if hit["kind"] in ("draw", "play"):
         memory.actions_left += 1  # 抽到的牌由下一帧手牌与牌堆账（track_piles 同回合 drawn）记
+        from hiro.brain import piles as PB
+
+        PB.expect(data.get("veil_piles"), PB.moves_of_ability(hit["kind"]))
     elif hit["kind"] == "sleep":
         deck = data.get("veil_deck") or {}
         if deck.get("眠気", 0) > 0:
@@ -853,7 +982,7 @@ def note_commit(data, memory, state, decision) -> None:
     """每次记账后记下「此刻应在手里的牌」和剩余回合：下一次 exam 启动时用它核对 exam 外有没有人出过牌（check_outside_plays）。"""
     hand = [norm(c.name) for c in state.hand if c.card_id and not (decision.kind == "play" and c.slot == decision.slot)]
     played = next((c for c in state.hand if decision.kind == "play" and c.slot == decision.slot), None)
-    swap = played is not None and "手札をすべて入れ替える" in norm(played.text or "")
+    swap = played is not None and swaps_hand(played)
     if swap and hand:
         data["veil_swap_wait"] = {"turn": memory.turn, "before": sorted(hand), "card": norm(played.name)}
     data["veil_last_commit"] = {"turn": memory.turn, "remaining": state.remaining_turns, "kind": decision.kind,
@@ -955,6 +1084,26 @@ def fp_grey_by_stale_frame(state, fp) -> list:
         text = norm(c.text or "")
         if (not c.available and c.card_id and cost and fp >= cost and not (c.cost or c.hp_cost)
                 and "使用可" not in text and not c.tags.is_sleep):
+            out.append(c)
+    return out
+
+
+STANCE_REREAD = 3  # 姿态条件按账本已满足、画面还是灰：换帧重读这么多次（出牌动画中途的帧），仍灰就照画面
+
+
+def stance_grey_by_stale_frame(state) -> list:
+    """画面发灰、但唯一的使用条件是姿态、账本姿态已满足的牌（「強気の場合、使用可」等）。
+    1-h R1 剩 7：教えてあげる+ 切強気的动画中途截帧，一心不乱+ 还是温存下的灰，按「只剩复用牌」Skip 掉了。
+    只认纯姿态条件：计数条件（〜回以上）、回合条件、没有条件的发灰（全力値 / 体力 / 元気 付不起）不算；姿态不明不算。"""
+    current = stance(state)
+    if current is None:
+        return []
+    out = []
+    for c in state.hand:
+        if c.available or not c.card_id:
+            continue
+        cond = play_condition(c)
+        if cond and cond["kind"] == "stance" and condition_met(cond, state, None, {}, current) is True:
             out.append(c)
     return out
 
@@ -1146,7 +1295,44 @@ def match_variant(text, keys, variants, lookup=None) -> str | None:
 
 PROBE_TEXT_BOX = (0, 560, 720, 1040)  # 选中手牌后效果说明出现的区域（手牌上方）。未实机校准：探测时把 OCR 全文记进 trace
 PROBE_SETTLE = 0.4
+PROBE_NAME = "卡名:"  # tap_probe 返回文字的第一行：选中后读到的完整卡名（带「+」）
+PROBE_NAME_DX = 160  # 卡名标签与点按位置的横向容差
+PROBE_NAME_Y = 900  # 卡名标签在这条线以下（手牌区）
 PROBE_RETRIES = 2  # 点按读不出 / 分不出时最多再试几帧，之后按第一个可能的版本记、牌库标不确定
+
+
+# 考试页右下角牌库按钮：图标上压着「保留0/2」角标，模板（选行动页的图标）只配到 0.48（codex-20261109-1-c R1 五次全没打开），
+# 认不出时点这个固定位置；点了之后由 is_deck_list 核对一览真的打开
+EXAM_DECK_BUTTON = (557, 1205)
+PILE_VIEW_LAST: dict = {}  # 上次 read_pile_view 的情况（打开没有、问题），写进 trace
+
+
+def read_pile_view() -> dict | None:
+    """考试页右下角牌库按钮 → 一览切列表显示 → 按「保留 / 手札 / 山札 / 捨札 / 除外」分组读卡名 → 关闭。
+    读全（每组张数和标题对上、总张数对上）才返回 {组: [卡名]}；读不全返回 None；一览没关掉就停机（不能在一览上出牌）。"""
+    from kotonebot import device
+
+    from hiro.produce import deck_review, deck_text
+    from hiro.produce.ops import ocr_boxes
+
+    def swipe(x1, y1, x2, y2, d):
+        device.swipe(x1, y1, x2, y2, duration=d)
+
+    def ocr_texts(img):
+        return [(t, ((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)) for t, _, b in ocr_boxes(img)]
+
+    reader = lambda: deck_text.read_list(shoot=device.screenshot, click=device.click, swipe=swipe,  # noqa: E731
+                                         ocr_boxes=ocr_boxes, view_diff=deck_review._view_diff, save=deck_review._save)
+    r = deck_review.review_deck(shoot=device.screenshot, click=device.click, swipe=swipe, ocr_texts=ocr_texts,
+                                text_reader=reader, button=EXAM_DECK_BUTTON)
+    if r.get("opened") and not r.get("closed"):
+        raise ResumeBlocked("VEIL 牌库一览打开后没关掉，停止考试操作")
+    t = r.get("text") or {}
+    PILE_VIEW_LAST.clear()
+    PILE_VIEW_LAST.update(opened=r.get("opened"), problems=(r.get("problems") or [])[:5] + (t.get("problems") or [])[:5])
+    if not t.get("complete"):
+        return None
+    return {g: [norm(n) for n in names] for g, names in (t.get("groups") or {}).items()}
 
 
 def tap_probe(frame, card) -> str | None:
@@ -1173,9 +1359,16 @@ def tap_probe(frame, card) -> str | None:
     text = None
     if selected:
         time.sleep(PROBE_SETTLE)
+        boxes = ocr_boxes(device.screenshot())
         x1, y1, x2, y2 = PROBE_TEXT_BOX
-        text = "".join(t for t, _, (a, b, c, d) in ocr_boxes(device.screenshot())
-                       if x1 <= (a + c) // 2 <= x2 and y1 <= (b + d) // 2 <= y2)
+        text = "".join(t for t, _, (a, b, c, d) in boxes if x1 <= (a + c) // 2 <= x2 and y1 <= (b + d) // 2 <= y2)
+        # 使用者 2026-11-09：「点一次就可以看到完整卡」——选中的牌浮到最前，卡名标签不再被旁边的牌盖住，「+」个数就是档位。
+        # 卡名标签放第一行（PROBE_NAME 前缀），level_from_text 先按它定档，读不到再比说明文字
+        label = next((t for t, _, (a, b, c, d) in sorted(boxes, key=lambda bx: abs((bx[2][0] + bx[2][2]) // 2 - x))
+                      if abs((a + c) // 2 - x) <= PROBE_NAME_DX and (b + d) // 2 >= PROBE_NAME_Y
+                      and X._name_match(t, card.name)), None)
+        if label:
+            text = f"{PROBE_NAME}{label}\n{text}"
     for _ in range(2):
         device.click(*X.DESELECT_TAP)
         time.sleep(X.DESELECT_WAIT)
@@ -1208,6 +1401,7 @@ class VeilScreen(ScreenExamStateSource):
         self.position_retries = 0
         self.round_mismatch = 0
         self.fp_retries = 0
+        self.stance_retries = 0
         self.swap_retries = 0
         self.resume_checked = False  # 本进程第一帧：核对 exam 外有没有出牌、把不确定的原因写进 events.jsonl
         self.rec = None
@@ -1263,7 +1457,7 @@ class VeilScreen(ScreenExamStateSource):
         return {
             "hand": [[c.slot, norm(c.name), c.card_id, c.upgrade, c.available, bool(c.tags.once)] for c in state.hand],
             "drinks": [d.name for d in state.drinks],
-            "piles": None if not piles else {k: dict(Counter(norm(n) for n in piles.get(k) or [])) for k in ("deck", "grave", "unlocated")},
+            "piles": None if not piles else {k: dict(Counter(norm(n) for n in piles.get(k) or [])) for k in ("deck", "grave", "unlocated", "doubt")},
             "next_draw": piles.get("next_draw"),
             "excluded": dict(initial - deck) or None,
             "deck": dict(deck) or None,
@@ -1272,6 +1466,71 @@ class VeilScreen(ScreenExamStateSource):
             "flags": {name: _flag(name) for name in STRATEGY_FLAGS},
             **({"slot_keys": data.get("veil_slot_keys")} if signature_mode() else {}),
         }
+
+    def _probe(self, frame, card, memory) -> str | None:
+        """点按读一张牌，前后各截一帧比手牌（角标位置 / 卡面颜色 / 体力元気）。变了说明这一下把牌打出去了或局面在动
+        （codex-20261109-1-c R1 T2：点按读 トレーニングの成果+ 后它从手里没了，没记账，之后一直当幽灵牌在山札里）：
+        牌堆层标 need_view，本回合再开一次右下角牌库一览以画面为准重置。"""
+        from hiro.exec import exam as X
+
+        try:
+            from kotonebot import device
+
+            before = device.screenshot()
+        except Exception:  # noqa: BLE001  测试替身没有设备
+            return self.probe(frame, card)
+        text = self.probe(frame, card)
+        try:
+            after = device.screenshot()
+            a, b = X._lite_sig(before), X._lite_sig(after)
+            changed = None if a is None or b is None else (
+                "手牌 / 体力变了" if a != b else
+                (f"槽 {m} 卡面变了" if (m := X._art_changed(before, after, a[1])) is not None else None))
+        except Exception:  # noqa: BLE001
+            changed = None
+        if changed:
+            data = memory.strategy_data
+            self._log("veil_probe_changed", turn=memory.turn, card=norm(card.name), slot=card.slot, why=changed)
+            piles = data.get("veil_piles")
+            if piles is not None:
+                piles["need_view"] = True
+                data.pop("veil_pile_viewed", None)
+        return text
+
+    def probe_boosts(self, state, memory, frame, raw_hand) -> str | None:
+        """5 张手牌：被盖住、头像数不出的牌，多一档会改变决策 / 记账时点开读一次说明定档位（使用者 2026-11-09）。
+        循环状态（手里有核心 4 张）不读。读到的档位按 (回合, 卡名) 记在考试记忆里，本回合沿用；写回 raw_hand 的 boost。
+        点过一张返回 "veil_boost_probe"（换帧重读），没要点的返回 None。"""
+        data = memory.strategy_data
+        seen = data.setdefault("veil_boost_seen", {})
+        for key in [k for k in seen if not k.startswith(f"{memory.turn}:")]:
+            seen.pop(key)
+        by_slot = {e.get("slot"): e for e in raw_hand}
+        names = {norm(c.name).rstrip("+") for c in state.hand}
+        in_cycle = {n.rstrip("+") for n in CORE} <= names
+        for c in state.hand:
+            e = by_slot.get(c.slot)
+            if e is None or not c.card_id or e.get("plus") is not None or e.get("boost") is not None:
+                continue
+            base = norm(c.name).rstrip("+")
+            levels = [n.count("+") for n in (base, base + "+") if n in self.deck]
+            if len(levels) != 1:
+                continue
+            key = f"{memory.turn}:{base}"
+            if key in seen:
+                e["boost"] = seen[key]
+                continue
+            if len(state.hand) < 5 or in_cycle or not boost_matters(c.card_id, levels[0]):
+                continue
+            text = self._probe(frame, c, memory)
+            level = level_from_text(c.card_id, text, levels[0])
+            self._log("veil_boost_probe", turn=memory.turn, card=base + "+" * levels[0], text=text, level=level)
+            if level is not None:
+                seen[key] = level - levels[0]
+            else:
+                seen[key] = None
+            return "veil_boost_probe"
+        return None
 
     def assign_keys(self, state, memory, frame) -> dict[int, str] | None:
         """每个手牌槽位的记账键。同名只有一个版本：键就是卡名。同名几个版本：牌库里只剩一个版本有牌就是它；
@@ -1301,7 +1560,7 @@ class VeilScreen(ScreenExamStateSource):
                 continue
             got = {}
             for c in cards:
-                text = self.probe(frame, c)
+                text = self._probe(frame, c, memory)
                 key = match_variant(text, possible, self.variants)
                 self._log("veil_probe", turn=memory.turn, slot=c.slot, name=name, text=text, candidates=possible, key=key)
                 if key is None:
@@ -1330,9 +1589,15 @@ class VeilScreen(ScreenExamStateSource):
         for card in state.hand:
             info = (self.variants or {}).get(slot_keys.get(card.slot, ""))
             if info is not None and slot_keys.get(card.slot) != info["name"]:
-                add = [t for t in variant_texts(info) if t not in norm(card.text or "")]
+                texts = list(variant_texts(info))
+                add = [t for t in texts if t not in norm(card.text or "")]
                 if add:
                     card = replace(card, text="".join(add) + (card.text or ""))
+                if texts and card.fx is not None:
+                    from hiro.brain import card_fx
+
+                    index = custom_effect_ids(norm(card.name))
+                    card = replace(card, fx=card_fx.add_effects(card.fx, [index.get(t) for t in texts]))
                 card = replace(card, tags=replace(card.tags, once=info["once"]))
             out.append(card)
         state.hand = out
@@ -1352,6 +1617,14 @@ class VeilScreen(ScreenExamStateSource):
         if (self.last_raw or {}).get("carried"):
             # 状态栏是回合开头的读数：姿态 / 段階 交给账本（read_position 当作画面没读到姿态），其余状态照用
             state.statuses = [s for s in state.statuses or [] if norm(s.get("name") or "") not in STANCES]
+        if support_boost():
+            raw_hand = [dict(e) for e in (self.last_raw or {}).get("hand") or []]
+            if (probing := self.probe_boosts(state, memory, frame, raw_hand)) is not None:
+                return None, probing
+            state.hand, boosted = apply_boosts(state.hand, raw_hand, self.deck)
+            if boosted and boosted != getattr(self, "last_boosted", None):
+                self._log("veil_support_boost", turn=memory.turn, cards=boosted)
+            self.last_boosted = boosted
         uncertain = []
         if self.customs:
             state.hand = apply_customs(state.hand, self.customs, copies=self.copies, uncertain=uncertain)
@@ -1461,6 +1734,13 @@ class VeilScreen(ScreenExamStateSource):
             data.setdefault("veil_fp_log", []).append({"turn": memory.turn, "op": "按账本解灰", "cards": [norm(c.name) for c in stale],
                                                        "fp": fp})
         self.fp_retries = 0
+        if grey := stance_grey_by_stale_frame(state):
+            self.stance_retries += 1
+            if self.stance_retries <= STANCE_REREAD:
+                self._log("veil_stance_grey", turn=memory.turn, stance=stance(state), cards=[norm(c.name) for c in grey],
+                          retry=self.stance_retries)
+                return None, "veil_stance_grey"
+        self.stance_retries = 0
         if blocked := play_condition_blocked(state, memory, data):
             # 主数据「…の場合、使用可」按账本判定不满足：当作发灰，不点（画面没灰也不点）。
             # codex-20261108-1-b R1 T2：タフネス+（温存になった回数が2回以上）画面没灰，点了两次都没打出，撤回后账本位置不明
@@ -1489,7 +1769,20 @@ class VeilScreen(ScreenExamStateSource):
             if not 0 <= card.slot < 5 or slots[card.slot] is not None:
                 raise ResumeBlocked("VEIL 手牌槽位无法核对")
             slots[card.slot] = slot_keys[card.slot]
-        piles = track_piles(data, memory.turn, slots, outside)
+        from hiro.brain import piles as PB
+
+        if PB.enabled():
+            piles = PB.observe(data, memory.turn, slots, outside)
+            if data["veil_piles"].get("need_view") and data.get("veil_pile_viewed") != memory.turn:
+                # 对账层兜底（使用者 2026-11-09：「将点进右下角牌库做成所有幽灵牌出现时的兜底」）：打开牌库一览按分组读一次
+                data["veil_pile_viewed"] = memory.turn
+                groups = read_pile_view()
+                diff = PB.apply_view(data, groups) if groups else None
+                self._log("veil_pile_view", turn=memory.turn, ok=diff is not None, diff=diff, **PILE_VIEW_LAST)
+                if diff is not None:
+                    piles = PB._view(data["veil_piles"])
+        else:
+            piles = track_piles(data, memory.turn, slots, outside)
         once_view = data["veil_known_once"]
         if self.variants:
             # 决策层只认卡名：牌堆按卡名给；once 列出牌堆里还有一次性版本的卡名（small_deck 等按「有没有一次性的」判）
@@ -1586,38 +1879,97 @@ _CONDITIONS = (
 )
 
 
+_TEXT_STANCE_CONDITIONS = (
+    (re.compile(r"強気(\d)段階目の場合、使用可"), "強気"),
+    (re.compile(r"強気の場合、使用可"), "強気"),
+    (re.compile(r"温存の場合、使用可"), "温存"),
+    (re.compile(r"全力の場合、使用可"), "全力"),
+)
+
+
+def play_condition(card) -> dict | None:
+    """这张牌的使用条件，格式同 card_fx.trigger：{kind, value, not, text[, level]}。结构化效果为准（使用者 2026-11-09），
+    没有结构化效果时按牌面文字认（认得的几种），都没有返回 None。"""
+    from hiro.brain import card_fx
+
+    if (fx := card_fx.of(card)) is not None:
+        return fx.get("condition")
+    text = norm(card.text or "")
+    if "使用可" not in text:
+        return None
+    for pattern, key in _CONDITIONS:
+        if m := pattern.search(text):
+            return {"kind": key, "value": int(m.group(1)), "not": False, "text": m.group(0)}
+    if m := re.search(r"(\d+)ターン目以降の場合、使用可", text):
+        return {"kind": "turn", "value": int(m.group(1)), "not": False, "text": m.group(0)}
+    for pattern, value in _TEXT_STANCE_CONDITIONS:
+        if m := pattern.search(text):
+            out = {"kind": "stance", "value": value, "not": False, "text": m.group(0)}
+            if m.groups():
+                out["level"] = int(m.group(1))
+            return out
+    if "いずれかの指針の場合、使用可" in text:
+        return {"kind": "stance", "value": "なし", "not": True, "text": "いずれかの指針の場合、使用可"}
+    return {"kind": "other", "value": None, "not": False, "text": text}
+
+
+def condition_met(cond, state, memory, counts, current) -> bool | None:
+    """使用条件按账本 / 画面成不成立：True / False；判断不了（姿态不明、计数没记、认不出的条件）None。"""
+    if not cond:
+        return True
+    kind, value = cond["kind"], cond.get("value")
+    if kind in ("warm", "changes", "full", "strong"):
+        if kind not in counts and kind == "strong":
+            return None
+        ok = counts.get(kind, 0) >= int(value or 0)
+    elif kind == "turn":
+        ok = memory.turn >= int(value or 0)
+    elif kind == "stance":
+        if current is None:
+            return None
+        if value == "なし":
+            ok = current == NEUTRAL
+        elif value == "温存":
+            ok = current in WARM
+        else:
+            ok = current == value
+            if ok and cond.get("level") in (1, 2):
+                level = stance_level(state, current)
+                ok = level in (None, cond["level"])
+    else:
+        return None
+    return not ok if cond.get("not") else ok
+
+
 def play_condition_blocked(state, memory, data) -> dict:
     """手牌里按主数据使用条件肯定打不了的牌 {槽位: 原因}。只判账本 / 画面确定的（计数往多里算、姿态不明不判），
-    宁可漏判（照旧按画面）也不误拦。"""
+    宁可漏判（照旧按画面）也不误拦。使用条件以结构化效果为准（card_fx），没有时按牌面文字。"""
     counts = data.get("veil_stance_counts") or {}
     current = stance(state)
     out = {}
     for card in state.hand:
-        text = norm(card.text or "")
-        if not card.available or "使用可" not in text:
+        if not card.available:
             continue
-        why = None
-        for pattern, key in _CONDITIONS:
-            if (m := pattern.search(text)) and counts.get(key, 0) < int(m.group(1)):
-                why = f"{m.group(0)}（账本 {counts.get(key, 0)} 次）"
-        if m := re.search(r"(\d+)ターン目以降の場合、使用可", text):
-            if memory.turn < int(m.group(1)):
-                why = f"{m.group(0)}（第 {memory.turn} 回合）"
-        if current is not None:
-            if "温存の場合、使用可" in text and current not in WARM:
-                why = f"温存の場合、使用可（现在 {current}）"
-            elif (m := re.search(r"強気(\d)段階目の場合、使用可", text)) and (
-                    current != "強気" or stance_level(state, current) not in (None, int(m.group(1)))):
-                why = f"{m.group(0)}（现在 {current}）"
-            elif "強気の場合、使用可" in text and current != "強気":
-                why = f"強気の場合、使用可（现在 {current}）"
-            elif "全力の場合、使用可" in text and current != "全力":
-                why = f"全力の場合、使用可（现在 {current}）"
-            elif "いずれかの指針の場合、使用可" in text and current == NEUTRAL:
-                why = "いずれかの指針の場合、使用可（指針解除）"
-        if why:
-            out[card.slot] = why
+        cond = play_condition(card)
+        if condition_met(cond, state, memory, counts, current) is False:
+            seen = counts.get(cond["kind"], 0) if cond["kind"] in ("warm", "changes", "full", "strong") else None
+            where = f"账本 {seen} 次" if seen is not None else (f"第 {memory.turn} 回合" if cond["kind"] == "turn" else f"现在 {current}")
+            out[card.slot] = f"{cond['text']}（{where}）"
     return out
+
+
+def star_count(card) -> int:
+    """一番星打出后装上的「回合开始切のんびり」附魔次数（主数据 effectCount，以降3回まで）；查不到按 3。"""
+    if _flag("ENCHANT_ENGINE"):
+        try:
+            from hiro.brain.pitems import PHASE_START_TURN, card_enchants
+
+            for en, count in card_enchants(card):
+                if count and en.trigger is not None and any(p == PHASE_START_TURN for p, _ in en.trigger.phases):
+                    return count
+        except Exception:  # noqa: BLE001
+            pass
+    return 3
 
 
 class VeilBrain(BattleBrain):
@@ -1644,6 +1996,9 @@ class VeilBrain(BattleBrain):
                 data["veil_drinks"] = bar_record(bar)
             if drink.name == SODA:
                 data["veil_soda_until"] = memory.turn + 5
+            from hiro.brain import piles as PB
+
+            PB.expect(data.get("veil_piles"), PB.moves_of_drink(norm(drink.name)))
             commit_full_power(data, memory, drink, "喝")  # ジンジャーエール 全力値+1、ほうじ茶 +2、厳選初星チャイ 每回合 +1
             return
         if decision.kind != "play":
@@ -1654,14 +2009,14 @@ class VeilBrain(BattleBrain):
         variant = name != norm(card.name)
         before = stance(state)
         if before is None and memory.turn == 1 and (data.get("veil_position") or {}).get("stance") in (None, NEUTRAL):
-            before = NEUTRAL  # 第 1 回合还没切过姿态：切強気照算夜空（原来记成 None、夜空不明）
+            before = NEUTRAL  # 第 1 回合还没切过姿态：切強気不推夜空（原来记成 None、夜空不明）
         current, flower = after_play(before, state.pitem_charges, card)
         level = (level_after(before, stance_level(state, before), current, stance_change_level(card))
                  if destination(card) == current else None)
         if current == before and destination(card) != current:
             level = stance_level(state, before)
         if norm(card.name).startswith(STAR):
-            data["veil_star"] = 3
+            data["veil_star"] = star_count(card)
         delayed, delayed_level = next_stance_change(card)
         data["veil_pending_play"] = {
             "turn": memory.turn, "card": name,
@@ -1691,8 +2046,11 @@ class VeilBrain(BattleBrain):
             piles["hand"][decision.slot] = None
             if not lost:
                 piles["grave"][name] = piles["grave"].get(name, 0) + 1
-            if "手札をすべて入れ替える" in norm(card.text or ""):
+            if swaps_hand(card):
                 piles["swap"] = True  # 下一次记账：原手牌整手进捨札，新手牌全部算新抽的（track_piles）
+            from hiro.brain import piles as PB
+
+            PB.expect(piles, PB.moves_of_card(card))  # 这一手应该抽几张：回合结束都没出现的记成暗抽（VEIL_PILE_ENGINE）
         if norm(card.name) in SLEEP_GENERATORS:
             deck["眠気"] = deck.get("眠気", 0) + 1
             if piles is not None:

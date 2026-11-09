@@ -6,6 +6,8 @@ import os
 import sys
 import re
 import unicodedata
+
+from hiro.brain import card_fx
 from collections import Counter
 
 from hiro.contracts import Decision
@@ -29,11 +31,11 @@ HAND_MAX = 5  # 手牌上限：抽牌超出的作废
 # 2026-11-08 验证局 1-d R2 剩 12：HP_NET 默认开（使用者：「做方案A」）——体力 12 时 みずたまりスキップ+（元気+10、再动）被保底线拦
 DEFAULT_ON = frozenset({"HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP",
                         "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA",
-                        "FP_RESERVE", "CLEAR_FIRST", "MINOR_HP", "HP_NET"})
+                        "FP_RESERVE", "CLEAR_FIRST", "MINOR_HP", "HP_NET", "PITEM_FLOWER", "ENCHANT_ENGINE"})
 STRATEGY_FLAGS = ("KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP",
                   "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET", "MINOR_HP",
                   "IDOL_CLEAR", "STANCE_SCREEN", "CYCLE_PLAN", "STRONG_TEACH", "CYCLE_WHEY", "DRIVE_CHECK",
-                  "STANCE_LATER", "HP_ZERO", "CYCLE_TAP")
+                  "STANCE_LATER", "HP_ZERO", "CYCLE_TAP", "IDOL_FP_GATE", "PITEM_FLOWER", "ENCHANT_ENGINE", "STANCE_UNLOCK")
 
 
 def _flag(name: str) -> bool:
@@ -196,6 +198,13 @@ def stance_later():
     return _flag("STANCE_LATER")
 
 
+def stance_unlock():
+    """VEIL_STANCE_UNLOCK=1：清牌阶段可打的只剩复用牌、手里姿态限定的一次性牌（一心不乱+ 要強気 / ガタゴトすやすや+ 要温存）
+    因姿态不对发灰时，先打一张能切到那个姿态、打完还剩出牌次数的复用牌，下一手清掉它。
+    例：codex-20261109-1-i R2 attempt 1，のんびり 下 一心不乱+ 发灰，「只剩复用牌、不打」连跳 7 回合，牌堆一直 6 张进不了循环，敗退。"""
+    return _flag("STANCE_UNLOCK")
+
+
 def hp_zero():
     """VEIL_HP_ZERO=1：状态栏有「消費体力変化」时（全身全霊+：次に使用したスキルカードの消費体力を0にする），下一张牌不掉体力。
     原来体力闸当它照常掉血。例：3-3 第 1 局 R1 attempt2 剩 9，インフルエンサー++ 因此被留到温存。"""
@@ -242,6 +251,8 @@ def _fp_drop_false_conditions(text: str) -> str:
 def fp_effect(card) -> dict:
     """牌面文字 → {gain, cost, boost: (百分比, 回合数) | None}。主数据原文：オーバードライブ+ 全力値+2、巻き返し+ 全力値消費1、
     アイドルになります+ 全力値消費3、リスキーチャンス+ 全力値+3 / 全力値増加量増加+50%（4ターン）。"""
+    if fx := card_fx.of(card):  # 结构化效果为准（使用者 2026-11-09）
+        return {"gain": fx["fp_gain"], "cost": fx["fp_cost"], "boost": tuple(fx["fp_boost"]) if fx["fp_boost"] else None}
     text = _fp_drop_false_conditions(_FP_LATER.split(norm(getattr(card, "text", card) or ""), maxsplit=1)[0])
     boost = _FP_BOOST.search(text)
     return {"gain": sum(map(int, _FP_GAIN.findall(text))), "cost": sum(map(int, _FP_COST.findall(text))),
@@ -371,6 +382,8 @@ _GENKI_GAIN = re.compile(r"元気\+(\d+)")
 
 def genki_gain(card) -> int:
     """牌面「元気+N」（打出时立刻加的元気；「元気値増加+N」这类加成不算）。"""
+    if fx := card_fx.of(card):
+        return fx["genki"]
     return sum(int(n) for n in _GENKI_GAIN.findall(norm(card.text or "")))
 
 
@@ -403,12 +416,16 @@ _DELAYED = re.compile(r"次のターン|ターン開始|以降")
 
 
 def destination(card):
+    if fx := card_fx.of(card):
+        return fx["stance"]
     immediate = _DELAYED.split(norm(card.text), maxsplit=1)[0]
     match = _STANCE_CHANGE.search(immediate)
     return (match[1] or "指針解除") if match else None
 
 
 def stance_change_level(card):
+    if fx := card_fx.of(card):
+        return fx["stance_level"]
     immediate = _DELAYED.split(norm(card.text), maxsplit=1)[0]
     match = _STANCE_CHANGE.search(immediate)
     if match:
@@ -433,6 +450,8 @@ def level_after(before, before_level, dest, explicit=None):
 
 
 def next_stance_change(card):
+    if fx := card_fx.of(card):
+        return fx["next_stance"], fx["next_stance_level"]
     match = re.search(r"(?:次のターン(?:開始時)?|ターン開始時)[、,に：:]*(強気|温存|のんびり|全力)(?:([12])段階目)?に変更",
                       norm(card.text))
     if match is None:
@@ -447,13 +466,41 @@ def next_stance(card):
     return next_stance_change(card)[0]
 
 
-NEUTRAL = "指針なし"  # 考试第 1 回合还没切过姿态（画面没有姿态图标）：切強気照样算夜空，但没有温存解除
+NEUTRAL = "指針なし"  # 考试第 1 回合还没切过姿态（画面没有姿态图标）：切強気不推夜空计数，也没有温存解除
 STAR = "星々を見下ろす一番星"  # 以降3回まで、ターン開始時、非温存状態の場合、のんびりに変更
 
 
+HAND_SWAP = "ProduceExamEffectType_ExamHandGraveCountCardDraw"  # 手札をすべて入れ替える
+
+
+def swaps_hand(card) -> bool:
+    """这张牌会不会换掉整手牌。结构化效果为准（效果类型 ExamHandGraveCountCardDraw），没有时按牌面文字。"""
+    if (fx := card_fx.of(card)) is not None:
+        from hiro.brain.pitems import exam_effect
+
+        try:
+            return any((e := exam_effect(eid)) is not None and e.type == HAND_SWAP for _, eid in fx.get("effects") or [])
+        except Exception:  # noqa: BLE001
+            pass
+    return "手札をすべて入れ替える" in norm(card.text or "")
+
+
 def start_turn(current, star):
-    """回合开始：一番星还有次数且不在温存 / のんびり 时切のんびり，返回（姿态，剩余次数）。姿态不明时不动。"""
-    if current is not None and current not in WARM and (star or 0) > 0:
+    """回合开始：一番星还有次数且不在温存 / のんびり 时切のんびり，返回（姿态，剩余次数）。姿态不明时不动。
+    VEIL_ENCHANT_ENGINE（默认开）：触发条件和效果按主数据的附魔（hiro.brain.pitems）判 / 执行，主数据不可用时按下面的手写规则。"""
+    if current is None or not (star or 0) > 0:
+        return current, star
+    if _flag("ENCHANT_ENGINE"):
+        from hiro.brain.pitems import card_start_turn_enchant, start_turn_fire
+
+        try:
+            found = card_start_turn_enchant(STAR)
+        except Exception:  # noqa: BLE001  没有主数据
+            found = None
+        if found is not None:
+            out = start_turn_fire(found[0], current)
+            return ((out.stance or current), star - 1) if out is not None else (current, star)
+    if current not in WARM:
         return "のんびり", star - 1
     return current, star
 
@@ -470,14 +517,62 @@ def warm_next_turn(state, memory=None) -> bool:
     return bool(memory is not None and (memory.strategy_data.get("veil_star") or 0) > 0)
 
 
+def stance_requirement(card):
+    """使用条件里要求的姿态（強気 / 温存 / 全力），没有姿态条件 None。结构化效果为准，没有时按牌面文字。"""
+    if (fx := card_fx.of(card)) is not None:
+        cond = fx.get("condition") or {}
+        return cond.get("value") if cond.get("kind") == "stance" and not cond.get("not") else None
+    t = norm(card.text or "")
+    return next((s for s in ("強気", "温存", "全力") if f"{s}の場合、使用可" in t or (s == "強気" and "強気2段階目の場合、使用可" in t)), None)
+
+
 def keeps_nonbiri(current, dest):
     """のんびり 覆盖温存：温存 → のんびり 可以，のんびり 收到「温存に変更」（任一段階）仍是のんびり（使用者 2026-11-07，
     1-g R2 再挑戦3 剩 9：のんびり 下打 アイドルになります+，画面仍のんびり、账本记成温存）。"""
     return current == "のんびり" and dest is not None and dest.startswith("温存")
 
 
+def flower_counts(current, card):
+    """打出这张牌推不推夜空计数（主数据 P 道具触发条件）；判断不了 None。"""
+    from hiro.brain.pitems import flower_counts as counts
+
+    if current is None:
+        return None  # 姿态不明（不是「指針なし」）：交给手写规则
+    return counts(card, current)
+
+
+def _after_play_counted(current, flower, card, counted):
+    """已知推不推计数时的结算：先结算牌的姿态，再结算夜空（计数到了切のんびり、回到 3；全力 下切不了姿态，计数照样走）。"""
+    dest = destination(card)
+    if keeps_nonbiri(current, dest) or current == "全力":
+        new = current
+    elif dest == "強気" and current is None:
+        new = None  # 姿态不明
+    else:
+        new = dest or current
+    if not counted:
+        return new, flower
+    if flower not in (1, 2, 3):
+        return new, None
+    if flower == 1:
+        # 计数到了：效果按主数据执行（夜空を従える花：のんびりに変更、熱意、元気；全力 下切不了姿态）
+        from hiro.brain.pitems import flower_trigger_outcome
+
+        out = flower_trigger_outcome(current) if _flag("ENCHANT_ENGINE") else None
+        if out is not None:
+            return (out.stance or new), 3
+        return (current if current == "全力" else "のんびり"), 3
+    return new, flower - 1
+
+
 def after_play(current, flower, card):
-    """Resolve the card first, then the flower's overriding stance effect."""
+    """Resolve the card first, then the flower's overriding stance effect.
+    VEIL_PITEM_FLOWER（默认开，=0 关）：推不推夜空计数按主数据的 P 道具触发条件判（hiro.brain.pitems：
+    「いずれかの指針の場合、強気効果のスキルカード使用後3回ごとに」= 带「強気」效果组的牌、有指针时才算），
+    判断不了（没有卡 id / 主数据）时退回下面的手写规则。2026-11-09 回放 54 份 trace，52 份每帧和画面「N回」一致。"""
+    counted = flower_counts(current, card) if _flag("PITEM_FLOWER") else None
+    if counted is not None:
+        return _after_play_counted(current, flower, card, counted)
     dest = destination(card)
     if keeps_nonbiri(current, dest):
         return current, flower
@@ -488,6 +583,12 @@ def after_play(current, flower, card):
         return current, flower
     if dest != "強気" or current == "指針解除":
         return dest or current, flower
+    if current == NEUTRAL:
+        # 夜空要在任意姿态下用強気才计数，没有指针不算指针（使用者 2026-11-08）；指針解除 同理（上面已直接返回）。
+        # 考试第 1 回合从「指針なし」切強気不推夜空计数（2026-11-08 核对：1-g R2 全身全霊+ 后画面「3回」不变；
+        # 第 1 回合从指針なし 切強気的 5 份 trace（1-g-1-exam2、3-1-exam1-attempt1、3-b-1-exam1-attempt2、
+        # 3-c-1-exam2-attempt1、3-c-3-exam2）账本都从这里起比画面少 1，之后のんびり 触发全错位）
+        return dest, flower
     if current is None or flower not in (1, 2, 3):
         return None, None
     return ("のんびり", 3) if flower == 1 else (dest, flower - 1)
@@ -526,6 +627,9 @@ def small_deck(state):
     if len(hand) != len(state.hand):
         return False
     names = Counter(hand + [norm(c) for k in ("deck", "grave", "unlocated") for c in state.piles.get(k, [])])
+    # 存疑的牌（VEIL_PILE_ENGINE：账面在山札、画面一直没出现，可能已不在牌库）不算：codex-20261109-1 R2 トレーニングの成果+
+    # 被暗抽后一直挂着，4 核心 + 眠気 + 它 = 6 张，循环判不成小牌组
+    names -= Counter(norm(c) for c in state.piles.get("doubt", []))
     if REBOUND in state.piles.get("once", []):
         return False
     if any(names[c] != 1 for c in CORE) or names.total() not in (4, 5):
@@ -573,11 +677,12 @@ def plan_cycle(state, memory, hand_cards, actions, drinks, current, flower, coun
     draw_extra = (piles.get("next_draw") or 3) - 3 - 2 * (TEACH in played)
     floor = hp_floor()
 
+    def stance_ok(c, cur):
+        need_stance = stance_requirement(c)
+        return not ((need_stance == "温存" and cur not in WARM) or (need_stance == "強気" and cur != "強気"))
+
     def usable(c, cur, fpv):
-        t = norm(c.text)
-        if "温存の場合、使用可" in t and cur not in WARM:
-            return False
-        if "強気の場合、使用可" in t and cur != "強気":
+        if not stance_ok(c, cur):
             return False
         need = fp_delta(c)[1]
         if need and (fpv is None or fpv < need):
@@ -587,8 +692,7 @@ def plan_cycle(state, memory, hand_cards, actions, drinks, current, flower, coun
         # 现在打不了：只认「现在的姿态 / 全力値不满足牌面条件」这种本回合会变的原因；条件现在已满足还打不了的（体力、读错…）不算
         if c.tags.genki_min is not None:
             return False
-        return bool(("温存の場合、使用可" in t and current not in WARM) or ("強気の場合、使用可" in t and current != "強気")
-                    or (need and (fp0 is None or fp0 < need)))
+        return bool(not stance_ok(c, current) or (need and (fp0 is None or fp0 < need)))
 
     def run(seq):
         acts, cur, fl, fpv = count, current, flower, fp0
@@ -625,7 +729,7 @@ def plan_cycle(state, memory, hand_cards, actions, drinks, current, flower, coun
                 cleared[name] += 1
             sleeps += int(c.tags.makes_sleep)
             teach = teach or name == TEACH
-            swapped = "手札をすべて入れ替える" in norm(c.text)
+            swapped = swaps_hand(c)
         if fl not in ORDERS or bad_next or not (cur in WARM or warm):
             return None
         left = allc - cleared + Counter({"眠気": sleeps})
@@ -713,6 +817,12 @@ class VeilAdvisor:
             hand_cards.sort(key=lambda c: not c.tags.once)
         observed = {norm(c.name): c for c in hand_cards}
         by_name = {name: c for name, c in observed.items() if f"play:{c.slot}" in actions}
+        fp = memory.strategy_data.get("veil_fp")
+        idol_starved = [c for name, c in observed.items()
+                        if _flag("IDOL_FP_GATE") and name.rstrip("+") == IDOL_CARD and fp is not None
+                        and fp < (fp_delta(c)[1] or FP_RESERVE_AT)]
+        for card in idol_starved:
+            by_name.pop(norm(card.name), None)
         hand = observed.keys()
         drinks = {d.name: f"drink:{d.slot}" for d in state.drinks if f"drink:{d.slot}" in actions}
         current = stance(state)
@@ -778,7 +888,10 @@ class VeilAdvisor:
                 played = played[1:]
             if played[:len(order)] != list(order[:len(played)]):
                 raise ResumeBlocked("VEIL 循环出牌记录和预定顺序不一致")
-            if played and played[-1] in hand:
+            # 上一张打出后又喝过饮料（センブリソーダ 抽 2）：牌堆薄时洗牌会把刚打出的牌抽回手里，手里这张是新抽的，不是没打出
+            #（codex-20261109-1-b R1 T6：OD → ソーダ 抽回 OD，原来在这里停机）
+            drew_since = bool(memory.this_turn) and not memory.this_turn[-1].startswith("打 ")
+            if played and played[-1] in hand and not drew_since:
                 raise ResumeBlocked(f"VEIL 循环上一张牌仍在手中，无法确认已打出：{played[-1]}")
             if len(played) < len(order):
                 name = order[len(played)]
@@ -787,13 +900,8 @@ class VeilAdvisor:
                     return skip(f"循环：下一张 {name} 在手里但打不出，本回合跳过")
                 if name not in by_name:
                     raise ResumeBlocked(f"VEIL 循环下一张牌不可用：{name}")
-                # 1-g R2 再挑戦 剩 7：本回合已先打 アイドルになります+，巻き返し+ 进温存后又打最后一张复用牌 エンターテイナー+
-                # （补的次数没牌接、没有牌被消耗），白丢温存存下的次数 → Skip，温存留到下回合。只限这种回合、夜空在 1 / 2：
-                # 普通循环回合按顺序打完（使用者 2026-11-07：进了循环就只按循环打；再挑戦2 剩 6 / 4 のんびり+夜空 3 跳过后下回合进不了循环）
-                if clear_first() and cycle.get("idol_first") and len(played) == len(order) - 1 and current in WARM \
-                        and flower in ORDERS and name not in CORE - {ENTERTAINER, TEACH} \
-                        and (state.remaining_turns is None or state.remaining_turns > 1):
-                    return skip(f"循环：アイドルになります+ 已先打，温存下最后一张 {name} 不打，温存留到下回合")
+                # 循环回合一律按顺序打完。「温存下最后一张复用牌不打、温存留到下回合」只属于清牌阶段（使用者 2026-11-08：
+                # 「这个是清理牌库阶段才会有的规则」；1-g R1 剩 4 アイドル 先打的循环回合因此少打一张 エンターテイナー+）
                 return play(by_name[name], "五卡循环")
             if len(played) == len(order) and cycle.get("idol_first"):
                 return skip("本回合循环完成（アイドルになります+ 已先打）")
@@ -806,8 +914,9 @@ class VeilAdvisor:
                     return skip("循环：第五张受アイドルになります+禁打条件限制")
                 if fifth:
                     fp_now = memory.strategy_data.get("veil_fp")
-                    if (fifth not in by_name and fifth in observed and fp_now is not None
-                            and fp_now < (fp_delta(observed[fifth])[1] or 0)):
+                    if (observed.get(fifth) in idol_starved
+                            or (fifth not in by_name and fifth in observed and fp_now is not None
+                                and fp_now < (fp_delta(observed[fifth])[1] or 0))):
                         # 验证局 1-d R2 再挑戦 剩 4：第五张 アンダンテ+（全力値消費2），OD +2 后 巻き返し+ 花 1，剩 1 打不出。
                         # 发灰能用账本解释（全力値不够）才结束回合；别的原因发灰（读错、条件牌）照旧停机
                         return skip(f"循环：第五张 {fifth} 全力値不够（账本 {fp_now}），本回合结束")
@@ -831,7 +940,8 @@ class VeilAdvisor:
         eligible = [c for name, c in by_name.items() if (final_turn or name.rstrip("+") != DRIVE.rstrip("+")) and (
             name.rstrip("+") != "アイドルになります" or len({ENTERTAINER, DRIVE, TEACH} & hand) >= 2
         )]
-        if idol_clear() and not any(c.tags.once or c.tags.is_sleep for c in eligible):
+        if (idol_clear() and (not _flag("IDOL_FP_GATE") or len(CORE & hand) >= 2)
+                and not any(c.tags.once or c.tags.is_sleep for c in eligible)):
             # 三选二挡住的 アイドルになります+ 是手里唯一能清的一次性牌：照打（画面不灰就是游戏允许；VEIL_IDOL_CLEAR）
             idol_card = next((c for n, c in by_name.items() if n.rstrip("+") == IDOL_CARD and c not in eligible), None)
             if idol_card is not None:
@@ -859,7 +969,7 @@ class VeilAdvisor:
             idol = next((c for n, c in observed.items() if n.rstrip("+") == IDOL_CARD), None)
             # 过渡里 オーバードライブ 优先级很低（生成眠気，使用者 2026-11-07）：只在 アイドルになります+ 因全力値不够打不出，
             # 或 巻き返し+ 因全力値发灰、下回合又不会自动温存（一番星用完）时打（1-g R1 剩 5→1：切不回温存，五卡循环一直进不去）
-            starved = [c for c in (idol,) if c is not None and not c.available and fp is not None
+            starved = [c for c in (idol,) if c is not None and (not c.available or c in idol_starved) and fp is not None
                        and fp < (fp_delta(c)[1] or FP_RESERVE_AT)]
             if need_warm and rebound is not None and REBOUND not in by_name and fp is not None \
                     and fp < (fp_delta(rebound)[1] or 1):
@@ -977,15 +1087,19 @@ class VeilAdvisor:
                     keeps = (lambda c: after_play(current, flower, c)[0] in WARM) if name == "ガタゴトすやすや" else \
                         (lambda c: after_play(current, flower, c)[0] == "強気")
                     first = next((c for c in eligible if c is not card and c.tags.extra_actions and c.tags.once
-                                  and not c.tags.makes_sleep and keeps(c) and affordable(c) and "手札をすべて入れ替える" not in norm(c.text)), None)
+                                  and not c.tags.makes_sleep and keeps(c) and affordable(c) and not swaps_hand(c)), None)
                     if first is not None:
                         return play(first, f"清牌：先打不改姿态的再动牌，{name} 留后")
                     if WHEY in drinks and any(c is not card and (c.tags.once or c.tags.is_sleep) for c in eligible):
                         return act(drinks[WHEY], f"清牌：{name} 会用掉最后一次出牌，先喝ホエイ")
                 return play(card, "清牌：姿态限定牌优先")
-        if drive_fp() and (fp := memory.strategy_data.get("veil_fp")) is not None:
+        if idol_starved:
+            generator = next((c for c in eligible if fp_delta(c)[0] > 0 and affordable(c)), None)
+            if generator is not None:
+                return play(generator, f"清牌：全力値 {fp} 打不了 {IDOL_CARD}，先攒全力値")
+        if drive_fp() and fp is not None:
             drive = next((c for n, c in by_name.items() if n.rstrip("+") == DRIVE.rstrip("+")), None)
-            starved = [n for n, c in observed.items() if not c.available
+            starved = [n for n, c in observed.items() if (not c.available or c in idol_starved)
                        and n.rstrip("+") in (IDOL_CARD, REBOUND.rstrip("+"))
                        and fp < (fp_delta(c)[1] or (FP_RESERVE_AT if n.rstrip("+") == IDOL_CARD else 1))]
             if drive and starved and not any(fp_delta(c)[0] for c in eligible) and affordable(drive) \
@@ -1052,7 +1166,7 @@ class VeilAdvisor:
             return hit["kind"] if hit else None
 
         def immediate_draw(card):
-            return ((card.tags.draws and "次のターン" not in norm(card.text)) or "手札をすべて入れ替える" in norm(card.text)
+            return ((card.tags.draws and "次のターン" not in norm(card.text)) or swaps_hand(card)
                     or ability_kind(card) == "draw")
 
         def resulting_stance(card):
@@ -1169,7 +1283,7 @@ class VeilAdvisor:
                     waste += max(0, size - HAND_MAX)
                     size = min(size, HAND_MAX)
                     draws.append(-d)
-                    if "手札をすべて入れ替える" in norm(c.text) and n < len(order):
+                    if swaps_hand(c) and n < len(order):
                         break  # 1-h R2 剩 10：仕切り直し+ 换掉整手牌，排在它后面的牌（頂点へ+）打不到了
                 if n == len(order) and not any(draws):
                     # 牌打完了、也没抽到牌：基础的 1 次用不掉；再动层数按 buff 保留规则留到下回合（track_extra：回合开始
@@ -1203,12 +1317,22 @@ class VeilAdvisor:
             if strong_teach() and current not in WARM and flower in (2, 3) and TEACH in by_name and TEACH not in played:
                 # 不在温存：没有温存可留。教えて 推夜空、预约下回合多抽 2（VEIL_STRONG_TEACH；1-c R2 attempt1 剩 8、7 连跳）
                 return play(by_name[TEACH], "清牌：只剩复用牌、不在温存，打 教えてあげる+ 推夜空并预约抽牌")
+            if stance_unlock():
+                for name, need in (("一心不乱", ("強気",)), ("ガタゴトすやすや", tuple(WARM))):
+                    locked = stance_cards.get(name)
+                    if locked is None or current in need or not locked.tags.once:
+                        continue
+                    for c in sorted(eligible, key=priority, reverse=True):
+                        to, _ = after_play(current, flower, c)
+                        left = count - 1 + c.tags.extra_actions + int(to == "強気" and current in WARM)
+                        if to in need and left >= 1 and affordable(c) and not swaps_hand(c):
+                            return play(c, f"清牌：先切到{to}，下一手清掉发灰的 {norm(locked.name)}")
             grey = [n for n, c in observed.items() if not c.available and clears(c)]
             return skip("清牌：可打的只剩复用牌" + (f"（{'、'.join(grey)} 发灰）" if grey else "") + "，不打、温存留到下回合")
         if count > len(eligible) and not unlocks(best):
             # 换掉整手牌的（仕切り直し+）只在手里没有别的可打牌时才先打，否则别的牌被换回牌库
             draw_card = next((c for c in sorted(eligible, key=priority, reverse=True) if immediate_draw(c)
-                              and (not clear_first() or "手札をすべて入れ替える" not in norm(c.text) or len(eligible) == 1)), None)
+                              and (not clear_first() or not swaps_hand(c) or len(eligible) == 1)), None)
             if draw_card:
                 return play(draw_card, "清牌：额外行动优先用技能卡抽牌")
             # 手牌满时喝ソーダ 抽的 2 张作废（1-g R2 再挑戦 T1：5 张满手连喝三瓶）→ DRAW_LAST 下手牌放得下才喝

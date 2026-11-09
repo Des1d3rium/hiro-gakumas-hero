@@ -21,11 +21,12 @@ TOGGLE = (662, 967)  # 一览右下「卡格 / 列表」切换（1-f 实机帧 r
 # 每屏上面 1/3 的卡名读不到（1-h：首张 心・技・体 没读，相邻两屏没有共同卡名，拼接漏牌）
 VIEW = (20, 110, 700, 1000)
 SWIPE = (360, 950, 360, 650)  # 带惯性，实际滚动约 480px（1-h 帧 00→01），一屏 890px 还留一张卡的重叠
-MAX_SCREENS = 20  # 21 张卡约 7000px，8 屏只滚到一半（1-h：第 8 屏停在 達成感+，滚动条在中间）
+MAX_SCREENS = 32  # 21 张卡约 7000px，8 屏只滚到一半（1-h）；考试中一览带 5 个分组标题，22 张 20 屏还没到底（codex-20261109-1-m R2 T4 读到 21/22）。到底就提前停
 SAME_DIFF = 2.0
 GROUPS = ("保留", "手札", "山札", "捨札", "除外")
 _TOTAL = re.compile(r"スキルカード[(（](\d+)[)）]")
-_HEADER = re.compile(r"^(保留|手札|山札|捨札|除外)[(（]?(\d+)(?:/\d+)?[)）]?$")
+# 分组标题前面有折叠图标，OCR 成「+」「▼」等一个符号（codex-20261109-1-e 实机：「+手札（3）」「+山札(19)」），原来一个都没认出
+_HEADER = re.compile(r"^[^ぁ-んァ-ン一-龯\w]?(保留|手札|山札|捨札|除外)[(（]?(\d+)(?:/\d+)?[)）]?$")
 FUZZY = 0.8
 
 
@@ -85,17 +86,50 @@ def parse_screen(boxes, names=None) -> dict:
     return {"rows": rows, "headers": headers, "unknown": unknown}
 
 
+def is_list_view(boxes) -> bool:
+    """一览是列表显示：卡图下方有「強化確認」「カスタマイズ確認」按钮（网格显示没有）。"""
+    return any(norm(t) in ("強化確認", "カスタマイズ確認") for t, _, _ in boxes)
+
+
 def merge_rows(screens: list[list]) -> list:
-    """多屏行序列拼接：后一屏开头和前面结尾重叠最长的那段只算一次（同名牌可能有几张，所以按序列重叠，不按集合去重）。"""
+    """多屏行序列拼接：后一屏开头和前面结尾重叠的那段只算一次（同名牌可能有几张，所以按序列对齐，不按集合去重）。
+    只比卡名：每屏开头在本屏第一个分组标题之前的行组是 None（标题滚出去了）。对齐容许一张漏读（某一屏 OCR 漏了一行）：
+    codex-20261109-1-h 实机一屏漏读一行，重叠对不上，整屏又接了一遍，读到 23 / 22。组为 None 的行最后沿用上一行的组。"""
     out: list = []
     for rows in screens:
-        best = 0
-        for k in range(min(len(out), len(rows)), 0, -1):
-            if out[-k:] == rows[:k]:
-                best = k
+        merged = None
+        for j in range(max(0, len(out) - MERGE_WINDOW), len(out)):  # 从早往晚试：重叠越长越优先
+            merged = _align(out, rows, j)
+            if merged is not None:
                 break
-        out.extend(rows[best:])
-    return out
+        out = merged if merged is not None else out + list(rows)
+    group, filled = None, []
+    for g, n in out:
+        group = g if g is not None else group
+        filled.append((group, n))
+    return filled
+
+
+MERGE_WINDOW = 8  # 一屏最多 4–5 行，重叠只会出现在已拼结果的最后这几行里
+
+
+def _align(out: list, rows: list, j: int) -> list | None:
+    """rows 的开头对齐到 out[j:]，一直对到 out 结尾就返回拼好的新序列；容许一处漏读（out 或 rows 少一行），对不上返回 None。"""
+    p, i, skips, res = j, 0, 0, list(out)
+    while p < len(res) and i < len(rows):
+        name = rows[i][1]
+        if res[p][1] == name:
+            p, i = p + 1, i + 1
+        elif skips == 0 and i + 1 < len(rows) and rows[i + 1][1] == res[p][1]:
+            res.insert(p, rows[i])  # 之前那屏漏读了这一行
+            p, i, skips = p + 1, i + 1, 1
+        elif skips == 0 and (p + 1 < len(res) and res[p + 1][1] == name or i > 0 and p + 1 == len(res)):
+            p, skips = p + 1, 1  # 这一屏漏读了 res[p]（已对上至少一行后，out 最后一行没出现在这屏也只能是漏读）
+        else:
+            return None
+    if p < len(res) or i == 0:
+        return None
+    return res + list(rows[i:])
 
 
 def read_list(*, shoot: Callable, click: Callable, swipe: Callable, ocr_boxes: Callable, view_diff: Callable,
@@ -104,12 +138,17 @@ def read_list(*, shoot: Callable, click: Callable, swipe: Callable, ocr_boxes: C
     返回 {cards: [卡名], groups: {组: [卡名]}, headers, complete, problems, screens}。complete：有分组标题时每组张数对上。"""
     out = {"cards": None, "groups": {}, "headers": {}, "complete": False, "problems": [], "screens": 0}
     before = shoot()
-    click(*TOGGLE)
-    sleep(0.8)
-    img = shoot()
-    if before is not None and img is not None and view_diff(before, img) < SAME_DIFF:
-        out["problems"].append("点了列表切换按钮，一览没变")
-        return out
+    # 游戏记住上次的显示方式：一览打开时已经是列表显示就不切（2026-11-08 使用者手动切成列表后，再点切换会切回网格），读完也不切
+    toggled = not (before is not None and is_list_view(ocr_boxes(before)))
+    if toggled:
+        click(*TOGGLE)
+        sleep(0.8)
+        img = shoot()
+        if before is not None and img is not None and view_diff(before, img) < SAME_DIFF:
+            out["problems"].append("点了列表切换按钮，一览没变")
+            return out
+    else:
+        img = before
     imgs, screens, headers, unknown = [img], [], {}, []
     total = None
     for i in range(MAX_SCREENS):
@@ -147,6 +186,8 @@ def read_list(*, shoot: Callable, click: Callable, swipe: Callable, ocr_boxes: C
     elif len(out["cards"]) != total:
         out["problems"].append(f"读到 {len(out['cards'])} 张，总张数 {total}")
     out["complete"] = total is not None and len(out["cards"]) == total and not bad
-    click(*TOGGLE)  # 切回网格，不改游戏里的显示设置
-    sleep(0.6)
+    if toggled:
+        click(*TOGGLE)  # 切回网格，不改游戏里的显示设置
+        sleep(0.6)
+    out["imgs"] = imgs
     return out

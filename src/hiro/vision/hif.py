@@ -908,6 +908,11 @@ def read_hand(img: MatLike, *, letters: list[Rect] | None = None, cache: RegionC
         entry.update(cached(cache, f"badge@{cx}:{bx2 - bx1}", badge_crop, lambda cx=cx, nx=next_cx: read_badge(img, cx, nx)))
         entry["slot"] = slot
         hand.append(entry)
+    # 支援卡的考试内临时强化：卡图右上角叠的头像个数（5 张布局被盖住的为 None），见 hiro.vision.support_boost
+    from hiro.vision.support_boost import count_boosts
+
+    for entry, boost in zip(hand, count_boosts(img, [(r.x1 + r.w // 2, r.y1) for r in letters])):
+        entry["boost"] = boost
     return hand, sum(1 for c in hand if c.get("name") is None)
 
 

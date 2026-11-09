@@ -72,6 +72,7 @@ def check(trace: Path) -> dict:
             else:
                 if piles.get("unlocated"):
                     why.append(f"有位置不明的牌：{piles['unlocated']}")
+                # 牌堆层（VEIL_PILE_ENGINE）的 doubt 是 deck 的子集（存疑但仍记在山札里），不另算
                 total = hand + Counter(piles.get("deck")) + Counter(piles.get("grave")) + Counter(piles.get("unlocated"))
                 if total != Counter(ctx["deck"]):
                     why.append(f"牌不守恒：多 {dict(total - Counter(ctx['deck']))}，少 {dict(Counter(ctx['deck']) - total)}")

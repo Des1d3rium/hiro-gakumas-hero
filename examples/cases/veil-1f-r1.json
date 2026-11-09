@@ -1,0 +1,17 @@
+{
+  "source": "codex-20261108-1-f R1 战斗事件 7–17",
+  "memory": {
+    "cards": ["インフルエンサー+", "エンターテイナー+", "仕切り直し+", "巻き返し+", "教えてあげる+", "オーバードライブ+", "プライド+", "アイドルになります+"],
+    "once": ["インフルエンサー+", "仕切り直し+", "プライド+", "アイドルになります+"],
+    "rebound_repeatable": true,
+    "custom": [
+      {"card": "インフルエンサー+", "item": "強気追加"},
+      {"card": "エンターテイナー+", "item": "パラメータ+12"},
+      {"card": "仕切り直し+", "item": "消費体力減少ターン+2"},
+      {"card": "巻き返し+", "item": "制限削除"}
+    ],
+    "evidence": "合成：开局牌组一览文字与主数据差异"
+  },
+  "influencer": {"seq": 7, "stance": "温存", "flower": 2, "after_stance": "強気", "after_flower": 1},
+  "idol": {"attempt_seq": 8, "undo_seq": 9, "fp_before": 0, "pride_seq": 14, "fp_after": 3, "play_seq": 15}
+}

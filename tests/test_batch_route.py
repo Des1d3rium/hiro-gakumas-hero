@@ -876,3 +876,116 @@ def test_replan_after_auto_resolve_on_same_hold(monkeypatch):
     assert not B.replan_due("考试中：残りター", 0)
     assert B.replan_due("考试中：残りター", 1)  # auto-resolve 之后
     assert not B.replan_due("考试中：残りター", 1)
+
+
+def test_reward_received_popup_closes():
+    """结算后「受取完了」奖励弹窗（奖励里有ジュエル）：点「閉じる」，不当危险页停下（codex-20261109-1-b 实机 OCR）。"""
+    boxes = [("受取完了", 1.0, (58, 338, 184, 372)), ("以下の報酬を受け取りました。", 1.0, (60, 400, 500, 430)),
+             ("メモリー再生成チケット", 1.0, (173, 700, 400, 730)), ("APドリンク", 1.0, (173, 800, 300, 830)),
+             ("ジュエル", 1.0, (173, 921, 283, 947)), ("閉じる", 1.0, (333, 1146, 422, 1174))]
+    assert B.reward_close(boxes) == (377, 1160)
+    assert B.reward_close(boxes + [("交換する", 1.0, (300, 1000, 420, 1030))]) is None
+    assert B.reward_close([b for b in boxes if b[0] != "受取完了"]) is None
+
+
+def _end_pill(v):
+    from hiro.produce.shop import END_PILL
+
+    img = np.zeros((1280, 720, 3), np.uint8)
+    x, y, w, h = END_PILL
+    img[y : y + h, x : x + w] = v
+    return img
+
+
+def test_consult_acquire_overlay_passes_through_exchange_label(monkeypatch):
+    """codex-20261109-1-c 相談：P 道具送的第 2 瓶饮料获得演出盖在相談页，星星层半透明、「交換する」照样读得出，
+    原来当「商店里选中饮料」停在「选择页」。「終了」被压暗（V≈182）才放行；选中饮料时「終了」原亮度（V≈224）照旧停。"""
+    monkeypatch.setattr(B, "acquire_bar", lambda img: True)
+    page = {"page": "ACQUIRE", "fields": {"kind": "drink", "name": "初星ホエイプロテイン"}}
+    boxes = [box("Pポイントと交換するものを選んでください", 310), box("交換する", 1085, 382), box("終了", 1085, 644)]
+    assert B.shop_overlay("选择页", page, boxes, _end_pill(182))
+    assert not B.shop_overlay("选择页", page, boxes, _end_pill(224))
+    assert not B.shop_overlay("选择页", page, boxes + [box("交換確認", 400)], _end_pill(182))
+
+
+def test_acquire_name_small_kana_folded():
+    from hiro.vision import deck
+
+    if "初星ホエイプロテイン" not in deck._drinks_by_name():
+        pytest.skip("没有主数据")
+    assert deck._item_from_name("西初星ホエイプロティン")["name"] == "初星ホエイプロテイン"
+
+
+def _consult_frame(end_v, *, bar=False):
+    from hiro.produce.shop import END_PILL
+
+    img = np.zeros((1280, 720, 3), np.uint8)
+    x, y, w, h = END_PILL
+    img[y : y + h, x : x + w] = end_v
+    img[0, 0, 0] = 1 if bar else 0  # 名称栏标记（monkeypatch 的 acquire_bar 读它）
+    return img
+
+
+@pytest.fixture
+def lazy(monkeypatch):
+    import batch_prep as P
+
+    monkeypatch.setattr(B, "acquire_bar", lambda img: bool(img[0, 0, 0]))
+    monkeypatch.setenv("HIRO_CONSULT_LAZY", "1")
+    return P
+
+
+def test_consult_state_ready_covered_other(lazy):
+    """相談懒处理：只认「主画面就绪」——「終了」正常亮度（V≈224）且没有获得名称栏；被星星层压暗（V≈181）或有名称栏 = 盖着；
+    弹窗把「終了」提亮（V≈254）= 别的，不点。"""
+    assert lazy.consult_state(_consult_frame(224)) == "ready"
+    assert lazy.consult_state(_consult_frame(181)) == "covered"
+    assert lazy.consult_state(_consult_frame(224, bar=True)) == "covered"
+    assert lazy.consult_state(_consult_frame(254)) == "other"
+
+
+class _Dev:
+    def __init__(self, frames):
+        self.frames, self.clicks = list(frames), []
+
+    def click(self, x, y):
+        self.clicks.append((x, y))
+
+    def screenshot(self):
+        return self.frames.pop(0)
+
+
+def test_wait_consult_ready_taps_shelf_gap_until_main(lazy):
+    """codex-20261109-1-c：第 2 瓶获得演出停住不动、OCR 认不出——懒处理不去认它，点货架空隙直到「終了」恢复亮度才交 shop-auto。"""
+    from hiro.produce.hif_buttons import SHELF_GAP
+
+    t = [0.0]
+    dev = _Dev([_consult_frame(181, bar=True), _consult_frame(224)])
+    out = lazy.wait_consult_ready(dev, _consult_frame(181), clock=lambda: t[0], sleep=lambda s: t.__setitem__(0, t[0] + s),
+                                  log=lambda m: None)  # fmt: skip
+    assert out is not None and dev.clicks == [SHELF_GAP, SHELF_GAP]
+
+
+def test_wait_consult_ready_does_not_tap_dialog_and_times_out(lazy):
+    t = [0.0]
+    dev = _Dev([_consult_frame(254)] * 40)
+    out = lazy.wait_consult_ready(dev, _consult_frame(254), timeout=3, clock=lambda: t[0],
+                                  sleep=lambda s: t.__setitem__(0, t[0] + s), log=lambda m: None)  # fmt: skip
+    assert out is None and dev.clicks == []
+
+
+def test_consult_lazy_default_off(monkeypatch):
+    import batch_prep as P
+
+    monkeypatch.delenv("HIRO_CONSULT_LAZY", raising=False)
+    assert P.consult_lazy() is False
+
+
+def test_prep_retries_consult_hold_after_lazy_timeout(monkeypatch):
+    """懒处理没等到就绪返回 None 时，同一停点（「选择页」本来只试一次）允许再试。"""
+    monkeypatch.setitem(B.HELD, "prep", None)
+    monkeypatch.setitem(B.HELD, "prep_consult", False)
+    assert B.prep_due("选择页：選んでください", 100.0)
+    assert not B.prep_due("选择页：選んでください", 102.0)
+    B.HELD["prep_consult"] = True
+    assert B.prep_due("选择页：選んでください", 104.0)

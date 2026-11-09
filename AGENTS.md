@@ -118,14 +118,18 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | `HIRO_STRATEGY` | 换培育策略类（KAA `HifGrindStrategy` 子类），默认 `hiro.produce.hif:HiroHifStrategy` |
 | `HIRO_PAUSE_FLAG` | 外部暂停旗标文件路径：文件存在就暂停对局 |
 | `HIRO_CONSULT_DRINK_SWAP=0` | 关掉相談栏满换饮料（默认开：货架上的饮料比持有里最差的一瓶好就先丢后买） |
+| `HIRO_CONSULT_LAZY=1` | 相談懒处理（默认关）：watch 交给 shop-auto 前不认获得演出，只等相談主画面就绪（「終了」正常亮度、没有获得名称栏）；盖着就点货架空隙再看，见 docs/batch-hif.md `prep.consult_lazy` |
 | `HIRO_LIVE_ROTATE=1` | LIVE 横屏黑屏时先把游戏窗口内容区宽高对调成横向（辅助功能改窗口尺寸，不切全屏、不抢前台），LIVE 结束还原原来的位置和尺寸；开着时不再切全屏，没救回画面就停下交给使用者（窗口已在全屏里时退出照旧走全屏方式）。`batch_hif watch` 默认开（设 `0` 关，退回原来的切全屏），`run_hif` 默认关。要求 PlayCover「宽高比」设为「自由」。手动实测：`PYTHONPATH=src .venv/bin/python -m hiro.loop.landscape rotate\|restore\|show` |
 | `HIRO_RESCUE_LLM=0` | 关掉认不出画面时的 LLM 看图兜底（默认开） |
 | `HIRO_DEBUG_RECOG=1` | 把全部识别互验写进 trace，页面变化都存帧 |
-| `HIRO_DRINK_INSITU=0` | 关掉考试饮料栏的统一模板补认（默认开：原画模板没把握的格，用统一模板——全部饮料按原画渲染成饮料栏外观，采到过的用 `tools/assets/capture_drinks.py` 生成的实机中位图——再认一次；已认出的格和空格不改） |
+| `HIRO_DRINK_INSITU=0` | 关掉饮料栏的实机模板读法（默认开：每一格先比实机模板——采到过的饮料用 `tools/assets/capture_drinks.py` 生成的实机中位图，其余按原画渲染成饮料栏外观——认准了就以它为准，包括原画模板判成空的格；实机模板没把握时才留原画模板的结果） |
+| `HIRO_CARD_FX=0` | 关掉技能卡结构化效果（默认开：姿态变化、全力値、追加行动、抽牌、生成眠気、使用条件按主数据 `playEffects` / `ProduceExamEffect` / `ProduceExamTrigger` 算，客制化「追加」的效果按效果 id 并进来；查不到主数据的卡照旧按牌面文字解析，见 `hiro/brain/card_fx.py`） |
 | `HIRO_CARD_ICON=1` | 换卡页 KAA 认不出的卡格用渲染卡图标再认一次（默认关；要先 `python -m hiro.vision.card_icon_render build`，见 docs/assets.md） |
 | `HIRO_VEIL_SIGNATURE=1` | VEIL 牌库按版本记账（默认关）：批量账本里同名卡一次性 / 客制化不同时，各算一个记账键；手里同名几张分不出时点按一次（只选中、不打出）读效果文字分辨，读完点空白取消选中。效果文字的 OCR 区域 `PROBE_TEXT_BOX` 还没实机校准，每次点按的文字都写进 trace（`veil_probe`） |
 | `HIRO_VEIL_HIF_FILL=1` | VEIL 本战 R2 按 H.I.F応援棒 记账（默认关）：开考时牌堆补到 22 张，补的「基本」牌名字不知道，先记成占位「基本?」，手里出现账本外、名字带「基本」的牌时改成真名；不开时这张牌被抽到后整副记成位置不明 |
 | `HIRO_LANDING_RETRY=1` | 出牌第一次没落地时先不禁用这张牌，重读后再点一次，第二次才禁用（默认关）。VEIL 出牌策略另有 8 个审查开关（`VEIL_CYCLE_PLAN` 等，默认关），见 docs/batch-hif.md |
+| `HIRO_VEIL_SUPPORT_BOOST=1` | 考试中支援卡的临时强化按总档位算效果（默认关）：卡图右上角叠的支援卡头像个数 = 临时强化次数（`hiro.vision.support_boost`），卡名「+」被盖住时效果换成「账本档位 + 头像数」那一档；账本不记临时强化。5 张手牌时被盖住的牌数不出头像，只有多一档会改变姿态 / 全力値 / 出牌次数 / 抽牌 / 元気 等、且不在循环状态（手里有核心 4 张）时，点开读一次说明定档位，本回合沿用 |
+| `VEIL_PILE_ENGINE=1` | VEIL 牌堆记账换成三层模块 `hiro.brain.piles`（默认关）：效果层按主数据登记每手应抽几张（牌 / 饮料 / 回忆能力）；牌堆层把「应抽却到回合结束都没出现」的记成暗抽，洗牌时对上；对账层遇到「账面山札有剩却抽到捨札的牌」只倒推山札已空、剩下的记存疑，存疑的牌洗回山札后又抽空一轮都没出现就判出局，不再整副位置不明。出矛盾时点右下角牌库一览按分组读一次，以画面为准重置。回放核对：`tools/audit/pile_replay.py` |
 | `HIRO_VEIL_STRICT_SHUFFLE=1` | VEIL 牌堆记账按洗牌规则收紧（默认关）：抽牌数大于牌堆剩余时，牌堆里的牌必须全被抽到才认洗牌，否则整副记成位置不明 |
 
 固定编成时，租借格按 `--main-attr` 挑主属性、等级最高的一张；挑不到就停下（不开局）。

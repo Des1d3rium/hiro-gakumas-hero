@@ -69,6 +69,9 @@ def wait_hand(n: int, remaining: int | None, *, timeout: float = SETTLE_S, clock
                 letters = read_letters(img)
                 xs = [x for x, _, _ in letters]
                 if len(xs) == n and hand_layout(xs) == "ok":
+                    if ex.card_in_flight(img):  # 上一张还浮着结算：手牌已摆好也先等它落下（1-i R2 OD 后 教えて 被吞）
+                        sleep(SETTLE_GAP)
+                        continue
                     return (img, letters), None
                 if hand_layout(xs) == "ok":
                     return None, f"count:{len(xs)}"

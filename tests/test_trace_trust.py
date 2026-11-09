@@ -42,7 +42,7 @@ def test_trace_context_has_board(monkeypatch):
     mem.this_turn = ["打 第一印象+"]
     ctx = VeilScreen({}, set()).trace_context(state, mem)
     assert ctx["hand"][1] == [1, "頂点へ+", "頂点へ+", 1, True, True]
-    assert ctx["piles"] == {"deck": {"眠気": 1}, "grave": {"教えてあげる+": 1}, "unlocated": {}}
+    assert ctx["piles"] == {"deck": {"眠気": 1}, "grave": {"教えてあげる+": 1}, "unlocated": {}, "doubt": {}}
     assert ctx["excluded"] == {"第一印象+": 1} and ctx["played"] == ["第一印象+"]
     assert ctx["flags"]["CLEAR_FIRST"] is True and ctx["flags"]["DRAW_LAST"] is True and ctx["undone"] == 0
     json.dumps(ctx, ensure_ascii=False)

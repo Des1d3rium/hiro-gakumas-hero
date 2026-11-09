@@ -77,3 +77,23 @@ def test_veil_clear_prefers_card_with_pending_extra_action():
     mem.strategy_data["veil_abilities"][0]["left"] = 0  # 用掉后不再加分
     state.hand = [card(0, "その他+", once=True)]
     assert choose(state, mem) == "play:0"
+
+
+def test_loader_table_matches_master_texts():
+    """表由通用加载器编译（效果类型分类、卡 id 认触发卡、enc02 次数），和说明文字逐项一致；没有主数据时跳过。"""
+    M.table.cache_clear()
+    try:
+        from hiro.state.context import catalog
+
+        rows = catalog().db.execute("SELECT id FROM ProduceExamStatusEnchant WHERE id LIKE ?", (M.PREFIX + "%",)).fetchall()
+    except Exception:  # noqa: BLE001
+        pytest.skip("没有主数据")
+    loaded = M._from_loader([r[0] for r in rows])
+    table = M.table()
+    assert len(loaded) == len(table) == 115
+    for cid, e in table.items():
+        assert loaded[cid]["kind"] is not None, cid
+        assert loaded[cid]["kind"] == M.classify(e["text"]), cid
+        assert M.norm(loaded[cid]["card"]) == M.norm(e["text"].split("使用後")[0]), cid
+        assert e["count"] == loaded[cid]["count"] and e["count"] >= 1, cid
+    assert {e["kind"] for e in table.values()} == {"draw", "play", "sleep"}

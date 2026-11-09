@@ -223,3 +223,47 @@ def test_drink_icon_names_real_pitem_page():
     if names == [None, None, None]:
         pytest.skip("没有饮料素材")
     assert names == ["ブーストエキス", "ミックススムージー", "ほうじ茶"]
+
+
+class _TapDev:
+    def __init__(self):
+        self.taps = []
+
+    def screenshot(self):
+        return None
+
+    def click(self, x, y):
+        self.taps.append((x, y))
+
+
+def _action_boxes(bottom, hint):
+    """实机 codex-20261109-1 第 1 局行动页的 OCR（4 日 / 1 日）：提示行压在人物身上，只读出残字。"""
+    return [("H.I.F本戦まで", 1.0, (47, 39, 179, 61)), ("4日", 1.0, (76, 84, 145, 129)), ("休む", 1.0, (625, 876, 666, 899)),
+            *[(t, 0.5, (333, 856, 370, 876)) for t in hint], *bottom]
+
+
+def test_action_page_without_full_prompt_still_follows_fixed_route():
+    """「行動を選択してください」没读全也照走固定路线：有差し入れ点差し入れ，只剩相談点相談。"""
+    gift = ("差し入れ", 1.0, (392, 1067, 489, 1095))
+    dev = _TapDev()
+    out = P.handle(dev, lambda img: _action_boxes([("おでかけ", 1.0, (231, 1068, 328, 1092)), gift], ["ください"]),
+                   None, {"active": {"ledger": None}}, "b", 1, persist=lambda: None)
+    assert out == "行动页：差し入れ" and dev.taps == [(440, 1081)]
+    dev = _TapDev()
+    out = P.handle(dev, lambda img: _action_boxes([("相談", 1.0, (335, 1068, 385, 1092))], ["択し", "ださ"]),
+                   None, {"active": {"ledger": None}}, "b", 1, persist=lambda: None)
+    assert out == "行动页：相談" and dev.taps == [(360, 1080)]
+    dev = _TapDev()
+    out = P.handle(dev, lambda img: _action_boxes([("相談", 1.0, (335, 1068, 385, 1092)), ("授業", 1.0, (100, 1068, 150, 1092))], []),
+                   None, {"active": {"ledger": None}}, "b", 1, persist=lambda: None)
+    assert out is None and dev.taps == []  # 还有授業：不是最后一天，交给授業路线
+
+
+def test_change_out_swapped_in_card_ignores_customized_flag():
+    """本局换卡换进来的牌被认成客制化（codex-20261109-1-b：カウントダウン 的绿色 LED 卡图）照样换出；回忆里客制化的牌仍不换。"""
+    ledger = {"log": [{"op": "remove", "card": "ハッピー♪", "why": "换卡换出 授業换卡"},
+                      {"op": "add", "card": "カウントダウン", "why": "换卡换入 授業换卡"}]}
+    cards = [{"row": 1, "col": 0, "name": "エンターテイナー", "customized": True},
+             {"row": 3, "col": 0, "name": "カウントダウン", "customized": True}]
+    assert P.pick_change_out(cards, ledger) == (3, 0)
+    assert P.pick_change_out(cards[:1], ledger) is None

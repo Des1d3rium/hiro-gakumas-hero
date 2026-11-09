@@ -277,14 +277,17 @@ def _read_drink_slots(img: MatLike) -> list[dict]:
 
 
 def _resolve_insitu(out: list[dict], crops: list[MatLike | None], lib: IconLibrary | None = None) -> None:
-    """只补原画模板没把握（unknown）的格：实机模板分数 ≥ INSITU_MIN 且领先 ≥ INSITU_MARGIN 才算认出。
-    认出的、空槽不改（实机模板只覆盖采到过的饮料，没采到的饮料照旧按原画认）。"""
+    """实机模板为主：每格都比实机模板，分数 ≥ INSITU_MIN 且领先 ≥ INSITU_MARGIN 就以它为准（覆盖原画模板的结果）；
+    实机模板没把握的格保留原画模板的结果（实机模板只覆盖采到过的饮料，没采到的饮料照旧按原画认）。"""
     from kaa.db.drink import Drink
 
     lib = _insitu_library(DRINK_SIZE) if lib is None else lib
     if not lib.keys:
         return
-    todo = [i for i, e in enumerate(out) if e["state"] == "unknown" and crops[i] is not None]
+    # 实机模板为主（使用者 2026-11-08：「直接用实机模板就好了」）：每一格都先比实机模板，认准了就以它为准，
+    # 原画模板的结果只在实机模板没把握时留着（没采到过的饮料）。原画模板把ブーストエキス 判成空（0.307 < EMPTY_MAX），
+    # 懒同步按画面抹掉账本里的那瓶（1-e 轮间、1-f 相談、1-g 相談）。实机模板：饮料 0.78–0.86，真空格 0.12–0.17
+    todo = [i for i, e in enumerate(out) if crops[i] is not None]
     for i, top in zip(todo, lib.match_many([crops[i] for i in todo]) if todo else []):
         (score, asset), (second, _) = top
         entry = out[i]

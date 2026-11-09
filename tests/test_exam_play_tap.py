@@ -172,3 +172,44 @@ def test_art_changed_flags_swapped_card_same_layout():
     b2 = a.copy()
     b2[960:1040, 50:130] = 130  # 轻微发光不算
     assert _art_changed(a, b2, letters) is None
+
+
+def test_tap_swallowed_while_previous_card_resolves_is_not_landed(game, monkeypatch):
+    """codex-20261109-1-e / 1-g 循环 T7：决策帧上 オーバードライブ+ 还在结算，点 教えてあげる+ 被吞掉（一下都没选中）。
+    上一张的效果让体力变了，旧判据「签名变了 = 打出」记成已打出。手牌张数没变、卡名还在原位 → 没打出。"""
+    game(lost=[True] * 10)
+    label = [ex._Text("教えてあげる+", Rect(X - 80, 1100, 160, 20))]
+    # 决策帧上卡名被上一张浮起的牌挡着（name_visible 为假，旧的「卡名仍在原位」分支不触发），结算完卡名露出来
+    monkeypatch.setattr(ex, "_roi_texts", lambda img, y1, y2: [] if img == "start" else label)
+    monkeypatch.setattr(ex, "_lite_sig", lambda img: ((5, 20, 10), ((1, 1), (2, 2))) if img == "start" else ((5, 18, 12), ((1, 1), (2, 2))))
+    ex._play_card(X, Y, "start", "教えてあげる+")
+    assert not ex.PLAY_RESULT["confirmed"]
+    assert "没打出" in ex._play_not_landed(NS(img="start"), X, "教えてあげる+")
+
+
+def test_wait_flight_waits_until_previous_card_lands(monkeypatch):
+    """codex-20261109-1-i R2：オーバードライブ+ 还浮在手牌上方结算时点 教えてあげる+ 被吞。点之前原地等它落下。"""
+    import numpy as np
+
+    frames = iter([np.ones((1280, 720, 3), np.uint8) * v for v in (1, 2, 3)])
+    monkeypatch.setattr(ex, "device", NS(screenshot=lambda: next(frames)))
+    monkeypatch.setattr(ex, "sleep", lambda s: None)
+    monkeypatch.setattr(ex, "card_in_flight", lambda img: int(img[0, 0, 0]) < 3)
+    first = np.zeros((1280, 720, 3), np.uint8)
+    assert int(ex.wait_flight(first)[0, 0, 0]) == 3
+
+
+def test_confirmed_but_hand_unchanged_is_not_landed(game, monkeypatch):
+    """codex-20261109-1-j R2 T6：选中、确认两下都收到了，オーバードライブ+ 还在手里。结算稳定后角标位置、卡面都没变 → 没打出。"""
+    import numpy as np
+
+    g = game()
+    ex._play_card(X, Y, "start")
+    assert ex.PLAY_RESULT["confirmed"]
+    same = np.zeros((1280, 720, 3), np.uint8)
+    monkeypatch.setattr(ex, "device", NS(screenshot=lambda: same, click=g.click))
+    monkeypatch.setattr(ex, "_lite_sig", lambda img: ((5, 20, 10), ((1, 1), (2, 2))))
+    assert "没打出" in ex._play_not_landed(NS(img=same), X)
+    drawn = same.copy()
+    drawn[900:1080, 240:360] = 200  # codex-20261109-1-l：打出后抽牌补到同一格，角标位置不变、那一格卡面换了 = 打出了
+    assert ex._play_not_landed(NS(img=drawn), X) is None

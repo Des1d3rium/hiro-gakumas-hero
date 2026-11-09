@@ -37,16 +37,47 @@ def memory_path(key: str) -> Path:
 
 def save_memory(key: str, deck: dict, idol: str, *, overwrite: bool = False) -> Path:
     path = memory_path(key)
-    if path.exists() and not overwrite:
-        old = json.loads(path.read_text(encoding="utf-8"))
-        if sorted(map(norm, old["cards"])) != sorted(map(norm, deck["cards"])):
-            raise ValueError(f"回忆栏「{key}」已存有不同的牌组；确认后加 --overwrite")
+    old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    same_deck = old.get("idol") == idol and Counter(map(norm, old["cards"])) == Counter(map(norm, deck["cards"]))
+    if old and not same_deck and not overwrite:
+        raise ValueError(f"回忆栏「{key}」已存有不同的牌组；确认后加 --overwrite")
+    custom = memory_customs(deck) if "custom" in deck else old.get("custom", []) if same_deck else []
+    if same_deck and old.get("custom") and custom != old["custom"] and not overwrite:
+        raise ValueError(f"回忆栏「{key}」已存有不同的客制化；确认后加 --overwrite")
     record = {"memory": key, "idol": idol, "cards": [norm(c) for c in deck["cards"]], "once": [norm(c) for c in deck.get("once", [])],
               "rebound_repeatable": deck.get("rebound_repeatable"), "evidence": deck["evidence"],
               "saved": time.strftime("%Y-%m-%d %H:%M:%S")}  # fmt: skip
+    if custom:
+        record["custom"] = custom
+    if deck.get("customs_known"):
+        record["customs_known"] = True  # memory-save --scan：没列出客制化的卡就是没做过（建账本时记 []，不是「不知道」）
+    if same_deck and "abilities" in old:
+        record["abilities"] = old["abilities"]
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
     return path
+
+
+def memory_customs(deck: dict) -> list[dict]:
+    """清单里按卡名登记的客制化。同名只有一张时按卡名归给它；同名多张时记录要带 copy（同名里的第几张，0 起，
+    按清单 cards 的顺序 = 牌组一览顺序；memory-save --scan 会写），没写 copy 就定位不了、报错。"""
+    counts = Counter(map(norm, deck["cards"]))
+    custom = deck.get("custom", [])
+    if not isinstance(custom, list):
+        raise ValueError("custom 须列出 {card, item} 记录")
+    records = []
+    for record in custom:
+        if not isinstance(record, dict) or not all(isinstance(record.get(k), str) and norm(record[k]) for k in ("card", "item")):
+            raise ValueError("custom 须列出 {card, item} 记录")
+        card, item = norm(record["card"]), norm(record["item"])
+        copy = record.get("copy")
+        if counts[card] == 1 and copy in (None, 0):
+            records.append({"card": card, "item": item})
+        elif counts[card] > 1 and isinstance(copy, int) and 0 <= copy < counts[card]:
+            records.append({"card": card, "item": item, "copy": copy})
+        else:
+            raise ValueError(f"回忆客制化无法定位卡牌：{card}（牌组里 {counts[card]} 张，copy={copy}）")
+    return records
 
 
 def load_memory(key: str) -> dict:
@@ -102,7 +133,19 @@ def new_ledger(memory: dict, drinks: list[str | None] | None = None) -> dict:
               "rebound_repeatable": memory.get("rebound_repeatable"), "drinks": slots, "pending_add": None,
               "abilities": static_abilities(memory.get("abilities")),
               "log": [{"t": _now(), "op": "load", "memory": memory["memory"], "evidence": memory["evidence"]}]}  # fmt: skip
-    ensure_deck(ledger, origin="memory")
+    deck = defaultdict(list)
+    for c in ensure_deck(ledger, origin="memory"):
+        deck[c["name"]].append(c)  # ensure_deck 按 cards 顺序建，同名的第几张 = copy
+    if memory.get("customs_known"):
+        for same in deck.values():
+            for c in same:
+                c["customs"] = []
+    for record in memory_customs(memory):
+        card = deck[record["card"]][record.get("copy", 0)]
+        card["customs"] = (card["customs"] or []) + [record["item"]]
+        if LIMIT_REMOVED in record["item"]:
+            card["once"] = False
+    _refresh(ledger)
     return ledger
 
 
@@ -353,7 +396,7 @@ def upgrade_card(ledger: dict, name: str | None, *, id: str | None = None, where
 
 def customize_card(ledger: dict, name: str | None, item: str, *, id: str | None = None, where: dict | None = None,
                    why: str = "") -> dict:
-    """客制化记到那一张卡上；「制限削除」同时去掉一次性。log 照旧记一条 customize（to_deck 的 custom 用）。
+    """客制化记到那一张卡上；「制限削除」同时去掉一次性。log 照旧记一条 customize。
     原来客制化不知道（None）的卡：记上这一项，并标 customs_partial（之前做过什么仍不知道）。"""
     card = _need(ledger, name, id=id, where=where, loose=True)
     item = norm(item)
@@ -459,12 +502,21 @@ def acquire_card(ledger: dict, name: str, once: bool | None, *, why: str, window
     return "added"
 
 
-def sync_deck(ledger: dict, screen: list[tuple[str, bool | None]], *, why: str) -> list[str]:
+def plus_cap(name: str) -> str:
+    """卡名末尾的「+」最多留一个（培育里的卡只能强化一次）。"""
+    base = name.rstrip("+")
+    return base + "+" if base != name else name
+
+
+def sync_deck(ledger: dict, screen: list[tuple[str, bool | None]], *, why: str, upgrades: bool = True) -> list[str]:
     """考前牌组对账（使用者 2026-11-07 第二层）：screen = 牌组一览读到的 [(带「+」的卡名, 一次性)]，整副读全才调用。
     账本缺的补上；同名只差「+」的按画面改强化（同一张卡，id / 客制化不变）；账本多出来的只记差异不删（可能是识别漏读）。
     返回改动 / 差异说明。"""
     deck = ensure_deck(ledger)
     have = Counter(c["name"] for c in deck)
+    # 培育里的卡最多强化一次：画面 / OCR 的「X++」按「X+」记（使用者 2026-11-09：账本里不该有 プライド++，只可能是 プライド+；
+    # 1-h R2 开考对账把 プライド+ 改成了 プライド++）
+    screen = [(plus_cap(norm(n)), o) for n, o in screen]
     seen = Counter(norm(n) for n, _ in screen)
     once_of = {norm(n): o for n, o in screen}
     missing = seen - have  # 画面有、账本没有
@@ -473,7 +525,12 @@ def sync_deck(ledger: dict, screen: list[tuple[str, bool | None]], *, why: str) 
     for name in sorted(missing.elements()):
         base = name.rstrip("+")
         old = next((c for c in sorted(extra.elements()) if c.rstrip("+") == base), None)
-        if old is not None:  # 强化次数不同：按画面改
+        if old is not None and not upgrades:
+            # 考试页的一览带考试里的临时强化（支援卡随机强化手牌，可超过 +1；アイドル魂 强化下回合手牌），
+            # 不是培育里的强化：只记差异，不改账本（使用者 2026-11-09）
+            extra[old] -= 1
+            notes.append(f"考试中强化 {old}→{name}（临时，未改账本）")
+        elif old is not None:  # 强化次数不同：按画面改
             extra[old] -= 1
             card = next(c for c in deck if c["name"] == old)
             card["name"] = name
@@ -593,7 +650,18 @@ def sync_drinks(ledger: dict, observed: list[dict] | None, *, why: str) -> list[
 def to_deck(ledger: dict) -> dict:
     """给 veil_exam 的牌组清单（同 deck-base 格式）。instances 是逐张的牌组（HIRO_VEIL_SIGNATURE=1 时考试按它分版本记账）。"""
     deck = ensure_deck(ledger)
-    custom = [{"card": e["card"], "item": e["item"]} for e in ledger.get("log", []) if e.get("op") == "customize"]
+    by_base = defaultdict(list)
+    for card in deck:
+        by_base[card["name"].rstrip("+")].append(card)
+    custom = [{"card": c["name"], "item": item} for cards in by_base.values()
+              if len({(c["name"], tuple(c["customs"] or [])) for c in cards}) == 1
+              for c in cards for item in c["customs"] or []]
+    for event in ledger.get("log", []):
+        if event.get("op") == "customize" and not event.get("id"):
+            name = norm(event["card"])
+            copies = by_base.get(name.rstrip("+"), [])
+            if len(copies) == 1 and copies[0]["customs"] is None:
+                custom.append({"card": copies[0]["name"], "item": event["item"]})
     return {"cards": list(ledger["cards"]), "once": sorted(set(ledger["once"])), "rebound_repeatable": ledger["rebound_repeatable"],
             "custom": custom, "instances": [{k: c.get(k) for k in ("id", "name", "once", "customs")} for c in deck],
             "evidence": f"账本（回忆「{ledger['memory']}」+ {len(ledger['log']) - 1} 条变动）"}  # fmt: skip

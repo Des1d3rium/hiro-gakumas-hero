@@ -28,6 +28,9 @@ DEFAULTS: dict = {
         #（tools/batch_title.py）。使用者 2026-11-08：「允许一切data更新和日期更新导致的返回主页。」通信エラー 照旧不点、停下
         "title_recover": True,
     },
+    "exam": {
+        "r2_deck_sync": True,  # R2 开考前在考试页用列表文字对一次账：找 H.I.F応援棒 补进来的「基本」卡（使用者 2026-11-08）
+    },
     "open": {
         "auto_start": "repeat",  # 开局确认页：repeat = 每批第一局由代理核对后手点，之后的重复局没有弹窗 / 危险字样时直接点
         #                         「プロデュース開始」；true = 每局都自动；false = 每局都由代理核对
@@ -51,6 +54,7 @@ DEFAULTS: dict = {
         "change_column": 3,
         "change_out": ["立ち回りの基本", "表現の基本", "アピールの基本"],  # 阶段 2 先换出这些 N 卡
         "change_out_swapped": True,  # 再换出本局之前从 N 卡换进来的牌
+        "change_out_once": True,  # change_out 里每个名字本局只换出一次（使用者 2026-11-08：只换一次ハッピー♪，第二次换前面换进来的卡）
         "change_out_duplicate": True,  # 再换出同名重复卡里没客制化的那张；客制化过的卡一律不换
         "exam_briefing": True,  # 考前说明页（優勝条件）点 (360,300) 进入考试
     },

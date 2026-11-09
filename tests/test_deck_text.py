@@ -1,5 +1,7 @@
 """牌组一览列表显示读法（hiro.produce.deck_text）：分组标题、卡名匹配、多屏拼接、切换按钮。"""
 
+import pytest
+
 from hiro.produce import deck_text as dt
 
 NAMES = frozenset({"頂点へ", "頂点へ+", "エンターテイナー+", "トレーニングの成果+", "教えてあげる+"})
@@ -43,3 +45,27 @@ def test_read_list_toggles_and_checks_total():
                        sleep=lambda s: None, names=NAMES)
     assert clicks == [dt.TOGGLE, dt.TOGGLE]
     assert out["cards"] == ["頂点へ+", "エンターテイナー+"] and out["total"] == 2 and out["complete"]
+
+
+def test_header_with_fold_icon_and_groups_carry_across_screens():
+    """codex-20261109-1-e 考试中牌库一览：标题带折叠图标「+手札（3）」「+山札(19)」；第 2 屏起标题滚出去，行的组是 None。
+    原来标题一个都认不出、重叠按 (组, 卡名) 比对不上 → 少读 / 多读一张，牌堆层拿不到「山札 / 捨札」分组。"""
+    import re
+
+    assert dt._HEADER.match(dt.norm("+手札（3）")).groups() == ("手札", "3")
+    assert re.match(dt._HEADER, dt.norm("+山札(19)"))[2] == "19"
+    s1 = [("手札", "教えてあげる+"), ("山札", "プライド+"), ("山札", "アイドル魂+")]
+    s2 = [(None, "プライド+"), (None, "アイドル魂+"), (None, "全身全霊+")]
+    assert dt.merge_rows([s1, s2]) == [*s1, ("山札", "全身全霊+")]
+
+
+@pytest.mark.parametrize("screens, want", [
+    ([["a", "b", "c"], ["b", "d", "e"]], "abcde"),  # 这一屏漏读 c
+    ([["a", "b", "d"], ["b", "c", "d", "e"]], "abcde"),  # 上一屏漏读 c
+    ([["h", "h"], ["h", "h", "x"]], "hhx"),  # 同名两张
+    ([["a", "b"], ["x", "y"]], "abxy"),  # 没有重叠
+])
+def test_merge_rows_tolerates_one_missed_row(screens, want):
+    """codex-20261109-1-h：一屏 OCR 漏读一行，重叠对不上整屏又接一遍（读到 23 / 22）。对齐容许一处漏读。"""
+    rows = [[(None, n) for n in s] for s in screens]
+    assert "".join(n for _, n in dt.merge_rows(rows)) == want

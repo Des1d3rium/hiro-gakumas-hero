@@ -251,3 +251,26 @@ def test_shop_checks_funds_and_availability_before_dropping(monkeypatch, p, pric
     assert out["ok"]
     assert calls == (["drop", ("buy", 0)] if bought else [])
     assert held == (original[1:] + ["ブーストエキス"] if bought else original)
+
+
+def test_shop_auto_consult_refresh_is_free_until_count_runs_out(monkeypatch):
+    """codex-20261109-1-c 相談：「リフレッシュ」免费、角标「あと1回」，没有标价。原来刷新价读成 None 直接停「P 不够刷新」。"""
+    import batch_shop as S
+
+    state = {"left": 1, "refreshed": 0}
+    monkeypatch.setattr(S, "_page", lambda d: ("consult", None))
+    monkeypatch.setattr(S, "_shelf", lambda k, img: ({"shelf": [], "rerolls_left": state["left"]},
+                                                     [{"index": 6, "name": "初星スペシャル青汁", "purchased": False}]))
+    monkeypatch.setitem(sys.modules, "hiro.produce.shop", NS(read_p=lambda img, ocr: 380))
+    monkeypatch.setitem(sys.modules, "hiro.produce.ops", NS(ocr_boxes=None))
+
+    def reroll(action, fields, shoot, click):
+        state["left"] -= 1
+        state["refreshed"] += 1
+        return NS(ok=True, error=None)
+
+    monkeypatch.setattr(S, "_executor", lambda kind: (reroll, None))
+    monkeypatch.setattr(S.time, "sleep", lambda s: None)
+    r = S.auto(NS(screenshot=None, click=None), free_slots=lambda: 1, on_buy=lambda n: None)
+    assert r["ok"] and state["refreshed"] == 1 and r["stop"] == "相談刷新次数用完"
+    assert [s["op"] for s in r["steps"]] == ["refresh"]
