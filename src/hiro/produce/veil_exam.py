@@ -675,6 +675,12 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
         if pending and pending["next_stance"]:
             current, level = observed, observed_level  # 上一手没核对上、它又预约了下回合姿态：账本不确定，只能看画面
         else:
+            engine = pitem_engine_on()
+            if engine and position:
+                # 通用 P 道具引擎（VEIL_PITEM_ENGINE）：上回合结束时的道具附魔，按上回合结束时的姿态判
+                from hiro.brain import pitem_engine
+
+                current, level = pitem_engine.end_turn(data, memory, state, position.get("turn"), current, level)
             scheduled = delayed if not keeps_nonbiri(current, delayed) else None
             predicted = scheduled or current
             predicted_level = level_after(current, level, scheduled, delayed_level) if scheduled else level
@@ -682,8 +688,16 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
             predicted, star = start_turn(predicted, data.get("veil_star"))
             if star != data.get("veil_star"):
                 data["veil_star"] = star
+            changed = False
+            if engine:
+                from hiro.brain import pitem_engine
+
+                base_level = predicted_level if predicted == (scheduled or current) else None
+                predicted, engine_level, changed = pitem_engine.start_turn(data, memory, state, predicted, base_level)
             if observed:
                 level = observed_level
+            elif changed:
+                level = engine_level
             else:
                 level = predicted_level if predicted == (scheduled or current) else None
             current = observed or predicted
@@ -1466,6 +1480,7 @@ class VeilScreen(ScreenExamStateSource):
                 "cycle": data.get("veil_cycle"), "uncertain": bool(data.get("veil_uncertain")),
                 "uncertain_why": (data.get("veil_uncertain_why") or [None])[-1],
                 "carried": ((getattr(self, "last_raw", None) or {}).get("carried") or {}).get("fields"),  # HIRO_TURN_CARRY：沿用回合开头读数的字段
+                **({"pitems": pitem_engine_summary(data)} if pitem_engine_on() else {}),
                 **self.trace_board(state, memory)}
 
     def trace_board(self, state, memory) -> dict:
@@ -1732,6 +1747,10 @@ class VeilScreen(ScreenExamStateSource):
             deck = Counter(data["veil_deck"])
         if adopt_added() and hand - deck:
             deck = adopt_added_cards(data, memory, state, hand, deck)
+        if pitem_engine_on():
+            from hiro.brain import pitem_engine
+
+            pitem_engine.observe(data, (self.last_raw or {}).get("pitems"), IDOL, pitem_engine.profile_hints())
         problem = read_position(state, memory, hand, lambda: flower_count(frame.img), calibrate=self.calibrate)
         if problem == "veil_play_unverified" and self.position_retries >= UNDO_AFTER - 1:
             undone = undo_unlanded_play(memory, names)
@@ -2012,6 +2031,17 @@ def star_count(card) -> int:
     return 3
 
 
+def pitem_engine_summary(data):
+    from hiro.brain import pitem_engine
+
+    return pitem_engine.summary(data)
+
+
+def pitem_engine_on() -> bool:
+    """VEIL_PITEM_ENGINE（默认关）：按持有的 P 道具装附魔、在账本推演里执行（hiro.brain.pitem_engine）。"""
+    return _flag("PITEM_ENGINE")
+
+
 def commit_ledger(state, memory, decision, base):
     """动作落地后记账（VeilScreen.commit 钩子）：先存出牌前的整份记忆（没落地时撤回用），base 做通用记忆更新，再记 VEIL 的账。"""
     before = memory.actions_left
@@ -2063,6 +2093,11 @@ def _commit_ledger(state, memory, decision, base):
              if destination(card) == current else None)
     if current == before and destination(card) != current:
         level = stance_level(state, before)
+    if pitem_engine_on():
+        # 通用 P 道具引擎（VEIL_PITEM_ENGINE）：持有道具的出牌时 / 出牌后 / 每 N 张 / 姿态变化附魔；判断不了时不动
+        from hiro.brain import pitem_engine
+
+        current, level = pitem_engine.after_play(data, memory, state, card, before, current, level, card_dest=destination(card))
     if norm(card.name).startswith(STAR):
         data["veil_star"] = star_count(card)
     delayed, delayed_level = next_stance_change(card)

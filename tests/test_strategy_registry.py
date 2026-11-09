@@ -37,7 +37,7 @@ def test_veil_engine_constants_unchanged():
     assert V.DEFAULT_ON == frozenset({"HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP", "DRAW_ALL", "LAST_TURN",
                                       "CYCLE_SODA", "STUCK_SODA", "FP_RESERVE", "CLEAR_FIRST", "MINOR_HP", "HP_NET",
                                       "PITEM_FLOWER", "ENCHANT_ENGINE"})
-    assert len(V.STRATEGY_FLAGS) == 27 and V.PLAY_LATER == {"ひと呼吸"}
+    assert len(V.STRATEGY_FLAGS) == 28 and V.PLAY_LATER == {"ひと呼吸"}
     assert list(V.STANCE_LIMITED) == ["ガタゴトすやすや", "一心不乱"]
 
 

@@ -172,6 +172,16 @@
       },
       "description": "有别的牌可打时留后的牌（基名）"
     },
+    "pitem_assets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "画面 P 道具列的图标（img_general_pitem_…）→ 实际持有的 ProduceItem id。同一图标有几种效果不同的道具时写明，通用 P 道具引擎（VEIL_PITEM_ENGINE）才会装它"
+    },
+    "pitem_assets_note": {
+      "type": "string"
+    },
     "flags": {
       "type": "object",
       "additionalProperties": false,

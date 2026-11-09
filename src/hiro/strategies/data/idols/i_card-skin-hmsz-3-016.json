@@ -34,6 +34,10 @@
     "一心不乱": {"stance": "強気", "unlock_from": "warm"}
   },
   "play_later": ["ひと呼吸"],
+  "pitem_assets": {
+    "img_general_pitem_3-258": "pitem_3-258-research-event-008"
+  },
+  "pitem_assets_note": "ゼミパーカー 图标对应 10 个道具、7 种效果。2026-11-09 实机核对：角标开局 5、只在 Plan1 牌（ひと呼吸+ / 演出計画+）打出后减 1、姿态不变 → 「センスのスキルカード使用後、パラメータ上昇量増加10%（レッスン内5回）」（research-event-008..010 结构相同）。",
   "flags": {
     "default_on": ["HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP",
                    "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA",
@@ -41,6 +45,7 @@
     "known": ["KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP",
               "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET", "MINOR_HP",
               "IDOL_CLEAR", "STANCE_SCREEN", "CYCLE_PLAN", "STRONG_TEACH", "CYCLE_WHEY", "DRIVE_CHECK",
-              "STANCE_LATER", "HP_ZERO", "CYCLE_TAP", "IDOL_FP_GATE", "PITEM_FLOWER", "ENCHANT_ENGINE", "STANCE_UNLOCK"]
+              "STANCE_LATER", "HP_ZERO", "CYCLE_TAP", "IDOL_FP_GATE", "PITEM_FLOWER", "ENCHANT_ENGINE", "STANCE_UNLOCK",
+              "PITEM_ENGINE"]
   }
 }

@@ -564,6 +564,10 @@ def flower_counts(current, card):
 
     if current is None:
         return None  # 姿态不明（不是「指針なし」）：交给手写规则
+    if _flag("PITEM_ENGINE"):  # 通用 P 道具引擎：道具按偶像找（hiro.brain.pitem_engine.ring_item），不写死 FLOWER_ITEM
+        from hiro.brain.pitem_engine import ring_counts
+
+        return ring_counts(IDOL, card, current)
     return counts(card, current)
 
 
@@ -584,7 +588,14 @@ def _after_play_counted(current, flower, card, counted):
         # 计数到了：效果按主数据执行（夜空を従える花：のんびりに変更、熱意、元気；全力 下切不了姿态）
         from hiro.brain.pitems import flower_trigger_outcome
 
-        out = flower_trigger_outcome(current) if _flag("ENCHANT_ENGINE") else None
+        out = None
+        if _flag("ENCHANT_ENGINE"):
+            if _flag("PITEM_ENGINE"):
+                from hiro.brain.pitem_engine import ring_outcome
+
+                out = ring_outcome(IDOL, current)
+            else:
+                out = flower_trigger_outcome(current)
         if out is not None:
             return (out.stance or new), 3
         return (current if current == "全力" else "のんびり"), 3
