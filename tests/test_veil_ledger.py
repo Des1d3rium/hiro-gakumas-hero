@@ -31,11 +31,11 @@ TEXT = {
 
 @pytest.fixture(autouse=True)
 def _old_defaults_for_2026_11_08(monkeypatch):
-    """FP_RESERVE / CLEAR_FIRST / MINOR_HP 2026-11-08 起默认开（验证局 1-c R1 剩 3）。这里的老用例按当时的默认（关）写的：
+    """FP_RESERVE / CLEAR_FIRST / MINOR_HP / HP_NET 2026-11-08 起默认开（验证局 1-c R1 剩 3）。这里的老用例按当时的默认（关）写的：
     没显式设开关时固定成关；要测新默认的用例自己 setenv / delenv。"""
     import os
 
-    for name in ("FP_RESERVE", "CLEAR_FIRST", "MINOR_HP"):
+    for name in ("FP_RESERVE", "CLEAR_FIRST", "MINOR_HP", "HP_NET"):
         if f"VEIL_{name}" not in os.environ and f"HIRO_VEIL_{name}" not in os.environ:
             monkeypatch.setenv(f"VEIL_{name}", "0")
 

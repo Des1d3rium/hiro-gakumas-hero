@@ -19,7 +19,7 @@ from hiro.loop.errors import ResumeBlocked
 from hiro.brain.veil import (
     CORE, DRIVE, IDOL, REBOUND, SODA, STANCES, STRATEGY_FLAGS, TEACH, WARM, VeilAdvisor, _flag,
     NEUTRAL, STAR, after_play, destination, flower_count, keeps_nonbiri, full_power_count, keep_warm, next_stance_change, norm,
-    stance, stance_level, stance_change_level, start_turn,
+    stance, stance_level, stance_change_level, start_turn, level_after,
 )
 
 
@@ -550,7 +550,7 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
         else:
             scheduled = delayed if not keeps_nonbiri(current, delayed) else None
             predicted = scheduled or current
-            predicted_level = delayed_level if scheduled else level
+            predicted_level = level_after(current, level, scheduled, delayed_level) if scheduled else level
             # 一番星：回合开始不在温存 / のんびり 就切のんびり（1-h R1 第 2 回合：账本记強気，画面已是のんびり）
             predicted, star = start_turn(predicted, data.get("veil_star"))
             if star != data.get("veil_star"):
@@ -1581,7 +1581,8 @@ class VeilBrain(BattleBrain):
         if before is None and memory.turn == 1 and (data.get("veil_position") or {}).get("stance") in (None, NEUTRAL):
             before = NEUTRAL  # 第 1 回合还没切过姿态：切強気照算夜空（原来记成 None、夜空不明）
         current, flower = after_play(before, state.pitem_charges, card)
-        level = stance_change_level(card) if destination(card) == current else None
+        level = (level_after(before, stance_level(state, before), current, stance_change_level(card))
+                 if destination(card) == current else None)
         if current == before and destination(card) != current:
             level = stance_level(state, before)
         if norm(card.name).startswith(STAR):

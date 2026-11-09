@@ -12,11 +12,11 @@ from hiro.loop.errors import ResumeBlocked
 
 @pytest.fixture(autouse=True)
 def _old_defaults_for_2026_11_08(monkeypatch):
-    """FP_RESERVE / CLEAR_FIRST / MINOR_HP 2026-11-08 起默认开（验证局 1-c R1 剩 3）。这里的老用例按当时的默认（关）写的：
+    """FP_RESERVE / CLEAR_FIRST / MINOR_HP / HP_NET 2026-11-08 起默认开（验证局 1-c R1 剩 3）。这里的老用例按当时的默认（关）写的：
     没显式设开关时固定成关；要测新默认的用例自己 setenv / delenv。"""
     import os
 
-    for name in ("FP_RESERVE", "CLEAR_FIRST", "MINOR_HP"):
+    for name in ("FP_RESERVE", "CLEAR_FIRST", "MINOR_HP", "HP_NET"):
         if f"VEIL_{name}" not in os.environ and f"HIRO_VEIL_{name}" not in os.environ:
             monkeypatch.setenv(f"VEIL_{name}", "0")
 
@@ -1355,11 +1355,11 @@ def test_strategy_flag_defaults(monkeypatch):
         monkeypatch.delenv(f"HIRO_VEIL_{name}", raising=False)
     on = {f.__name__ for f in (veil.hp_guard, veil.release_gain, veil.draw_last, veil.drive_fp, veil.fp_cap,
                                veil.draw_all, veil.last_turn_play, veil.cycle_soda, veil.stuck_soda,
-                               veil.fp_reserve, veil.clear_first, veil.minor_hp) if f()}
+                               veil.fp_reserve, veil.clear_first, veil.minor_hp, veil.hp_net) if f()}
     # 2026-11-08 复盘后 DRAW_ALL / LAST_TURN / CYCLE_SODA / STUCK_SODA 也默认开；验证局 1-c 后 FP_RESERVE / CLEAR_FIRST / MINOR_HP 也开
     assert on == {"hp_guard", "release_gain", "draw_last", "drive_fp", "fp_cap",
-                  "draw_all", "last_turn_play", "cycle_soda", "stuck_soda", "fp_reserve", "clear_first", "minor_hp"}
-    assert not (veil.keep_warm() or veil.hp_net())
+                  "draw_all", "last_turn_play", "cycle_soda", "stuck_soda", "fp_reserve", "clear_first", "minor_hp", "hp_net"}
+    assert not veil.keep_warm()
     assert not hasattr(veil, "free_extra")
 
 
@@ -1606,3 +1606,46 @@ def test_hp_loss_status_modifiers_and_minor_threshold():
     assert hp_loss(state, c, "強気") == 16
     state.statuses = [{"name": "強気", "value": 1}, {"name": "消費体力追加", "value": 1}]
     assert hp_loss(state, c, "強気") == 10
+
+
+def test_level_after_counts_strong_and_warm_stages():
+    """使用者 2026-11-08：强气 / 温存 阶段几都计入账本。"""
+    from hiro.brain.veil import level_after
+
+    assert level_after("温存", 1, "強気") == 1  # 别的姿态切进来：1 段階
+    assert level_after("強気", 1, "強気") == 2  # 同一姿态再切：2 段階
+    assert level_after("強気", None, "強気") == 2
+    assert level_after("強気", 2, "強気") == 2  # 封顶
+    assert level_after("のんびり", None, "強気", 2) == 2  # 牌面写明「強気2段階目に変更」
+    assert level_after("強気", 1, "温存") == 1 and level_after("温存", 1, "温存") == 2
+    assert level_after("温存1段階目", 1, "温存2段階目") == 2
+    assert level_after("強気", 2, "のんびり") is None and level_after("強気", 2, "全力") is None
+
+
+def test_plain_stance_change_level_tracked_in_ledger(guard):
+    """普通「強気に変更」（牌面没写段階）：温存切进来记 1 段階，強気下再打一张记 2 段階；预约「次のターン、温存に変更」从強気切过去记 1 段階。"""
+    from collections import Counter
+
+    from hiro.brain.rules import Decision
+    from hiro.brain.veil import stance
+    from hiro.produce.veil_exam import VeilBrain, read_position
+
+    a = costly(0, "強気牌A+", "強気に変更", 0)
+    b = costly(1, "強気牌B+", "強気に変更次のターン、温存に変更", 0)
+    state, mem = case(a, b, status="温存")
+    state.statuses[0]["value"] = 1
+    mem.strategy_data["veil_deck"] = {a.name: 1, b.name: 1}
+    assert read_position(state, mem, Counter({a.name: 1, b.name: 1}), lambda: 3) is None
+    VeilBrain(None, None).commit(state, mem, Decision("play:0", "test", "rule"))
+    state.hand, state.statuses = [b], []
+    mem.actions_left = 1
+    assert read_position(state, mem, Counter({b.name: 1}), lambda: 2) is None
+    assert (stance(state), state.statuses[0]["value"]) == ("強気", 1)
+    VeilBrain(None, None).commit(state, mem, Decision("play:1", "test", "rule"))
+    state.hand, state.statuses = [], []
+    assert read_position(state, mem, Counter(), lambda: 2) is None
+    assert (stance(state), next(s["value"] for s in state.statuses if s["name"] == "強気")) == ("強気", 2)
+    mem.turn += 1
+    state.statuses = []
+    assert read_position(state, mem, Counter(), lambda: 2) is None
+    assert (stance(state), next(s["value"] for s in state.statuses if s["name"] == "温存")) == ("温存", 1)

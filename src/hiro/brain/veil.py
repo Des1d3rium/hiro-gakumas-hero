@@ -26,9 +26,10 @@ HAND_MAX = 5  # 手牌上限：抽牌超出的作废
 # 默认开的策略开关（使用者 2026-11-07，22 个 trace 回放后定）：设 VEIL_<name>=0 关掉。其余默认关，=1 打开
 # 2026-11-08 trusted trace 复盘后：DRAW_ALL / LAST_TURN / CYCLE_SODA / STUCK_SODA 也默认开（使用者确认）；HP_NET 默认关
 # 2026-11-08 验证局 1-c R1 倒数第三回合后：FP_RESERVE / CLEAR_FIRST / MINOR_HP 默认开（使用者：「按方案改」）
+# 2026-11-08 验证局 1-d R2 剩 12：HP_NET 默认开（使用者：「做方案A」）——体力 12 时 みずたまりスキップ+（元気+10、再动）被保底线拦
 DEFAULT_ON = frozenset({"HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP",
                         "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA",
-                        "FP_RESERVE", "CLEAR_FIRST", "MINOR_HP"})
+                        "FP_RESERVE", "CLEAR_FIRST", "MINOR_HP", "HP_NET"})
 STRATEGY_FLAGS = ("KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP",
                   "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET", "MINOR_HP")
 
@@ -138,7 +139,8 @@ def stuck_soda():
 def hp_net():
     """VEIL_HP_NET=1：体力闸按「可用体力 = 体力 + 元気」看：打出后加的元気不少于这张实际花掉的（元気 + 体力），
     可用体力不减，不拦（みずたまりスキップ+：体力消費1、元気+8）；核心打分牌（エンターテイナー+ 等）也不拦。
-    打完体力至少剩 1。使用者 2026-11-08：mutation test 说体力闸没错但太保守。默认关。"""
+    打完体力至少剩 1。使用者 2026-11-08：mutation test 说体力闸没错但太保守。
+    默认开（=0 关；使用者 2026-11-08「做方案A」：验证局 1-d R2 剩 12，体力 12 时 みずたまりスキップ+ 被保底线拦）。"""
     return _flag("HP_NET")
 
 
@@ -330,6 +332,20 @@ def stance_change_level(card):
             if f"{level}段階目" in match[0]:
                 return level
     return None
+
+
+def level_after(before, before_level, dest, explicit=None):
+    """切到 dest 之后的段階（強気 / 温存 才有）：牌面写明「N段階目」用 N；已经在同一姿态再切一次 → 2 段階（封顶）；
+    从别的姿态切进来 → 1 段階。のんびり / 全力 / 指針解除 没有段階（None）。
+    使用者 2026-11-08：「把强气阶段几，温存阶段几也都计入」——原来普通的「強気に変更」记成段階不明，体力闸按 2 段階多估 1 点。"""
+    base = lambda s: "温存" if s and s.startswith("温存") else s  # noqa: E731
+    if base(dest) not in ("強気", "温存"):
+        return None
+    if explicit in (1, 2):
+        return explicit
+    if m := re.search(r"([12])段階目", dest):
+        return int(m.group(1))
+    return 2 if base(before) == base(dest) else 1
 
 
 def next_stance_change(card):
