@@ -106,14 +106,14 @@ def test_veil_fp_balance_demotes_overflow_and_promotes_when_low(monkeypatch):
     _fp_table(monkeypatch, {"成果+": 4, "心・技・体": 3, "涙+": 4, "オーバードライブ+": 2, "id_tears": 4})
     cands = [{"col": 0, "once": True, "name": "ハッピー"}, {"col": 2, "once": True, "card_id": "id_tears"}]
     high = {"cards": ["オーバードライブ+", "成果+", "心・技・体", "アイドルになります+"]}  # 7（不计 オーバードライブ）
-    rank = P.fp_rank(high, veil=True)
+    rank = P.fp_rank(high, enabled=True)
     assert rank.total == 7 and P.pick_change_in(cands, 3, rank=rank) == 0  # 第 3 列 +4 会到 11：让位
-    assert P.pick_change_in(cands, 3, rank=P.fp_rank(high, veil=False)) == 2  # 不是 VEIL：照旧第 3 列
+    assert P.pick_change_in(cands, 3, rank=P.fp_rank(high, enabled=False)) == 2  # 不是 VEIL：照旧第 3 列
     low = {"cards": ["オーバードライブ+", "アイドルになります+"]}
     cands = [{"col": 0, "once": True, "card_id": "id_tears"}, {"col": 2, "once": True, "name": "ハッピー"}]
-    assert P.pick_change_in(cands, 3, rank=P.fp_rank(low, veil=True)) == 0  # 总量 0 < 3：加全力値的优先
+    assert P.pick_change_in(cands, 3, rank=P.fp_rank(low, enabled=True)) == 0  # 总量 0 < 3：加全力値的优先
     no_idol = {"cards": ["オーバードライブ+"]}
-    assert P.pick_change_in(cands, 3, rank=P.fp_rank(no_idol, veil=True)) == 2
+    assert P.pick_change_in(cands, 3, rank=P.fp_rank(no_idol, enabled=True)) == 2
 
 
 def test_card_fp_reads_master_names_with_plus():
@@ -138,15 +138,15 @@ def test_veil_fp_change_counts_inherited_upgrade(monkeypatch):
     ledger = {"cards": ["立ち回りの基本+", "成果+", "アイドルになります+"]}  # 总量 4
     cands = [{"col": 0, "once": True, "name": "ハッピー"}, {"col": 2, "once": True, "card_id": "tears", "upgrade": 0}]
     assert P.change_out_upgrade(ledger) == 1
-    rank = P.fp_rank(ledger, veil=True, change=True)
+    rank = P.fp_rank(ledger, enabled=True, change=True)
     assert rank(cands[1]) == 2 and ("tears", 1) in seen  # 4 + 4 = 8 > 7：降低（按强化版 +4 算）
     ledger_small = {"cards": ["立ち回りの基本+", "アイドルになります+"]}
-    assert P.fp_rank(ledger_small, veil=True, change=True)(cands[1]) == 0  # 总量 0 < 3 且有アイドル：提高
+    assert P.fp_rank(ledger_small, enabled=True, change=True)(cands[1]) == 0  # 总量 0 < 3 且有アイドル：提高
     ledger["cards"].append("その他+3")
     monkeypatch.setattr(P, "card_fp", lambda card_id=None, name=None, upgrade=None:
                         ({0: 3, 1: 4}[int(upgrade or 0)] if card_id == "tears" else {"成果+": 4, "その他+3": 3}.get(name, 0)))
-    assert P.fp_rank(ledger, veil=True, change=True)(cands[1]) == 2  # 7 + 4 = 11：降低
-    assert P.fp_rank(ledger, veil=True, change=False)(cands[1]) == 2  # 差し入れ按画面 +3：7 + 3 = 10 > 7
+    assert P.fp_rank(ledger, enabled=True, change=True)(cands[1]) == 2  # 7 + 4 = 11：降低
+    assert P.fp_rank(ledger, enabled=True, change=False)(cands[1]) == 2  # 差し入れ按画面 +3：7 + 3 = 10 > 7
 
 
 def test_veil_fp_change_subtracts_card_going_out(monkeypatch):
@@ -154,7 +154,7 @@ def test_veil_fp_change_subtracts_card_going_out(monkeypatch):
     _fp_table(monkeypatch, {"忍耐力+": 3, "成果+": 4, "モチベ+": 2, "id_seika": 4})
     ledger = {"cards": ["成果+", "忍耐力+", "モチベ+", "アイドルになります+"],
               "log": [{"op": "add", "card": "忍耐力+", "why": "换卡换入 授業"}]}
-    rank = P.fp_rank(ledger, veil=True, change=True)
+    rank = P.fp_rank(ledger, enabled=True, change=True)
     assert rank.total == 6 and rank({"card_id": "id_seika", "upgrade": 1}) == 2  # 9 - 3 + 4 = 10 > 7
 
 

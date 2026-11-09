@@ -28,7 +28,7 @@ QUICK_ANIMATIONS = {"commu", "GIFT", "ACQUIRE", "UPGRADE_RESULT", "CUSTOMIZE_RES
 QUICK_TRANSITIONS = {
     "message", "tap_hint", "custom_cutin", "select_bonus", "toppa", "custom_pitem", "custom_pitem_get", "pitem_note",
 }
-VEIL_IDOL = "i_card-skin-hmsz-3-016"
+VEIL_IDOL = "i_card-skin-hmsz-3-016"  # 只给测试 / 旧脚本用；判断一律问偶像档案（hiro.strategies.registry）
 STUDY_DETAIL_TOP = 420  # 授業分支：展开的选项说明在这条线以下、第一行选项以上
 STUDY_LINE_TAP = BTN.TOAST  # 授業结束后的训练员台词框
 # 角落 (12,12) 不点的页面：代理正在看牌组一览 / 考试前说明（要先登记牌组和检查点）。其余页面都点。
@@ -1355,8 +1355,10 @@ def change(state, args, *, persist=None):
         sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa")]
         from hiro.produce.veil_exam import validate_deck
 
-        if state["preflight"]["idol"] != VEIL_IDOL:
-            raise ValueError("基准牌组只用于 [VEIL] 秦谷美玲")
+        from hiro.strategies import registry
+
+        if not registry.has(state["preflight"]["idol"], "needs_ledger"):
+            raise ValueError(f"基准牌组只用于偶像档案带 needs_ledger 能力位的偶像（{registry.label(state['preflight']['idol'])} 没有）")
         base = json.loads(args.deck.read_text(encoding="utf-8"))
         validate_deck(base)
         if state.get("veil_base_deck") not in (None, base):
@@ -1368,7 +1370,9 @@ def change(state, args, *, persist=None):
         import batch_ledger as L
 
         deck = json.loads(args.deck.read_text(encoding="utf-8"))
-        if state["preflight"]["idol"] == VEIL_IDOL:
+        from hiro.strategies import registry
+
+        if registry.has(state["preflight"]["idol"], "needs_ledger"):
             from hiro.produce.veil_exam import validate_deck
 
             validate_deck(deck)
@@ -1592,12 +1596,12 @@ def change(state, args, *, persist=None):
         if active["phase"] != "playing":
             raise ValueError("exam 只允许在 playing 阶段使用")
         sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa")]
-        from hiro.brain.veil import IDOL
+        from hiro.strategies import registry
+
+        registry.require_engine(state["preflight"]["idol"], "cycle", "此考试入口")
         from hiro.loop.errors import ResumeBlocked
         from hiro.produce.veil_exam import apply_deck_change, run_round
 
-        if state["preflight"]["idol"] != IDOL:
-            raise ValueError("此考试入口仅适用于首检记录为 [VEIL] 秦谷美玲的批次")
         deck, ledger = args.deck, active.get("ledger")
         if ledger is not None:
             sys.path.insert(0, str(ROOT / "tools"))
@@ -1696,7 +1700,9 @@ def change(state, args, *, persist=None):
         phase = "opening" if cmd in {"refill", "open"} else "playing"
         if active["phase"] != phase:
             raise ValueError(f"{cmd} 只允许在 {phase} 阶段使用")
-        if cmd == "burst" and state["preflight"]["idol"] == VEIL_IDOL:
+        from hiro.strategies import registry
+
+        if cmd == "burst" and registry.has(state["preflight"]["idol"], "burst_auto_route"):
             return device_action(cmd, auto_route=True)
         return device_action(cmd)
 
@@ -1958,8 +1964,9 @@ def watch(path, run, *, auto=False):
             active = state.get("active") or {}
             if len(state["completed"]) >= state["total"] or (run is not None and active.get("run") != run):
                 return False
-            if (state.get("preflight") or {}).get("idol") != VEIL_IDOL:
-                raise ValueError("常驻快点仅适用于首检记录为 [VEIL] 秦谷美玲的批次")
+            from hiro.strategies import registry
+
+            registry.require_engine((state.get("preflight") or {}).get("idol"), "cycle", "常驻快点")
             if pause_flag.ENABLED and pause_flag.reason() is not None:
                 return True
             from hiro.device import MaaToolsEmptyFrame

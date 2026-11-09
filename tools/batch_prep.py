@@ -10,7 +10,7 @@
   没有规则或没命中时，优先选一次性卡（第三张是一次性就选它，否则第一张一次性卡）；认不出一次性卡才停下。
 - 「受け取らないで次へ進みます」确认页：点底部确认。
 - 授業换卡：阶段 1 选一次性卡（第三列优先），阶段 2 换出 N 卡或本局之前从 N 卡换进来的牌（原有卡组保护）。
-- VEIL：换卡阶段 1 和差し入れ技能卡兜底时按牌组全力値来源总量调优先级（fp_rank：会超过 7 的降低，不到 3 且有 アイドルになります 的提高；换卡先减去预计换出那张）。
+- 有 fp_balance 能力位的偶像（VEIL）：换卡阶段 1 和差し入れ技能卡兜底时按牌组全力値来源总量调优先级（fp_rank：会超过 7 的降低，不到 3 且有 アイドルになります 的提高；换卡先减去预计换出那张）。
 - 考前说明页（優勝条件 + タップして次へ）：点 (360,300) 进入考试。
 认不出、规则挑不到时返回 None，照旧停下交给代理。轮间（インターバル）和考试不归这里管。
 """
@@ -74,14 +74,30 @@ def pick_change_in(cands: list[dict], column: int | None = None, rank=None) -> i
     return min(once, key=lambda c: ((rank(c) if rank else 1), c["col"] != column - 1))["col"]
 
 
-# ---- VEIL 牌组全力値平衡（使用者 2026-11-07）：账本统计牌组里加全力値的手段；下一次抓卡 / 换卡会让总量超过 FP_HIGH（7）的降低优先级，
-# 总量不到 FP_LOW 且牌组有 アイドルになります（全力値消費3）时加全力値的提高优先级。巻き返し 每次消費1，理想总量 5–7。
-# 循环牌 オーバードライブ 每回合都打、+2 在循环里自己平衡，不计入。关掉：回忆档案 change.fp_balance=false。
-VEIL_IDOL = "i_card-skin-hmsz-3-016"
+# ---- 牌组全力値平衡（使用者 2026-11-07，VEIL）：账本统计牌组里加全力値的手段；下一次抓卡 / 换卡会让总量超过 high（7）的降低优先级，
+# 总量不到 low（3）且牌组有 idol_card（アイドルになります，全力値消費3）时加全力値的提高优先级。巻き返し 每次消費1，理想总量 5–7。
+# 循环牌 オーバードライブ 每回合都打、+2 在循环里自己平衡，不计入（skip）。
+# 数值在偶像档案 full_power（hiro/strategies/data/idols/），只对有 fp_balance 能力位的偶像生效；关掉：回忆档案 change.fp_balance=false。
 # 上限按理想区间上沿 7（使用者 2026-11-07：1-e 牌组已有 7 时又选了 モチベ+ +2、换入 成果+ +4，「进入全力不是好事」）
-FP_HIGH, FP_LOW = 7, 3
-FP_SKIP = ("オーバードライブ",)
-FP_IDOL = "アイドルになります"
+
+
+def fp_cfg(idol: str | None = None) -> dict:
+    """偶像档案的全力値平衡参数 {high, low, skip, idol}；偶像没档案时用 cycle 引擎缺省档案（VEIL）的。"""
+    from hiro.brain import veil
+    from hiro.strategies import registry
+
+    p = registry.idol_profile(idol) if idol else None
+    p = p if p and p.get("full_power") else veil.PROFILE
+    fp = p["full_power"]
+    return {"high": fp["high"], "low": fp["low"], "skip": tuple(fp.get("skip") or ()), "idol": p["cards"].get("idol_card")}
+
+
+def fp_enabled(state: dict) -> tuple[bool, dict | None]:
+    """批次首检偶像有 fp_balance 能力位 → (True, 参数)。"""
+    from hiro.strategies import registry
+
+    idol = (state.get("preflight") or {}).get("idol")
+    return (True, fp_cfg(idol)) if registry.has(idol, "fp_balance") else (False, None)
 
 
 def card_fp(card_id: str | None = None, name: str | None = None, upgrade=None) -> int | None:
@@ -106,13 +122,14 @@ def card_fp(card_id: str | None = None, name: str | None = None, upgrade=None) -
         return None
 
 
-def deck_fp(ledger: dict | None) -> tuple[int, bool] | None:
-    """账本牌组的全力値来源总量（不计 オーバードライブ）和有没有 アイドルになります；没账本返回 None。"""
+def deck_fp(ledger: dict | None, cfg: dict | None = None) -> tuple[int, bool] | None:
+    """账本牌组的全力値来源总量（不计 skip：オーバードライブ）和有没有 idol_card（アイドルになります）；没账本返回 None。"""
     if not ledger or not ledger.get("cards"):
         return None
+    cfg = cfg or fp_cfg()
     base = lambda n: _norm(n).rstrip("+＋")  # noqa: E731
-    total = sum(card_fp(name=n) or 0 for n in ledger["cards"] if base(n) not in FP_SKIP)
-    return total, any(base(n) == FP_IDOL for n in ledger["cards"])
+    total = sum(card_fp(name=n) or 0 for n in ledger["cards"] if base(n) not in cfg["skip"])
+    return total, any(base(n) == cfg["idol"] for n in ledger["cards"])
 
 
 def change_out_card(ledger: dict | None) -> str | None:
@@ -146,14 +163,15 @@ def change_out_upgrade(ledger: dict | None) -> int | None:
     return None
 
 
-def fp_rank(ledger: dict | None, veil: bool, *, change: bool = False):
-    """候选 → 0（提高）/ 1（照旧）/ 2（降低）。不是 VEIL、没账本、规则关掉时返回 None（不改原顺序）。
+def fp_rank(ledger: dict | None, enabled: bool, *, change: bool = False, cfg: dict | None = None):
+    """候选 → 0（提高）/ 1（照旧）/ 2（降低）。偶像没有 fp_balance 能力位（enabled=False）、没账本、规则关掉时返回 None（不改原顺序）。
     change=True（授業换卡）：候选按换入后的强化算——继承换出那张的「+」（使用者 2026-11-07：强化过的换出、换入的也是强化卡）。"""
-    if not veil or not S.get("change.fp_balance", True) or (info := deck_fp(ledger)) is None:
+    cfg = cfg or fp_cfg()
+    if not enabled or not S.get("change.fp_balance", True) or (info := deck_fp(ledger, cfg)) is None:
         return None
     total, idol = info
     inherit = change_out_upgrade(ledger) if change else None
-    if change and (out := change_out_card(ledger)) and _norm(out).rstrip("+＋") not in FP_SKIP:
+    if change and (out := change_out_card(ledger)) and _norm(out).rstrip("+＋") not in cfg["skip"]:
         # 换卡是一换一：预计换出的那张的全力値要先减掉（1-e 第二次换卡换出 忍耐力+ +3，换入 成果+ +4，实际 9→10）
         total -= card_fp(name=out) or 0
 
@@ -167,9 +185,9 @@ def fp_rank(ledger: dict | None, veil: bool, *, change: bool = False):
             gain = card_fp(name=_norm(c.get("name") or "").rstrip("+＋") + "+" * up)
         if not gain:
             return 1
-        if total + gain > FP_HIGH:
+        if total + gain > cfg["high"]:
             return 2
-        return 0 if total < FP_LOW and idol else 1
+        return 0 if total < cfg["low"] and idol else 1
 
     rank.total = total
     return rank
@@ -274,7 +292,8 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
         if S.get("change.in.rule", "once") != "once":
             return None
         scan = run_cmd("change-scan")
-        rank = fp_rank(state["active"].get("ledger"), (state.get("preflight") or {}).get("idol") == VEIL_IDOL, change=True)
+        enabled, cfg = fp_enabled(state)
+        rank = fp_rank(state["active"].get("ledger"), enabled, change=True, cfg=cfg)
         col = pick_change_in(scan.get("candidates") or [], rank=rank)
         if col is None:
             return None
@@ -409,7 +428,8 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
         index = pick_card(cands, load_card_rules())
         if index is None and S.get("change.gift_card.fallback", "once") == "once":
             # 使用者 2026-11-07：规则没定之前，能认出一次性卡就优先选一次性的（第三张是一次性时选它）
-            rank = fp_rank(state["active"].get("ledger"), (state.get("preflight") or {}).get("idol") == VEIL_IDOL)
+            enabled, cfg = fp_enabled(state)
+            rank = fp_rank(state["active"].get("ledger"), enabled, cfg=cfg)
             col = pick_change_in([{"col": c["index"], "once": is_once(c.get("card_id")), "card_id": c.get("card_id"),
                                    "upgrade": c.get("upgrade"), "name": c.get("name")} for c in cands],
                                  S.get("change.gift_card.column", 3), rank=rank)
