@@ -1498,6 +1498,72 @@ class VeilScreen(ScreenExamStateSource):
         state.piles = {**piles, "next_draw": next_draw, "once": once_view}
         return state, why
 
+    # ---------------------------------------------------------------- 循环连打（VEIL_CYCLE_TAP，执行侧见 hiro.exec.cycle_tap）
+    def burst_begin(self, state, memory, decision):
+        """刚记完账的一手循环牌之后，不读画面推出「这张牌离手后」的局面：手牌按首读的顺序删掉打出的那张、槽位重排，
+        记忆字段（本回合动作、剩余出牌次数）刷新。姿态 / 夜空等到 burst_settle 核对过画面张数再结算。
+        不满足连打条件（开关关、分版本记账、牌库不确定、不在本回合的循环里、出牌次数用完、打出的牌会抽牌 / 换手）返回 None。"""
+        from hiro.brain.veil import cycle_tap
+
+        if not cycle_tap() or decision.kind != "play" or self.variants:
+            return None
+        data = memory.strategy_data
+        cycle = data.get("veil_cycle")
+        pending = data.get("veil_pending_play")
+        if (not cycle or cycle.get("turn") != state.turn or data.get("veil_uncertain") or memory.actions_left < 1
+                or not pending or pending.get("turn") != memory.turn or memory.expected_hand is None):
+            return None
+        played = next((c for c in state.hand if c.slot == decision.slot), None)
+        if played is None or played.tags.draws or "入れ替える" in norm(played.text or ""):
+            return None
+        rest = [c for c in state.hand if c.slot != decision.slot]
+        if not rest or any(not c.card_id for c in rest):
+            return None
+        return replace(state, hand=[replace(c, slot=i) for i, c in enumerate(rest)], actions_left=memory.actions_left,
+                       this_turn=list(memory.this_turn), history=list(memory.history), blocked=list(memory.blocked))
+
+    def burst_settle(self, state, memory, greys) -> bool:
+        """连打：画面核对过张数和位置（上一手确实离手）后，按账本结算上一手，同 read_position 回合内的分支：
+        姿态 / 段階 / 夜空 / 预约的下回合姿态，牌堆记录里的手牌格挤紧，发灰按卡名首字母角标（greys，每格一个），
+        使用条件按账本。结算不了返回 False（退回整帧读取，pending 留给 read_position 核对）。"""
+        from hiro.brain.veil import SCREEN_STANCE
+
+        data = memory.strategy_data
+        pending = data.get("veil_pending_play")
+        position = data.get("veil_position") or {}
+        if (not pending or pending.get("turn") != memory.turn or position.get("turn") != memory.turn
+                or len(greys) != len(state.hand) or pending.get("stance") is None or pending.get("flower") is None):
+            return False
+        current, level, flower = pending["stance"], pending.get("stance_level"), pending["flower"]
+        delayed, delayed_level = position.get("next_stance"), position.get("next_stance_level")
+        if pending.get("next_stance"):
+            delayed, delayed_level = pending["next_stance"], pending.get("next_stance_level")
+        count_stance_change(data, position.get("stance"), current)
+        data["veil_position"] = {"turn": memory.turn, "stance": current, "stance_level": level,
+                                 "flower": flower, "next_stance": delayed, "next_stance_level": delayed_level}
+        data.pop("veil_pending_play", None)
+        state.pitem_charges = flower
+        state.statuses = [s for s in state.statuses or [] if s.get("name") != SCREEN_STANCE
+                          and norm(s.get("name") or "") not in STANCES and not norm(s.get("name") or "").startswith("次のターン開始時")]
+        state.statuses.append({"name": current, "value": level})
+        if delayed:
+            state.statuses.append({"name": f"次のターン開始時、{delayed}に変更"})
+        names = [norm(c.name) for c in state.hand]
+        data["veil_slot_keys"] = {str(c.slot): norm(c.name) for c in state.hand}
+        piles = data.get("veil_piles")
+        if piles is not None:
+            piles["hand"] = names + [None] * (5 - len(names))
+            played = {norm(a[2:]) for a in memory.this_turn if a.startswith("打 ")}
+            state.piles = {**(state.piles or {}),
+                           **{k: list(Counter(piles.get(k) or {}).elements()) for k in ("deck", "grave", "unlocated")},
+                           "next_draw": 3 + 2 * (TEACH in played) + int(memory.turn < data.get("veil_soda_until", 0))}
+        state.hand = [replace(c, available=not grey) for c, grey in zip(state.hand, greys)]
+        if blocked := play_condition_blocked(state, memory, data):
+            state.hand = [replace(c, available=False) if c.slot in blocked else c for c in state.hand]
+        track_full_power(data, memory)
+        state.actions_left = memory.actions_left
+        return True
+
 
 def count_stance_change(data, before, after):
     """使用条件要的计数（这场考试内）：指針を変更した回数、温存になった回数、全力になった回数。往多里算（宁多勿少）：

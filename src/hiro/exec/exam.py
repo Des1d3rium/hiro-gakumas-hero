@@ -1412,6 +1412,14 @@ def run_exam(
                                            "wait_change": (t_done - t_tap) * 1000, "cycle": (t_done - t_cycle) * 1000,
                                            "anim_taps": _anim["taps"], **_take_phases()})  # fmt: skip
                 _guard_repeated_decision(session, memory, d, exam)
+            if changed and missed is None and d.kind == "play" and hasattr(source, "burst_begin"):
+                # 循环回合连打（VEIL_CYCLE_TAP，默认关）：这张循环牌落地记完账后，剩下的按首读手牌 + n 张布局直接点，见 hiro.exec.cycle_tap
+                from hiro.exec.cycle_tap import run_burst
+
+                PHASES.clear()
+                if run_burst(state, memory, d, brain=brain, source=source, advisor=advisor, exam=exam, rec=rec, session=session):
+                    failures = 0
+                    t_done = time.monotonic()
             PHASES.clear()
             _anim["taps"] = 0
             t_cycle = t_done

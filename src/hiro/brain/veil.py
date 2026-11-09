@@ -33,7 +33,7 @@ DEFAULT_ON = frozenset({"HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP
 STRATEGY_FLAGS = ("KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP",
                   "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET", "MINOR_HP",
                   "IDOL_CLEAR", "STANCE_SCREEN", "CYCLE_PLAN", "STRONG_TEACH", "CYCLE_WHEY", "DRIVE_CHECK",
-                  "STANCE_LATER", "HP_ZERO")
+                  "STANCE_LATER", "HP_ZERO", "CYCLE_TAP")
 
 
 def _flag(name: str) -> bool:
@@ -200,6 +200,14 @@ def hp_zero():
     """VEIL_HP_ZERO=1：状态栏有「消費体力変化」时（全身全霊+：次に使用したスキルカードの消費体力を0にする），下一张牌不掉体力。
     原来体力闸当它照常掉血。例：3-3 第 1 局 R1 attempt2 剩 9，インフルエンサー++ 因此被留到温存。"""
     return _flag("HP_ZERO")
+
+
+def cycle_tap():
+    """VEIL_CYCLE_TAP=1：五卡循环回合连打（使用者 2026-11-08）。回合里第一张循环牌照常整帧读取、决策、点击；它落地后，
+    剩下的循环牌不再每张重读手牌：按首读的手牌顺序删掉打出的那张，按 1–5 张的手牌布局（hiro.vision.hif.HAND_LAYOUT）
+    算出下一张在第几格、点哪里，直接打。每张之前只看轻量签名（剩余回合 + 卡名首字母角标）核对张数、位置与发灰，
+    对不上（多抽了牌、回合结束、发灰、弹窗、没落地）就退回整帧读取。实现见 hiro.exec.cycle_tap。默认关。"""
+    return _flag("CYCLE_TAP")
 
 
 FULL_POWER_AT = 10  # 全力値到 10 自动进全力（实机）
