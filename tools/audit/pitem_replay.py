@@ -1,13 +1,33 @@
 """用 hiro.brain.pitems 的通用计数器回放 VEIL trace（夜空を従える花+），每个决策帧和画面道具旁「N回」比对。
 
-用法：PYTHONPATH=src:vendor/kaa .venv/bin/python tools/audit/pitem_replay.py [--all | traces/batch-…-exam1 …]
+用法：PYTHONPATH=src:vendor/kaa .venv/bin/python tools/audit/pitem_replay.py [--all | traces/batch-…-exam1 …] [--jobs N] [--no-cache | --cache-only]
+多份 trace 按进程并行；画面「N回」读数缓存在 cache/replay/pitem_flower.json，第二次起不读图（改了 flower_count / digits 自动重读）。
 不给参数只跑账本核对全部对上的批次（ledger_check）；--all 连早期批次一起跑。
 客制化取批次账本里的 customs；账本记错客制化（例如漏了 インフルエンサー+ 強気追加）时会整段对不上。"""
-import glob, json, os, re, sys
+import argparse, functools, glob, hashlib, inspect, json, os, re, sys
 from collections import Counter
-import cv2
+from pathlib import Path
 from hiro.brain import pitems as P
 from hiro.brain.veil import flower_count
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import replay_common as RC  # noqa: E402
+
+CACHE_NAME = "pitem_flower"
+_CACHE = None
+
+
+def cache_version() -> str:
+    """flower_count 自身的源码 + 读数字模块：只改 veil.py 别处不作废缓存。"""
+    h = hashlib.sha1(inspect.getsource(flower_count).encode())
+    h.update(RC.code_version(["src/hiro/vision/digits.py"]).encode())
+    return h.hexdigest()[:16]
+
+
+def _read_flower(frame):
+    import cv2
+
+    return flower_count(cv2.imread(str(frame)))
 
 ITEM = P.load_pitem("pitem_03-3-303-1")
 
@@ -46,7 +66,7 @@ def _stance_after(stance, name):
     return stance
 
 
-def replay(trace):
+def replay(trace, cache=None):
     """决策帧打出的那张按手牌（卡 id / 档位）算；循环连打（VEIL_CYCLE_TAP）一次点出、中间不写决策帧的几张，
     从同一回合下一帧 context 的 played（本回合已打出，实机记账）比上一帧多出的部分补上。
     连打的牌打出前的姿态按前一张的效果推。换回合时 played 清空，只算决策帧那一张（回合末连打不会跨回合）。"""
@@ -96,8 +116,12 @@ def replay(trace):
                 name = nm
             pending = None
         frame = d.get("frame")
-        img = cv2.imread(os.path.join(base, frame)) if frame else None
-        seen = flower_count(img)
+        if not frame:
+            seen = None
+        elif cache is not None:
+            seen = cache.get(Path(base) / frame, _read_flower)
+        else:
+            seen = _read_flower(os.path.join(base, frame))
         want = ctr.remaining
         if seen is not None and want is not None:
             stats["ok" if seen == want else "bad"] += 1
@@ -135,20 +159,42 @@ def clean_batches() -> set[str]:
     return out
 
 
-def main(args):
-    if args and args[0] != "--all":
-        traces = args
+def replay_job(trace, version, mode):
+    """子进程：一份 trace 的结果 + 本进程新读的缓存项。"""
+    global _CACHE
+    if _CACHE is None:
+        _CACHE = RC.FrameCache(CACHE_NAME, version, mode=mode)
+    _CACHE.new, _CACHE.hits, _CACHE.misses = {}, 0, 0
+    r = replay(trace, _CACHE)
+    return r, _CACHE.new, _CACHE.hits, _CACHE.misses
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("traces", nargs="*")
+    ap.add_argument("--all", action="store_true", help="连早期批次一起跑")
+    RC.add_args(ap)
+    args = ap.parse_args(argv)
+    if args.traces:
+        traces = args.traces
     else:
         traces = sorted(glob.glob("traces/batch-codex-*-exam*"))
-        if not args:
+        if not args.all:
             keep = clean_batches()
             traces = [t for t in traces if (m := re.match(r"traces/batch-(.+)-\d+-exam\d", t)) and m.group(1) in keep]
             print("账本核对全部对上的批次：" + "、".join(sorted(keep)) + "（加 --all 连早期批次一起跑）")
-    for t in traces:
-        r = replay(t)
+    version, mode = cache_version(), RC.cache_mode(args)
+    results = RC.run_traces(functools.partial(replay_job, version=version, mode=mode), traces, args.jobs)
+    cache = RC.FrameCache(CACHE_NAME, version, mode=mode)
+    hits = misses = 0
+    for t, (r, new, h, m) in zip(traces, results):
+        cache.merge(new)
+        hits, misses = hits + h, misses + m
         if r:
             s, bad = r
             print(os.path.basename(t)[6:], dict(s), bad[:4])
+    cache.save()
+    print(f"读图缓存：命中 {hits} 帧，{'未读' if mode == 'ro' else '新读'} {misses} 帧", file=sys.stderr)
 
 
 if __name__ == "__main__":
