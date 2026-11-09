@@ -2323,9 +2323,12 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
 
         from hiro import plugins
 
+        source, advisor = veil_plugins()  # 先取插件再写 meta：取之前 plugins.source 还是「default」，记不出实际用的实现
+        used = {"exam_state_source": source, "exam_advisor": advisor}
         trace = TraceWriter(root=directory.parent, name=directory.name,
                             meta={"mode": "main", "idol": IDOL, "advisor": "veil", "round": round_no, **_profile_meta(),
-                                  "plugins": {k: plugins.source(k) for k in ("exam_state_source", "exam_advisor")}})
+                                  "plugins": {k: f"{type(o).__module__}:{type(o).__name__}（{plugins.source(k)}）"
+                                              for k, o in used.items()}})
         session = Session(trace)
         watch = pause_flag.Watcher(kvars.flow, session=session).start()
         guard = watchdog(session)
@@ -2343,7 +2346,6 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
             drinks = retry_drinks  # 再挑戦：游戏把饮料栏恢复到这一轮开考前，账本也用开考前的快照
         setup = {"deck": deck, "once": once, "ledger_drinks": drinks, "abilities": abilities, "customs": customs,
                  "variants": variants, "fill": fill_count(round_no, deck)}
-        source, advisor = veil_plugins()
         try:
             run_exam(BattleBrain(None, None), exam, rec, ended, session=session, source=source,
                      advisor=advisor, setup=setup, round_no=round_no, strict=True)

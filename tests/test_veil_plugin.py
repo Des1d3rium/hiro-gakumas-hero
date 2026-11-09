@@ -152,3 +152,15 @@ def test_run_exam_checks_pair_before_touching_game():
 
     with pytest.raises(TypeError, match="veil-ledger"):
         run_exam(BattleBrain(None, None), "r1", Rec(), lambda: True, source=ScreenExamStateSource(), advisor=VeilAdvisor())
+
+
+def test_trace_meta_names_the_veil_plugins_actually_used():
+    """run_round 先取插件再写 meta：meta 记实际用的类，不是取之前的「default:通用实现」。"""
+    from hiro.produce.veil_exam import veil_plugins
+
+    assert plugins.source("exam_state_source").startswith("default:")  # 取之前
+    source, advisor = veil_plugins()
+    used = {"exam_state_source": source, "exam_advisor": advisor}
+    meta = {k: f"{type(o).__module__}:{type(o).__name__}（{plugins.source(k)}）" for k, o in used.items()}
+    assert meta == {"exam_state_source": "hiro.produce.veil_exam:VeilScreen（register）",
+                    "exam_advisor": "hiro.brain.veil:VeilAdvisor（register）"}
