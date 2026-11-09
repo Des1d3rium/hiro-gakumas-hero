@@ -38,8 +38,19 @@ def next_step(state, reason: str, rules):
     driver = active.get("driver") or {}
     if driver.get("error") or active["ledger"].get("pending_drink_replace"):
         return None  # 上次没核验完：交给代理核对后 auto-resolve
+    pending = driver.get("pending")
+    if pending and pending["command"] == "interval-end" and reason.split("：", 1)[0] == "考试中":
+        # 点了「終了」后没等到确认框、游戏直接进了 R2 加载（codex-20261108-1 / 1-b 两局都这样）：画面进考试就是轮间已结束的证据，
+        # 按成功记进度、留记录，接着跑 R2（原来卡在 pending，要代理 auto-resolve）
+        apply(active, pending)
+        driver = active["driver"]
+        driver.setdefault("resolved", []).append({"action": pending, "applied": True, "error": None,
+                                                  "note": "画面已进考试：轮间已结束（自动判定）"})
+        for key in ("pending", "tries"):
+            driver.pop(key, None)
+        return _fresh_step(driver, reason, rules)
     step = _fresh_step(driver, reason, rules)
-    if pending := driver.get("pending"):
+    if pending:
         # 可重做的命令（考试续跑、轮间结束…）上次没确认、画面还是同一个停点就再来一次；花钱的命令留给代理核对
         same = step is not None and step["command"] == pending["command"] and step.get("round") == pending.get("round")
         return deepcopy(pending) if pending["command"] in IDEMPOTENT and same else None

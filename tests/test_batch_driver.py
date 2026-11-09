@@ -418,3 +418,14 @@ def test_photo_pages_route_to_settle():
     assert photo.startswith("结算回忆") and save.startswith("结算回忆")
     s = state(stage="after_r2")
     assert D.next_step(s, photo, rules())["command"] == "settle"
+
+
+def test_interval_end_without_dialog_then_exam_page_counts_as_done():
+    """codex-20261108-1 / 1-b：interval-end 点了「終了」没等到确认框，游戏直接进 R2。看到考试页就按轮间已结束接着跑 R2。"""
+    s = state(stage="interval", recovered=True, customized=[0, 1], shopped=True)
+    action, ok = run(s, INTERVAL, {"ok": False, "why": "点了「終了」，5s 内没出确认框"})
+    assert action["command"] == "interval-end" and not ok
+    step = D.next_step(s, EXAM, rules())
+    assert step == {"command": "exam", "round": 2, "deck": None}
+    driver = s["active"]["driver"]
+    assert driver["stage"] == "r2" and "pending" not in driver and driver["resolved"][-1]["applied"]
