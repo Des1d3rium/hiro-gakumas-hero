@@ -1509,3 +1509,33 @@ def test_plus_misread_matched_to_sibling_version():
     assert fix_plus_misread([card(0, "トレーニングの成果+")], data, 3, deck)[0].name == "トレーニングの成果+"
     data["veil_piles"]["deck"] = {"達成感+": 1}
     assert fix_plus_misread([card(0, "トレーニングの成果")], data, 3, deck)[0].name == "トレーニングの成果"
+
+
+def test_plus_probe_reads_floating_full_name():
+    """使用者 2026-11-08：拿不准是哪个版本时点按一次（只选中），读浮起来的全名再定；读不出再按账本推断。同回合同一槽位只点一次。"""
+    from collections import Counter
+
+    from hiro.produce.veil_exam import fix_plus_misread, name_from_probe
+
+    assert name_from_probe("トレーニングの成果++全力値+5", ["トレーニングの成果", "トレーニングの成果+"]) is None
+    assert name_from_probe("トレーニングの成果+全力値+4", ["トレーニングの成果", "トレーニングの成果+"]) == "トレーニングの成果+"
+    assert name_from_probe("トレーニングの成果全力値+3", ["トレーニングの成果", "トレーニングの成果+"]) == "トレーニングの成果"
+    deck = Counter({"トレーニングの成果": 1, "トレーニングの成果+": 1, "達成感+": 1})
+    piles = {"turn": 3, "hand": ["達成感+", None, None, None, None],
+             "deck": {"トレーニングの成果": 1, "トレーニングの成果+": 1}, "grave": {}, "unlocated": {}}
+    calls = []
+
+    def probe(c):
+        calls.append(c.slot)
+        return "トレーニングの成果全力値+3"
+
+    data = {"veil_piles": dict(piles)}
+    # 读成 +、两个版本都在山札：读数对得上也点按核对，按点按结果记成基础版
+    hand = fix_plus_misread([card(0, "達成感+"), card(1, "トレーニングの成果+")], data, 3, deck, probe=probe)
+    assert hand[1].name == "トレーニングの成果" and calls == [1]
+    fix_plus_misread([card(0, "達成感+"), card(1, "トレーニングの成果+")], data, 3, deck, probe=probe)
+    assert calls == [1]  # 同回合同槽位不再点
+    # 点按读不出：读数对得上就信读数，不乱改
+    data = {"veil_piles": dict(piles)}
+    hand = fix_plus_misread([card(1, "トレーニングの成果+")], data, 3, deck, probe=lambda c: None)
+    assert hand[0].name == "トレーニングの成果+"

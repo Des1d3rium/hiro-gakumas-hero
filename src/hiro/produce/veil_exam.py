@@ -379,7 +379,22 @@ def _base(name):
     return norm(name).rstrip("+")
 
 
-def fix_plus_misread(hand, data, turn, deck):
+def name_probe():
+    """HIRO_VEIL_NAME_PROBE（默认开，=0 关）：同名不同强化的牌拿不准是哪个版本时，点按一次（只选中、不打出），
+    读浮起来的全名再定；读不出再按账本推断（使用者 2026-11-08：作为兜底）。"""
+    return os.environ.get("HIRO_VEIL_NAME_PROBE", "1") != "0"
+
+
+def name_from_probe(text, family):
+    """点按读到的文字里认版本：按「+」多的先比（トレーニングの成果++ 先于 トレーニングの成果+），名字后面不能再跟「+」。"""
+    text = norm(text or "")
+    for name in sorted(family, key=lambda n: -n.count("+")):
+        if re.search(re.escape(name) + r"(?!\+)", text):
+            return name
+    return None
+
+
+def fix_plus_misread(hand, data, turn, deck, probe=None):
     """同名不同强化的牌（トレーニングの成果 / トレーニングの成果+）卡 ID 一样，只靠名字后面「+」的个数分，画面常读错个数
     （codex-20261108-1-b：R1 T3 把 + 读成基础版、R2 T7 读成 ++，账本判「抽到牌堆里没有的牌」，整场位置不明、进不了循环）。
     手里某个名字比它能来的地方多（或账本里根本没有这个名字），而同名的另一个版本那里还有富余，就按那个版本记。
@@ -408,10 +423,31 @@ def fix_plus_misread(hand, data, turn, deck):
     for card in hand:
         name = norm(card.name) if card.card_id else None
         family = siblings.get(_base(card.name), []) if name else []
-        if name and (seen[name] > sources[name] or name not in deck) and len(family) >= (1 if name not in deck else 2):
+        wrong = name and (seen[name] > sources[name] or name not in deck) and len(family) >= (1 if name not in deck else 2)
+        # 读到的版本对得上、但同名另一个版本也可能在手里：有点按兜底时去核对，没有就信读数
+        doubtful = wrong or (name and probe is not None and len(family) >= 2
+                             and sum(spare[n] > 0 for n in family if n != name) >= 1)
+        if doubtful:
             options = [n for n in family if n != name and spare[n] > 0]
-            if options:
+            pick = None
+            if probe is not None:
+                cache = data.setdefault("veil_name_probe", {})
+                if cache.get("turn") != turn:
+                    cache.clear()
+                    cache["turn"] = turn
+                key = f"{card.slot}:{name}"
+                if key not in cache:
+                    text = probe(card)
+                    cache[key] = name_from_probe(text, family)
+                    data.setdefault("veil_name_probe_log", []).append({"turn": turn, "slot": card.slot, "read": name,
+                                                                        "probe": text, "as": cache[key]})
+                pick = cache[key]
+                if pick == name:
+                    out.append(card)
+                    continue
+            if pick is None and wrong and options:
                 pick = min(options, key=lambda n: abs(n.count("+") - name.count("+")))
+            if pick is not None and pick != name:
                 seen[name] -= 1
                 seen[pick] += 1
                 spare[pick] -= 1
@@ -1351,7 +1387,8 @@ class VeilScreen(ScreenExamStateSource):
         if uncertain and sorted(set(uncertain)) != self.custom_uncertain:
             self.custom_uncertain = sorted(set(uncertain))
             self._log("veil_custom_uncertain", items=self.custom_uncertain)  # 同名多张、只有部分做过这项：版本不确定，没补
-        state.hand = fix_plus_misread(state.hand, data, memory.turn, deck)
+        state.hand = fix_plus_misread(state.hand, data, memory.turn, deck,
+                                      probe=(lambda c: self.probe(frame, c)) if name_probe() else None)
         names = Counter(norm(c.name) for c in state.hand if c.card_id)
         if len(state.hand) != names.total():
             raise ResumeBlocked("VEIL 手牌未读全，暂停以免错牌")
