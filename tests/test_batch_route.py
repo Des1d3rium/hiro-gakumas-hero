@@ -851,3 +851,26 @@ def test_auto_defeat_unknown_round_is_not_exhausted(debug_retry, monkeypatch):
     debug_retry["t"] += 20
     grey = real[:-1] + [_b("あと0回", 520, 1240)]
     assert B.debug_retry_step(grey, dialog=True) == ("auto_defeat_end", (233, 1225))
+
+
+def test_prep_retries_same_hold_up_to_three_times(monkeypatch):
+    """验证局 1-c：P 道具饮料页第一次赶上字没出全的帧，固定流程返回 None 后同一停点再也不试 → 停下等代理。"""
+    monkeypatch.setitem(B.HELD, "prep", None)
+    assert B.prep_due("领取选择：受け取らない", 100.0)
+    assert not B.prep_due("领取选择：受け取らない", 100.5)  # 间隔不够
+    assert B.prep_due("领取选择：受け取らない", 102.0)
+    assert B.prep_due("领取选择：受け取らない", 104.0)
+    assert not B.prep_due("领取选择：受け取らない", 110.0)  # 已试 3 次
+    assert B.prep_due("选择页：别的", 110.0)  # 换了停点重新计
+    assert not B.prep_due("选择页：别的", 115.0)  # 换卡等停点只试一次
+
+
+def test_replan_after_auto_resolve_on_same_hold(monkeypatch):
+    """验证局 1-c：exam 失败、停点「考试中」不变；代理 auto-resolve not-applied 后 resolved 多一条，watch 要重新安排。"""
+    monkeypatch.setitem(B.HELD, "reason", None)
+    monkeypatch.setitem(B.HELD, "resolved", None)
+    assert B.replan_due("考试中：残りター", 0)
+    B.HELD["reason"] = "考试中：残りター"  # 已报过停点
+    assert not B.replan_due("考试中：残りター", 0)
+    assert B.replan_due("考试中：残りター", 1)  # auto-resolve 之后
+    assert not B.replan_due("考试中：残りター", 1)

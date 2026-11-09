@@ -206,6 +206,35 @@ def pick_change_out(cards: list[dict], ledger: dict | None = None) -> tuple[int,
     return None
 
 
+DRINK_ICON_MIN = 0.55  # 选饮料弹窗模板分下限：实机 6 格正确的 0.60–0.80；非饮料页（外出补给）≤ 0.55
+DRINK_ICON_HALF = 52  # 统一模板库按弹窗图标裁的半边长（缩到 56 再比）
+
+
+def drink_icon_names(img) -> list[str | None]:
+    """选饮料弹窗三格的饮料名（图标识别）：多尺度原画模板（hiro.vision.drinks）和考试饮料栏用的统一模板库各认一次，
+    两个给出同一种饮料且模板分 ≥ DRINK_ICON_MIN 才算认出，否则这一格给 None（调用方退回点开 + OCR）。"""
+    import cv2
+
+    from hiro.vision import items
+    from hiro.vision.drinks import DIALOG_SLOT_Y, read_drink_dialog
+
+    try:
+        tpl = read_drink_dialog(img)
+        lib = items._insitu_library(items.DRINK_SIZE)
+        h = DRINK_ICON_HALF
+        crops = [cv2.resize(img[DIALOG_SLOT_Y - h : DIALOG_SLOT_Y + h, x - h : x + h], (items.DRINK_SIZE, items.DRINK_SIZE),
+                            interpolation=cv2.INTER_AREA) for x in DRINK_X]
+        tops = lib.match_many(crops)
+    except Exception:  # noqa: BLE001  素材 / 主数据缺：全部退回 OCR
+        return [None] * len(DRINK_X)
+    out = []
+    for t, top in zip(tpl, tops):
+        other = lib.names.get(top[0][1]) or top[0][1]
+        name = t.get("name")
+        out.append(_norm(name) if name and t["score"] >= DRINK_ICON_MIN and _norm(other) == _norm(name) else None)
+    return out
+
+
 def drink_source(boxes, *, pitem: bool = False) -> str:
     """饮料选择页的来源（N12：公開レッスン 奖励饮料原来也写成「差し入れ饮料」）：看左上角标签。"""
     top = [t for t, _, b in boxes if b[1] < 90 and b[0] < 260]
@@ -294,13 +323,17 @@ def handle(device, ocr, change, state, batch: str, run: int, persist, log=print)
                    and has("Pドリンク所持上限", "ランダムな特定のPドリンク", "特定のPドリンク", "レッスン終了時"))
     if has("受け取るPドリンクを選んでください") or pitem_drink:
         source = drink_source(boxes, pitem=pitem_drink)
-        names = []
-        for x in DRINK_X:
+        # 使用者 2026-11-08：「更改饮料识别：从ocr识别改为现在又快又好的饮料识别」。先按图标认三格（约 0.2 秒），
+        # 没把握的格才退回逐格点开 + OCR 名字（验证局 1-c：OCR 只认出 ほうじ茶，漏了 ブーストエキス，结果没收）
+        names = drink_icon_names(img) if batch_rules.get("prep.drink_icons", True) else [None] * len(DRINK_X)
+        for i, x in enumerate(DRINK_X):
+            if names[i] is not None:
+                continue
             device.click(x, DRINK_Y)
             time.sleep(0.7)
             y1, y2 = DRINK_NAME_BAND
             band = [_norm(t) for t, _, _ in ocr(device.screenshot()[y1:y2])]
-            names.append(band[0] if band else None)
+            names[i] = band[0] if band else None
         full = has("受け取らない")  # 栏满时同一页多出「受け取らない」(359,1006)
         if full and (ledger := state["active"].get("ledger")) is not None:
             import batch_ledger as L

@@ -1812,7 +1812,32 @@ def drain_acquired(state, active, persist) -> list[dict]:
 
 
 STAY = _env_flag("HIRO_WATCH_STAY", "watch.stay")  # 常驻：停点不退出（使用者 2026-11-07），设 0 恢复退出码 3
-HELD = {"reason": None, "prep": None}
+HELD = {"reason": None, "prep": None}  # prep：(停点, 已试次数, 上次试的时刻)
+PREP_TRIES = 3
+PREP_RETRY_S = 1.5
+PREP_RETRY_KINDS = ("领取选择", "差し入れ 选饮料")  # 重试最多重新选中一下候选；换卡等会先动手再失败的停点仍只试一次
+
+
+def replan_due(reason: str, resolved_n: int) -> bool:
+    """自动模式要不要为这个停点安排命令：停点变了；或停点没变、但代理用 auto-resolve 处理过上一条失败的命令
+    （driver.resolved 多了一条）。验证局 1-c：exam 两次失败、auto-resolve not-applied 之后停点名字没变，watch 一直不重排。"""
+    if HELD["reason"] == reason and HELD.get("resolved") == resolved_n:
+        return False
+    HELD["resolved"] = resolved_n
+    return True
+
+
+def prep_due(reason: str, now: float) -> bool:
+    """这个停点该不该（再）试一次前六周固定流程；该试时顺手记下这一次。"""
+    last = HELD["prep"]
+    if last is None or last[0] != reason:
+        HELD["prep"] = (reason, 1, now)
+        return True
+    _, tries, at = last
+    if reason.split("：")[0] not in PREP_RETRY_KINDS or tries >= PREP_TRIES or now - at < PREP_RETRY_S:
+        return False
+    HELD["prep"] = (reason, tries + 1, now)
+    return True
 EMPTY = {"seen": False}
 PREP = _env_flag("HIRO_WATCH_PREP", "prep.enabled")  # 前六周固定流程（使用者 2026-11-07），设 0 关掉
 
@@ -1912,6 +1937,11 @@ def watch(path, run, *, auto=False):
             DEBUG_RETRY["tickets"] = bool(rules.get("retry", {}).get("tickets"))
             DEBUG_RETRY["end_when_exhausted"] = bool(rules.get("retry", {}).get("end_when_exhausted"))
             DEBUG_RETRY["auto_used"] = dict(active.get("retries_used") or {})
+            if DEBUG_RETRY.get("round") is None and (stage := (active.get("driver") or {}).get("stage")):
+                # 没经过结果页（停在敗退框时重启 watch）：按批次阶段推轮次，再挑戦次数才记得进 retries_used（验证局 1-c）
+                import batch_driver
+
+                DEBUG_RETRY["round"] = str(batch_driver.stage_round(stage))
             try:
                 result = advance() if active.get("phase") == "playing" else None
             except MaaToolsEmptyFrame as e:
@@ -1927,8 +1957,8 @@ def watch(path, run, *, auto=False):
                 holds.append(str(hold))
                 if streak["reason"] != holds[-1]:
                     streak.update(reason=holds[-1], since=time.monotonic())
-                if PREP and len(holds) >= 2 and holds[-1] == holds[-2] and HELD["prep"] != holds[-1]:
-                    HELD["prep"] = holds[-1]  # 同一停点只试一次固定流程
+                if PREP and len(holds) >= 2 and holds[-1] == holds[-2] and prep_due(holds[-1], time.monotonic()):
+                    # 同一停点最多试 PREP_TRIES 次、间隔 ≥ PREP_RETRY_S：验证局 1-c 第一次赶上字没出全的帧，返回 None 后就再也不试
                     # 前六周固定流程（tools/batch_prep.py）：差し入れ / 相談 / 换卡 / 选饮料选卡，watch 自己做完不唤醒代理
                     done = prep_step(path, state)
                     if done and "待补" in done and (auto_on or "饮料替换" in done):
@@ -1947,7 +1977,8 @@ def watch(path, run, *, auto=False):
                 waited = time.monotonic() - streak["since"]
                 if (len(holds) >= HOLD_CONFIRM and len(set(holds[-HOLD_CONFIRM:])) == 1
                         and (not holds[-1].startswith("行动页") or waited >= ACTION_HOLD_S)):
-                    if auto_on and HELD["reason"] != holds[-1]:
+                    resolved_n = len(((active.get("driver") or {}).get("resolved")) or [])
+                    if auto_on and replan_due(holds[-1], resolved_n):
                         import batch_runtime as RT
 
                         action = RT.plan_hold(state, holds[-1], rules, lambda: save(path, state), hold_reason=hold_reason)

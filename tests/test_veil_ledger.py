@@ -753,3 +753,17 @@ def test_swap_card_still_in_hand_stops_waiting_early():
     data["veil_swap_wait"] = {"turn": 9, "card": "仕切り直し+", "before": ["アイドルになります+"]}
     for _ in range(SWAP_FLOAT + 2):
         assert swap_pending(data, mem, Counter(["アイドルになります+"]))
+
+
+def test_save_failure_writes_frame_and_reason(tmp_path):
+    """考试停机时画面和原因存进 <trace>/failures/（统计真实停机率用）。"""
+    import json
+
+    import numpy as np
+
+    from hiro.produce.veil_exam import save_failure
+
+    d = save_failure(tmp_path, lambda: np.zeros((1280, 720, 3), np.uint8), "VEIL 手牌未读全，暂停以免错牌")
+    rows = [json.loads(l) for l in (d / "failures.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert rows[0]["why"].startswith("VEIL 手牌未读全") and (d / rows[0]["frame"]).exists()
+    assert save_failure(tmp_path, lambda: (_ for _ in ()).throw(RuntimeError("断线")), "x") is None  # 存不了不抛

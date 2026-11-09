@@ -184,3 +184,42 @@ def test_prep_change_pick_namespace_has_every_cli_arg(monkeypatch):
         monkeypatch.setattr(batch_change, "stage_of", lambda texts, s=stage: s)
         P.handle(Dev(), lambda img: [], change, state, "b", 1, persist=lambda: None)
     assert len(seen) == 2
+
+
+def test_drink_page_uses_icon_names_and_ocr_only_for_unsure_slots(monkeypatch):
+    """使用者 2026-11-08：选饮料页先按图标认，没把握的格才点开 + OCR。"""
+    page = [("Vo.公開レッスン", 1.0, (60, 40, 160, 64)), ("レッスン終了時、", 1.0, (150, 440, 300, 464)),
+            ("受け取らない", 1.0, (300, 994, 420, 1018)), ("受け取る", 1.0, (300, 1085, 400, 1109)),
+            ("Pドリンク所持上限", 1.0, (280, 1120, 440, 1144))]
+    calls = {"n": 0}
+
+    def ocr(img):
+        calls["n"] += 1
+        return page if calls["n"] == 1 else [("烏龍茶", 1.0, (300, 20, 420, 40))]
+
+    monkeypatch.setattr(P.time, "sleep", lambda s: None)
+    monkeypatch.setattr(P, "drink_icon_names", lambda img: ["初星水", None, "ほうじ茶"])
+    dev = _Dev(None)
+    out = P.handle(dev, ocr, None, {"active": {"ledger": None}}, "b", 1, persist=lambda: None)
+    assert out.startswith("P道具饮料：栏满且无高价值") and "初星水" in out and "烏龍茶" in out
+    assert calls["n"] == 2 and dev.clicks[0] == (P.DRINK_X[1], P.DRINK_Y)  # 只点开了没把握的第 2 格
+    # 图标认出高价值（验证局 1-c 漏掉的 ブーストエキス）：不再当成低价值直接不收
+    calls["n"] = 0
+    monkeypatch.setattr(P, "drink_icon_names", lambda img: ["ブーストエキス", "ミックススムージー", "ほうじ茶"])
+    dev = _Dev(None)
+    out = P.handle(dev, ocr, None, {"active": {"ledger": None}}, "b", 1, persist=lambda: None)
+    assert out is None or "無高価値" not in out and "无高价值" not in out
+    assert P.DECLINE not in dev.clicks
+
+
+def test_drink_icon_names_real_pitem_page():
+    """验证局 1-c 实机：P 道具饮料页（栏满）三格 = ブーストエキス / ミックススムージー / ほうじ茶。"""
+    import cv2
+
+    path = Path(__file__).parent / "fixtures" / "trace" / "drink-pitem-full-1c.png"
+    if not path.exists():
+        pytest.skip("缺样例")
+    names = P.drink_icon_names(cv2.imread(str(path)))
+    if names == [None, None, None]:
+        pytest.skip("没有饮料素材")
+    assert names == ["ブーストエキス", "ミックススムージー", "ほうじ茶"]

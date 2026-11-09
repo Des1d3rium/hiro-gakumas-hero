@@ -1692,6 +1692,26 @@ def round_attempt(directory, exam, *, first_turn):
     return directory, retry or None, restored
 
 
+def save_failure(trace_dir, shoot, why: str) -> Path | None:
+    """考试停机（ResumeBlocked）时把当时的画面和原因存进 <trace>/failures/（使用者 2026-11-08：读失败的帧原来不进 trace，
+    算不出真实停机率）。存不了不影响停机本身。"""
+    import cv2
+
+    try:
+        d = Path(trace_dir) / "failures"
+        d.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        img = shoot()
+        if img is not None:
+            cv2.imwrite(str(d / f"{stamp}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        with (d / "failures.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"t": round(time.time(), 2), "frame": f"{stamp}.jpg" if img is not None else None, "why": why},
+                               ensure_ascii=False) + "\n")
+        return d
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retry_drinks=None):
     from kaa.config.const import HifScenario
     from kotonebot import device
@@ -1778,6 +1798,9 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
         try:
             run_exam(VeilBrain(None, None), exam, rec, ended, session=session, source=source,
                      advisor=VeilAdvisor(), round_no=round_no, strict=True)
+        except ResumeBlocked as e:
+            save_failure(trace.dir, device.screenshot, str(e))
+            raise
         finally:
             callbacks.remove(guard)
             watch.stop()
