@@ -25,6 +25,7 @@
 | watch | `stay` | true | 停点不退出，打印一行 `hold`，画面一变（代理处理完）自动继续；代理用 Monitor 盯 hold 行 |
 | watch | `tap_through_holds` | 领取选择 等 4 类 | 这几类停点确认期间仍点 (12,12)，是获得动画就顺手跳过 |
 | watch | `result_next_first` | true | 考试结果页先点一次「次へ」：晋级没有弹窗直接走，敗退弹「再挑戦確認」才停 |
+| watch | `title_recover` | true | 「データ更新」「日付変更」弹窗（使用者 2026-11-08：「允许一切data更新和日期更新导致的返回主页。」）：点「タイトルへ」→ 标题页点 (360,900) → 下载确认「決定」（框里没有ジュエル / 有償 / 購入）→ 公告和登录奖励点结算收尾同一个 ✕ (360,1170) → 首页；watch 培育中再点「プロデュース」→「プロデュース再開」框的「再開する」（有破棄 / 開始する 就停）；`open` 回到首页后照常开局。日志行 `title_update` / `title_date` / `title_start` / `title_download` / `title_close` / `title_produce` / `title_resume`。**「通信エラー」框不点「タイトルへ」，watch 直接 hold**；「機種変更」、利用規約、破棄等字样也停下。`settle` 里没接（结算中途回标题可能丢回忆，照旧停下）。`HIRO_WATCH_TITLE=0` 临时关。代码 `tools/batch_title.py`，用例 `tests/test_batch_title.py`（OCR 取自 3-b 开工前实读）
 | open | `auto_start` | repeat | 开局确认页「プロデュース開始」：`repeat` = 每批第一局由代理核对后手点，之后的重复局没有弹窗、没有破棄 / 别的设备 / 再開 / 付费字样时自动点；`true` / `false` = 每局都自动 / 都手点。别的设备有进度、AP 不足都以弹窗出现，有弹窗一律不点 |
 | prep | `enabled` | true | 前六周固定流程（`tools/batch_prep.py`），watch 自己做完不唤醒代理 |
 | prep | `action` / `last_day` | 差し入れ / 相談 | 行动页永远选差し入れ，只剩相談时选相談 |

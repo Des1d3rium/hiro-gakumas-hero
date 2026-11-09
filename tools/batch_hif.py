@@ -169,6 +169,19 @@ def _env_flag(name, rule):
 AUTO_START = False  # 本次命令是否允许自动点「プロデュース開始」：change() 开头按 start_allowed(state) 设
 
 
+def title_step(boxes, *, resume):
+    """数据更新 / 日期变更 → タイトルへ → 首页（→ 再開）的一步（tools/batch_title.py）。watch.title_recover 关（或
+    HIRO_WATCH_TITLE=0）时不管。返回 (kind, tap)、(kind, None) = 等，或 None；要使用者处理时抛 HoldPage。"""
+    if not _env_flag("HIRO_WATCH_TITLE", "watch.title_recover"):
+        return None
+    import batch_title
+
+    try:
+        return batch_title.step(boxes, resume=resume)
+    except batch_title.TitleHold as e:
+        raise HoldPage(str(e)) from None
+
+
 def start_allowed(state) -> bool:
     """open.auto_start：repeat（默认）= 每批第一局由代理核对后手点，之后的重复局自动点；true / false = 每局都自动 / 都不自动。
     环境变量 HIRO_BATCH_AUTO_START=0 / 1 临时覆盖。"""
@@ -246,6 +259,7 @@ def interval_end(device, timeout: float = 15.0, *, guarded: bool = False) -> dic
     return {"ok": False, "why": f"点了「本戦へ」，{timeout:.0f}s 后左上仍是「インターバル」"}
 
 
+TITLE_STEPS_MAX = 150  # open 里回标题恢复最多走这么多步（下载等待每步 2s）
 SETTLE_TAP = BTN.SETTLE  # 回忆定下后结算页：「×」(360,1188) 与后面「次へ」圆角框 (y 1125–1195) 的重合处（= hif_buttons.SETTLE）
 TAP_THROUGH = tuple(batch_rules.get("watch.tap_through_holds", []))  # 停点确认期间仍点角落
 HOLD_CONFIRM = 3  # watch：同一停点连续读到几次才退出（约 1–2 秒）
@@ -784,6 +798,8 @@ def auto_decide(img, *, ocr, quick, fallback, header):
     # 整帧读一次：选择页、考试、商店、确认框等都停下交给代理。快识别认成动画的页面也读：
     # 商店 / 轮间选中饮料时会被认成 ACQUIRE，轮间菜单会被认成 CUSTOMIZE_RESULT（全局回放）。
     boxes = boxes if boxes is not None else ocr(img)
+    if (step := title_step(boxes, resume=True)) is not None:
+        return None if step[1] is None else step
     if step := debug_retry_step(boxes, dialog, img):
         return None if step == "wait" else step
     if tap := result_next(boxes, dialog):
@@ -1020,6 +1036,7 @@ def device_action(action, *, watch_tick=None, auto_route=False):
             fast = {"thumb": None, "same": 0, "taps": 0}
             slow = {"thumb": None, "same": 0}
             steps = 0
+            title_n = 0  # 回标题恢复用掉的步数（不算进 60 步，单独封顶）
             # 只按整帧读的步数算 60 步上限：回忆定下后的只点不读（最多 SETTLE_FAST_MAX 下）原来也占这 60 步，
             # 点 60 下就报 timeout（1-e、1-f 两局 settle 都是这样超时，之后画面其实自己回到首页）
             while steps < 60:
@@ -1042,6 +1059,21 @@ def device_action(action, *, watch_tick=None, auto_route=False):
                 steps += 1
                 boxes = ocr_boxes(img)
                 texts = [t for t, _, _ in boxes]
+                if action == "open" and title_n < TITLE_STEPS_MAX:
+                    # 开局途中弹「データ更新」「日付変更」：回标题、下载、关公告，回到首页后交回下面按页开局（不占 60 步）
+                    try:
+                        step = title_step(boxes, resume=False)
+                    except HoldPage as e:
+                        return {"page": "title_hold", "why": str(e), "memories": memories}
+                    if step is not None:
+                        steps -= 1
+                        title_n += 1
+                        print(json.dumps({"action": step[0], "tap": step[1]}, ensure_ascii=False), file=sys.stderr, flush=True)
+                        if step[1] is not None:
+                            click(*step[1])
+                            last = None
+                        time.sleep(0.65 if step[1] is not None else 2.0)
+                        continue
                 keep_memory = False
                 if any("獲得可能スキルカード" in t for t in texts):
                     ev = batch_memory.evaluate(texts)
