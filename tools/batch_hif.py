@@ -1347,7 +1347,11 @@ def change(state, args, *, persist=None):
         sys.path.insert(0, str(ROOT / "tools"))
         from batch_driver import resolve
 
-        return resolve(active, args.outcome == "applied", args.note)
+        out = resolve(active, args.outcome == "applied", args.note)
+        if persist is not None:
+            # 有返回值时 main 不再 save：这里自己写盘（codex-20261108-1：auto-resolve 打印 ok、批次文件不变，驱动一直卡在 interval-end）
+            persist()
+        return out
     if cmd == "deck-change":
         sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa")]
         from hiro.produce.veil_exam import apply_deck_change

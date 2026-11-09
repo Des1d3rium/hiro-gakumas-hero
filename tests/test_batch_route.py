@@ -767,3 +767,19 @@ def test_interval_header_beats_choice_prompt():
     texts = ["インターバル", "審査基準", "Pポイントで利用するものを選んでください", "交換する"]
     assert B.hold_reason(texts) == "轮间客制化：インターバル"
     assert B.hold_reason(["Pポイントで利用するものを選んでください"]).startswith("选择页")
+
+
+def test_auto_resolve_command_writes_state_file(tmp_path, monkeypatch):
+    """codex-20261108-1：auto-resolve 打印 ok 但文件没变（同 debug-retries），驱动一直卡在 pending 的 interval-end。"""
+    import json
+
+    monkeypatch.setattr(B, "STATE_DIR", tmp_path)
+    path = tmp_path / "t.json"
+    path.write_text(json.dumps({"total": 1, "completed": [], "preflight": {"idol": B.VEIL_IDOL},
+                                "active": {"run": 1, "phase": "playing",
+                                           "driver": {"stage": "interval", "pending": {"command": "interval-end", "run": 1}}}}),
+                    encoding="utf-8")
+    monkeypatch.setattr(B.sys, "argv", ["batch_hif.py", "--batch", "t", "auto-resolve", "1", "applied", "--note", "已进 R2"])
+    assert B.main() == 0
+    driver = json.loads(path.read_text(encoding="utf-8"))["active"]["driver"]
+    assert driver["stage"] == "r2" and "pending" not in driver and driver["resolved"][0]["applied"]
