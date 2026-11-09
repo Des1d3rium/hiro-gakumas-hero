@@ -46,7 +46,7 @@
 
   | 插件 | 回答什么 | 本仓库的默认实现 |
   |---|---|---|
-  | `asset_source` | 素材和主数据从哪来 | KAA 公开数据 + 使用者自建素材 |
+  | `asset_source` | 素材和主数据从哪来 | KAA 公开数据 + 随仓库素材包 `assets/pack/` + 使用者自建素材 |
   | `exam_state_source` | 考试局面从哪来 | 画面识别 + 状态机记账 |
   | `exam_advisor` | 考试每一步怎么打 | 社区规则链 + LLM 兜底 |
 
@@ -88,6 +88,8 @@ PYTHONPATH=src .venv/bin/python -m pytest -q            # 没有截图样例时�
    HIRO_SUPPORT_SET=<支援卡编成号> HIRO_MEMORY_SET=<回忆编成号> \
      python tools/play_game.py --idol <偶像卡 skin id> --main-attr <Vo|Da|Vi>
    ```
+
+   也可以让程序按社区攻略选支援卡和回忆、生成开局编成方案，开局时自动核对编成，见 [docs/formation-plan.md](docs/formation-plan.md)。
 
 3. **看复盘**：`python tools/viewer/build_exam_view.py <trace>`，打开生成的 HTML。
 

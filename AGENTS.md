@@ -114,6 +114,9 @@
 
 跑之前确认：游戏停在首页；没有别的设备上进行中的培育；AP 够或有 APドリンク；游戏里已经编好支援卡和回忆的编成。
 
+支援卡和回忆可以让程序按社区规则选（[docs/formation-plan.md](docs/formation-plan.md)）：扫库存 → `python -m hiro.brain.formation_plan --idol … --support-set N --memory-set N`
+→ 按报告存进这两个编成位。之后开局不用再设编成号和 `--main-attr`，第 2、3 步会按方案核对编成，对不上就停。
+
 ```bash
 # 整局（选拔 → 本战）
 HIRO_SUPPORT_SET=<支援卡编成号> HIRO_MEMORY_SET=<回忆编成号> \
@@ -132,7 +135,9 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 
 | 环境变量 | 作用 |
 |---|---|
-| `HIRO_SUPPORT_SET` / `HIRO_MEMORY_SET` | **必填**，游戏里的编成号。没设就在碰游戏前退出（码 2）。写 `auto` 等于 KAA「おまかせ」，支援卡会直接确认列表第一张租借卡，只在你明确想这样时用 |
+| `HIRO_SUPPORT_SET` / `HIRO_MEMORY_SET` | 游戏里的编成号。没设、也没有开局编成方案时，在碰游戏前退出（码 2）。写 `auto` 等于 KAA「おまかせ」，支援卡会直接确认列表第一张租借卡，只在你明确想这样时用 |
+| `HIRO_MEMORY_CARDS` | 回忆编成带进培育的技能卡 ID（逗号分隔）。决策器把它们算作已有，三选一里不再找；不设时用开局编成方案里的，都没有就当空。手动设编成号时记得一起设 |
+| `HIRO_FORMATION_PLAN` | 开局编成方案文件，默认 `conf/formation-plan.json`；`off` = 不读。见 [docs/formation-plan.md](docs/formation-plan.md) |
 | `HIRO_LLM` | LLM，如 `claude:sonnet`（默认，走 `claude -p`）、`codex[:<model>]`（走 OpenAI Codex CLI 的 `codex exec`，用 ChatGPT 账号登录，不要 API key；Windows 上能自动找到 Codex 应用自带的 `codex.exe`，或用 `HIRO_CODEX_BIN` 指定）、`openai:<model>`（OpenAI 兼容）。`--no-llm` 只用规则。需要代理的网络给进程设 `HTTPS_PROXY` |
 | `HIRO_KAA_GAME_DATA` | KAA 公开数据目录（含 `game.db`），默认 `resources/game_data` |
 | `HIRO_USER_ASSETS` | 自建素材目录（`capture_icons` 的产出），可选；与随仓库素材包并用，同类图库取文件更多的一个 |

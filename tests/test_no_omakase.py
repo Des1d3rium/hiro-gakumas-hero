@@ -49,12 +49,17 @@ def test_rent_step2_refuses_omakase_unless_explicit(monkeypatch):
 def test_default_rental_pick_uses_main_attr(monkeypatch):
     from hiro.produce import rental
 
-    got = []
-    monkeypatch.setattr(rental, "pick_rental", lambda attr: got.append(attr) or True)
+    from hiro import kaa_env
+
+    got, scorers = [], []
+    monkeypatch.setattr(rental, "pick_rental", lambda attr, scorer=None, **k: got.append(attr) or scorers.append(scorer) or True)
+    monkeypatch.setattr(kaa_env, "ACTIVE_PLAN", None)
     monkeypatch.setattr(kaa_patches, "RENTAL_ATTR", "Vi")
-    assert kaa_patches._default_rental_pick() and got == ["Vi"]
+    assert kaa_patches._default_rental_pick() and got == ["Vi"] and scorers == [None]  # 没有方案：主属性、等级最高
     monkeypatch.setattr(kaa_patches, "RENTAL_ATTR", None)
     assert kaa_patches._default_rental_pick() and got[-1] == rental.WANT_ATTR
+    monkeypatch.setattr(kaa_env, "ACTIVE_PLAN", {"support": {"own": [{"support_card_id": "s_card-3-0099", "level": 60}]}, "idol": {}})
+    assert kaa_patches._default_rental_pick() and callable(scorers[-1])  # 有方案：按编成价值打分
 
 
 def _fake_R(next_enabled: bool):

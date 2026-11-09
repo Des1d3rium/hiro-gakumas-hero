@@ -1,7 +1,9 @@
 # 来源：digital-hiro hiro/produce/rental.py（c3fc27f）；调用 KAA / kotonebot（kotones-auto-assistant，GPL-3.0）
 """开局第 2 步租借格（用户 2026-11-02：不用おまかせ，租借格由我们挑）。
 
-过渡规则（支援卡选择系统 choose_rental 接入前，用户指定）：在租借列表里挑「Da、等级最高」的一张。
+挑法：
+- 有开局编成方案时（kaa_patches 传 scorer = support_select.rental_scorer）：两页从顶滑到底，每一行按「加上这张后整个编成的价值」打分，租价值最高的。
+- 没有方案时：挑「主属性、等级最高」的一张，碰到满级立刻选。
 流程：点「レンタルのみ」空格 → 读列表（读两屏：顶部 + 往下滑一次）→ 挑 → 点该行 → 「決定」→ 等第 2 步「次へ」亮。
 只点租借列表里的行和「決定」；读不到合格行就点「キャンセル」返回 False（交 RentalPending 停下）。
 """
@@ -86,11 +88,29 @@ def rental_mismatch() -> bool:
     return any("不一致" in t and (b[0] + b[2]) // 2 > 480 and 600 <= (b[1] + b[3]) // 2 <= 900 for t, _, b in ocr_boxes(device.screenshot()))
 
 
-def pick_rental(attr: str = WANT_ATTR, tries: int = 3) -> bool:
-    """挑一张；决定后租借格标「プラン不一致」就记下卡名、重开列表换下一张（第十七局：勾选没生效，租到了别的方案的卡）。"""
+def scored_best(rows: list[dict], scorer, exclude: set | None = None) -> tuple[dict, float] | None:
+    """按 scorer 挑一行（价值最高；同价值等级、突破高的优先）。没有可打分的行返回 None。"""
+    exclude = exclude or set()
+    best = None
+    for r in rows:
+        c = r.get("card") or {}
+        if r.get("covered") or c.get("name") in exclude:
+            continue
+        v = scorer(r)
+        if v is None:
+            continue
+        key = (v, c.get("level") or 0, c.get("breaks") or 0)
+        if best is None or key > best[0]:
+            best = (key, r)
+    return (best[1], best[0][0]) if best else None
+
+
+def pick_rental(attr: str = WANT_ATTR, tries: int = 3, scorer=None) -> bool:
+    """挑一张；决定后租借格标「プラン不一致」就记下卡名、重开列表换下一张（第十七局：勾选没生效，租到了别的方案的卡）。
+    scorer：按编成价值打分（有方案时）；None = 主属性、等级最高。"""
     exclude: set = set()
     for _ in range(tries):
-        name = _pick_once(attr, exclude)
+        name = _pick_once(attr, exclude, scorer)
         if name is None:
             return False
         if not rental_mismatch():
@@ -106,8 +126,9 @@ def progress(why: str) -> None:
     _p(why)
 
 
-def _pick_once(attr: str, exclude: set) -> str | None:
-    """两页都从顶滑到底：遇到满级（Lv60）主属性卡立刻选；否则记下最好的一张（页、滑动次数、玩家名），回去点它。返回选中的卡名。"""
+def _pick_once(attr: str, exclude: set, scorer=None) -> str | None:
+    """两页都从顶滑到底，记下最好的一张（页、滑动次数、玩家名），回去点它。返回选中的卡名。
+    没有 scorer 时遇到满级（Lv60）主属性卡立刻选；有 scorer 时要看完全部再挑价值最高的。"""
     device.click(*RENTAL_SLOT)
     time.sleep(2.5)
     _ensure_plan_fit()
@@ -128,29 +149,42 @@ def _pick_once(attr: str, exclude: set) -> str | None:
             if players == last_players:
                 break  # 到底了
             last_players = players
-            row = best_row(rows, attr, exclude)
-            if row is not None:
-                c = row["card"]
-                if (c.get("level") or 0) >= TOP_LEVEL:
-                    _tap_and_decide(row, ctrl)
-                    return c.get("name")
-                key = (c.get("level") or 0, c.get("breaks") or 0)
-                if best is None or key > best[:2]:
-                    best = (*key, page, screen, row.get("player"))
+            if scorer is not None:
+                hit = scored_best(rows, scorer, exclude)
+                if hit is not None:
+                    row, value = hit
+                    c = row["card"]
+                    key = (value, c.get("level") or 0, c.get("breaks") or 0)
+                    if best is None or key > best[:3]:
+                        best = (*key, page, screen, row.get("player"))
+                        logger.info("租借：目前最好 %s（%s Lv%s，编成价值 %.0f，玩家 %s）", c.get("name"), c.get("attr"), c.get("level"), value, row.get("player"))
+            else:
+                row = best_row(rows, attr, exclude)
+                if row is not None:
+                    c = row["card"]
+                    if (c.get("level") or 0) >= TOP_LEVEL:
+                        _tap_and_decide(row, ctrl)
+                        return c.get("name")
+                    key = (0.0, c.get("level") or 0, c.get("breaks") or 0)
+                    if best is None or key > best[:3]:
+                        best = (*key, page, screen, row.get("player"))
             device.swipe(*SWIPE)
             time.sleep(1.2)
     if best is None:
-        logger.warning("租借：两页都没读到 %s 卡，取消", attr)
+        logger.warning("租借：两页都没读到%s，取消", f" {attr} 卡" if scorer is None else "能补成 4-2 的卡")
         device.click(*(ctrl.get("cancel") or (220, 1157)))
         return None
-    _, _, page, screen, player = best
+    _, _, _, page, screen, player = best
     _goto_page(page, pager)
     _to_top()
     for _ in range(screen):
         device.swipe(*SWIPE)
         time.sleep(1.2)
     lst = _rows()
-    row = next((r for r in lst["rows"] if r.get("player") == player and r.get("card")), None) or best_row(lst["rows"], attr, exclude)
+    row = next((r for r in lst["rows"] if r.get("player") == player and r.get("card")), None)
+    if row is None:
+        hit = scored_best(lst["rows"], scorer, exclude) if scorer is not None else None
+        row = hit[0] if hit else (best_row(lst["rows"], attr, exclude) if scorer is None else None)
     if row is None:
         logger.warning("租借：回到最佳行时没找到（玩家 %s），取消", player)
         device.click(*(ctrl.get("cancel") or (220, 1157)))

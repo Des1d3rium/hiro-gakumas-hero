@@ -1,5 +1,10 @@
-# 来源：digital-hiro src/hiro/state/memory_priority.py @ c3fc27f（GPL-3.0-or-later）
-"""回忆（プロデュースメモリー）编成的社区优先级表：Campus 広（i_card-shro-3-007，ロジック / やる気）。
+# 来源：digital-hiro src/hiro/state/memory_priority.py @ 99092bc（GPL-3.0-or-later）
+"""回忆（プロデュースメモリー）编成的社区优先级表。
+
+按流派分表（PROFILES，偶像卡 examEffectType → 流派见 profile_for_idol）：
+- yaruki：Campus 広（i_card-shro-3-007，ロジック / やる気），下面 MEMORY_PRIORITY，来源见本段说明。
+- sense_spotlight / review_smile / anomaly_tsuyoki：感性国民脚光 [いおん09]、好印象笑颜 [いおん10]、观者强气 [いおん12]，
+  加 [いおん01] 各方案的回忆推荐；表在文件后半部分。卡名是视频里的中文昵称，按主数据卡面效果对到卡 ID（对照写在每行 note）。
 
 用户 2026-11-01：按社区推荐从高到低选，考虑已有哪些回忆、是否定制 / 附魔过（docs/tasks/回忆编成选择系统.md §1）。
 
@@ -112,14 +117,20 @@ REACT_TRIGGERS = {
 SLEEP_TRIGGERS = {"ひなたぼっこ": 5}  # 「〇〇使用時、眠気を削除」[wiki论坛]；其余默认 3
 
 
-def card_entry(card_id: str | None) -> dict | None:
+def card_entry(card_id: str | None, profile: str | None = None) -> dict | None:
+    if profile and profile != DEFAULT_PROFILE:
+        return PROFILES[profile]["by_id"].get(card_id or "")
     return PRIORITY_BY_ID.get(card_id or "")
 
 
-def fallback_weight(card_id: str | None) -> int:
-    """不在优先级表里的卡：やる気 卡按评级给低分；冲突 / 偏离路线的卡 0。"""
+def fallback_weight(card_id: str | None, profile: str | None = None) -> int:
+    """不在优先级表里的卡：やる気 卡按评级给低分；冲突 / 偏离路线的卡 0。其他流派：表外的本方案 / 共通卡给 20，排除名单 0。"""
     from hiro.state.knowledge import CONFLICT_CARDS, OFF_PLAN_CARDS, YARUKI_CARDS
 
+    if profile and profile != DEFAULT_PROFILE:
+        if not card_id or card_id in PROFILES[profile]["exclude"]:
+            return 0
+        return 20 if ("-00-" in card_id or PROFILES[profile]["plan_tag"] in card_id) else 0
     if not card_id or card_id in CONFLICT_CARDS or card_id in OFF_PLAN_CARDS or card_id in MEMORY_EXCLUDE:
         return 0
     tier = (YARUKI_CARDS.get(card_id) or {}).get("tier")
@@ -132,30 +143,36 @@ def _quoted(text: str) -> str | None:
     return m.group(1).rstrip("+＋") if m else None
 
 
-def _trigger_value(trigger: str | None, table: dict, plan_default: float) -> float:
-    """触发卡的价值：表里的（部分匹配，OCR 可能截断）；やる気 牌组常见的卡 plan_default；别的プラン的卡（意地、ハイタッチ…）几乎没用。"""
+def _trigger_value(trigger: str | None, table: dict, plan_default: float, profile: str | None = None) -> float:
+    """触发卡的价值：表里的（部分匹配，OCR 可能截断）；本流派牌组常见的卡 plan_default；别的プラン的卡（意地、ハイタッチ…）几乎没用。"""
     if not trigger:
         return 1.0
     for name, v in table.items():
         if name in trigger or trigger in name:
             return v
-    from hiro.state.knowledge import YARUKI_CARDS
+    if profile and profile != DEFAULT_PROFILE:
+        names = [e["name"] for e in PROFILES[profile]["priority"]]
+    else:
+        from hiro.state.knowledge import YARUKI_CARDS
 
-    if any(trigger in (k.get("name") or "") or (k.get("name") or "") in trigger for k in YARUKI_CARDS.values()):
+        names = [k.get("name") or "" for k in YARUKI_CARDS.values()]
+    if any(n and (trigger in n or n in trigger) for n in names):
         return plan_default
     return 0.5
 
 
-def ability_value(text: str) -> tuple[float, str | None]:
+def ability_value(text: str, profile: str | None = None) -> tuple[float, str | None]:
     """一条 HIF 能力 / 被动 → (分值, 去重键)。去重键相同的能力在一套编成里第二条只算一半（[いおん14] 同类重复不能按次数累加）。
     属性百分比 / 固定值词条不在这里算（见 param_points）。"""
     t = text.replace("＋", "+")
     trigger = _quoted(t)
     times = 1.5 if re.search(r"[2２]回", t) else 1.0
+    react = PROFILES[profile]["react"] if profile and profile != DEFAULT_PROFILE else REACT_TRIGGERS
+    sleep = PROFILES[profile]["sleep"] if profile and profile != DEFAULT_PROFILE else SLEEP_TRIGGERS
     if "使用数追加" in t:
-        return _trigger_value(trigger, REACT_TRIGGERS, 3) * times, f"react:{trigger}"
+        return _trigger_value(trigger, react, 3, profile) * times, f"react:{trigger}"
     if "眠気" in t and any(k in t for k in ("削除", "除外", "消")):
-        return _trigger_value(trigger, SLEEP_TRIGGERS, 3) * times, f"sleep:{trigger}"
+        return _trigger_value(trigger, sleep, 3, profile) * times, f"sleep:{trigger}"
     if ("ボーナス" in t and "%" in t) or "上昇+" in t:
         return 0.0, None  # 属性词条：按 param_points
     return 0.0, None  # 其他（OCR 碎片「H.I.F専用重複発動不可」、体力回复概率等）不计分
@@ -201,3 +218,185 @@ def parse_param_texts(texts: list[str]) -> dict:
         else:
             slot["fixed"] += int(float(m.group(1)))
     return out
+
+
+# ================================================================ 其他流派
+# 字段同 MEMORY_PRIORITY，另加：
+# - slot：A = 一次性压缩 / 过牌件，B = 关键循环件（要强化或定制）[いおん09][いおん10][いおん12]；
+# - upgrade_bonus：强化过的回忆另加分（「必须强化」的核心卡）。
+# 每个流派的 ab_target = (A 张数, B 张数)：社区推荐的配比；每栏 1–3 张，越界扣 AB_PENALTY，正好等于推荐配比加 AB_BONUS。
+# 卡名对照：视频中文昵称 → 主数据卡名（按卡面效果核对，2026-11-06）。
+
+AB_PENALTY = 15
+AB_BONUS = 8  # 推荐配比是默认先验：卡之间权重差不大时按它选，差得多时仍可偏离（每栏 1–3 张都在社区允许范围内）
+
+SENSE_SPOTLIGHT = [  # [いおん09] 感性国民脚光（好调 / 集中都适用）；[いおん01] 感性回忆推荐
+    dict(card_id="p_card-01-men-2_037", name="存在感", weight=95, slot="B", role="循环核心（好调消费 -1 定制后才转得动）",
+         timing="any", timing_penalty=0, upgrade_bonus=3,
+         customs=[("cost_parameter_buff_reduce", 10, "好調消費 -1 [いおん09：必须定制]")],
+         alts=[], conflicts=[], sources=["いおん09"]),
+    dict(card_id="p_card-01-act-3_185", name="脚光", weight=94, slot="B", role="输出核心（好调 ≤20 时每用两张追加输出，集中 3 倍）",
+         timing="any", timing_penalty=0, upgrade_bonus=8,
+         customs=[("lesson_buff_add", 8, "集中 定制 [いおん09]"), ("cost_parameter_buff_reduce", 4, "好調消費 -1")],
+         alts=[], conflicts=[], sources=["いおん09"], note="脚光必须强化 [いおん09]"),
+    dict(card_id="p_card-01-act-2_001", name="シュプレヒコール", weight=88, slot="B", role="开局再动刀（集中角色尤其适合预带）",
+         timing="start", timing_penalty=10, timing_bonus_start=4,
+         customs=[("cost_lesson_buff_reduce", 4, "集中消費 -1"), ("exam_card_upgrade", 3, "手札强化")],
+         alts=[], conflicts=[], sources=["いおん09"], note="「再动刀」= 带使用数 +1 的攻击卡，按卡面对到シュプレヒコール（推断）"),
+    dict(card_id="p_card-01-men-3_006", name="国民的アイドル", weight=86, slot="B", role="核心（下一张卡效果再发动一次）",
+         timing="any", timing_penalty=0,
+         customs=[("block_add", 6, "元気 定制 [いおん01]"), ("exam_lesson-0006", 3, "パラメータ+")],
+         alts=[], conflicts=[], sources=["いおん09", "いおん01"]),
+    dict(card_id="p_card-00-men-3_005", name="仕切り直し", weight=84, slot="A", role="过牌（SSR 共通，选拔里很难拿到）",
+         timing="any", timing_penalty=0,
+         customs=[("cost_reduce", 6, "コスト -2"), ("stamina_consumption_down", 3, "消費体力減少")],
+         alts=["アイドル宣言"], conflicts=[], sources=["いおん09"]),
+    dict(card_id="p_card-00-men-2_012", name="アイドル宣言", weight=82, slot="A", role="压缩 / 过牌（抽 2、使用数 +1）",
+         timing="any", timing_penalty=0,
+         customs=[("exam_block", 3, "元気 定制"), ("stamina_consumption_down", 2, "消費体力減少")],
+         alts=["仕切り直し"], conflicts=[], sources=["いおん09"]),
+    dict(card_id="p_card-01-men-2_104", name="精神統一", weight=78, slot="B", role="循环（抽牌，集中效果定制）",
+         timing="any", timing_penalty=0,
+         customs=[("lesson_buff_add", 8, "集中 定制 [いおん09]")],
+         alts=[], conflicts=[], sources=["いおん09"]),
+    dict(card_id="p_card-00-men-3_012", name="テレビ出演", weight=70, slot="A", role="压缩 / 再动（要有再动定制）",
+         timing="any", timing_penalty=0,
+         customs=[("exam_playable_value_add", 10, "再动 定制 [いおん09：电视演出须有再动定制]")],
+         alts=["仕切り直し"], conflicts=[], sources=["いおん09"]),
+    dict(card_id="p_card-01-men-2_099", name="一発勝負", weight=60, slot="A", role="一次性集中（生成眠気，要配夏夜删）",
+         timing="any", timing_penalty=0,
+         customs=[("lesson_buff_add", 4, "集中 定制")],
+         alts=[], conflicts=[], sources=["いおん09"]),
+    dict(card_id="p_card-01-act-3_049", name="至高のエンタメ", weight=55, slot="B", role="续航（元気定制）",
+         timing="any", timing_penalty=0,
+         customs=[("exam_block", 6, "元気 定制 [いおん01]")],
+         alts=[], conflicts=[], sources=["いおん01"]),
+]
+
+REVIEW_SMILE = [  # [いおん10] 好印象：倒数第五回合 国民药 + 决胜颜，末回合 キセキの魔法 收尾；[いおん01] 好印象回忆推荐
+    dict(card_id="p_card-02-act-3_187", name="びしっとキメ顔", weight=95, slot="B", role="启动核心（决胜颜：好印象强化 + 每次加好印象时追加输出）",
+         timing="any", timing_penalty=0, upgrade_bonus=3,
+         customs=[("p_card-02-act-3_187-enc_1", 8, "输出 定制 [いおん10]"), ("review_up", 4, "使用条件 好印象10→6")],
+         alts=[], conflicts=[], sources=["いおん10"]),
+    dict(card_id="p_card-02-act-3_052", name="キセキの魔法", weight=94, slot="B", role="收尾（眠気 ≥2 张时好印象 400% 两次）",
+         timing="any", timing_penalty=0, upgrade_bonus=3,
+         customs=[("p_card-02-act-3_001-enc_1", 8, "输出 定制 [いおん10]")],
+         alts=[], conflicts=[], sources=["いおん10"]),
+    dict(card_id="p_card-02-men-2_111", name="成長痛", weight=86, slot="B", role="循环（必须强化）",
+         timing="any", timing_penalty=0, upgrade_bonus=10,
+         customs=[("cost_reduce", 4, "コスト -2")],
+         alts=[], conflicts=[], sources=["いおん10"], note="成长痛必须强化 [いおん10]"),
+    dict(card_id="p_card-02-act-3_050", name="輝くキミへ", weight=84, slot="B", role="核心（好印象定制）",
+         timing="any", timing_penalty=0,
+         customs=[("p_card-02-act-3_050-enc_1", 8, "好印象 定制 [いおん10]")],
+         alts=[], conflicts=[], sources=["いおん10", "いおん01"], note="「届到你」按卡面对到輝くキミへ（推断；届いて！是元気卡）"),
+    dict(card_id="p_card-00-men-3_005", name="仕切り直し", weight=84, slot="A", role="过牌压缩",
+         timing="any", timing_penalty=0,
+         customs=[("cost_reduce", 6, "コスト -2")], alts=["アイドル宣言"], conflicts=[], sources=["いおん10"]),
+    dict(card_id="p_card-00-men-2_012", name="アイドル宣言", weight=82, slot="A", role="过牌压缩（抽 2、使用数 +1）",
+         timing="any", timing_penalty=0,
+         customs=[("stamina_consumption_down", 2, "消費体力減少")], alts=["仕切り直し"], conflicts=[], sources=["いおん10"]),
+    dict(card_id="p_card-02-men-2_060", name="オトメゴコロ", weight=78, slot="B", role="循环（好印象定制）",
+         timing="any", timing_penalty=0,
+         customs=[("review_add", 6, "好印象 定制 [いおん10]")], alts=[], conflicts=[], sources=["いおん10"]),
+    dict(card_id="p_card-02-men-2_101", name="冒険心", weight=74, slot="B", role="循环（生成眠気）",
+         timing="any", timing_penalty=0,
+         customs=[("review_add", 5, "好印象 定制")], alts=[], conflicts=[], sources=["いおん10"]),
+    dict(card_id="p_card-00-men-3_003", name="アイドル魂", weight=70, slot="A", role="压缩（使用数 +1）",
+         timing="any", timing_penalty=0,
+         customs=[("cost_reduce", 6, "コスト -2")], alts=["アイドル宣言"], conflicts=[], sources=["いおん10"]),
+    dict(card_id="p_card-02-act-2_049", name="みんな大好き", weight=60, slot="B", role="好印象输出",
+         timing="any", timing_penalty=0,
+         customs=[("lesson_depend_exam_review_add", 5, "好印象依存 定制")], alts=[], conflicts=[], sources=["いおん01"]),
+]
+
+ANOMALY_TSUYOKI = [  # [いおん12] 观者强气：全身全霊 → フルスロットル → オーバードライブ / エンターテイナー / 巻き返し 循环；[いおん01] 观者回忆推荐
+    dict(card_id="p_card-03-men-1_050", name="巻き返し", weight=96, slot="B", role="循环核心（定制成可无限次使用）",
+         timing="any", timing_penalty=0, upgrade_bonus=3,
+         customs=[("play_move_position_type_change-grave", 12, "使用后进弃牌堆（无限次）[いおん12：必须定制]")],
+         alts=[], conflicts=[], sources=["いおん12"], note="「卷土重来」= 巻き返し"),
+    dict(card_id="p_card-03-act-3_188", name="エンターテイナー", weight=92, slot="B", role="爆发核心（强气 2 时打，指针切换越多越强）",
+         timing="any", timing_penalty=0, upgrade_bonus=8,
+         customs=[("lesson_add", 5, "パラメータ+")], alts=[], conflicts=[], sources=["いおん12"], note="「演艺家」= エンターテイナー，必须强化"),
+    dict(card_id="p_card-03-men-2_112", name="フルスロットル", weight=88, slot="B", role="启动（熱意 +100%、抽 3）",
+         timing="any", timing_penalty=0, upgrade_bonus=8,
+         customs=[("exam_preservation", 3, "温存 定制")], alts=[], conflicts=[], sources=["いおん12"], note="「全速运转」，必须强化"),
+    dict(card_id="p_card-03-act-3_065", name="全身全霊", weight=82, slot="B", role="爆发起手（必须强化）",
+         timing="any", timing_penalty=0, upgrade_bonus=8,
+         customs=[("cost_reduce", 4, "コスト -2")], alts=[], conflicts=[], sources=["いおん12", "いおん01"]),
+    dict(card_id="p_card-03-act-2_102", name="オーバードライブ", weight=76, slot="B", role="循环（强气 + 使用数 +1）",
+         timing="any", timing_penalty=0,
+         customs=[("cost_reduce", 4, "コスト -2")], alts=[], conflicts=[], sources=["いおん12"], note="「超速驱动」"),
+    dict(card_id="p_card-00-men-3_005", name="仕切り直し", weight=80, slot="A", role="过牌 / 指针切换",
+         timing="any", timing_penalty=0,
+         customs=[("cost_reduce", 6, "コスト -2")], alts=["アイドル宣言"], conflicts=[], sources=["いおん12"]),
+    dict(card_id="p_card-00-men-2_012", name="アイドル宣言", weight=78, slot="A", role="过牌（抽 2、使用数 +1）",
+         timing="any", timing_penalty=0,
+         customs=[("stamina_consumption_down", 2, "消費体力減少")], alts=["仕切り直し"], conflicts=[], sources=["いおん12"]),
+    dict(card_id="p_card-03-men-2_080", name="インフルエンサー", weight=74, slot="A", role="指针切换（定制强气）",
+         timing="any", timing_penalty=0,
+         customs=[("exam_concentration", 6, "強気 定制 [いおん12]")], alts=[], conflicts=[], sources=["いおん12", "いおん01"],
+         note="「网红」"),
+    dict(card_id="p_card-03-men-3_058", name="アイドルになります", weight=72, slot="B", role="观者核心（[いおん01] 观者优先）",
+         timing="any", timing_penalty=0,
+         customs=[("cost_full_power_point_reduce", 4, "全力値消費 -1")], alts=[], conflicts=[], sources=["いおん01"]),
+    dict(card_id="p_card-03-men-1_039", name="ハッピー♪", weight=60, slot="A", role="过牌（带 HIF 再动 / 抽牌能力时更好）",
+         timing="any", timing_penalty=0,
+         customs=[("cost_reduce", 3, "コスト -2")], alts=[], conflicts=[], sources=["いおん12"]),
+    dict(card_id="p_card-03-men-2_076", name="盛り上げ上手", weight=55, slot="A", role="指针切换（定制过的气氛高手）",
+         timing="any", timing_penalty=0,
+         customs=[("exam_concentration", 4, "強気 定制")], alts=[], conflicts=[], sources=["いおん01"]),
+]
+
+DEFAULT_PROFILE = "yaruki"
+
+
+def _profile(key, name, priority, ab_target, plan_tag, react=None, sleep=None, exclude=None, sources=()):
+    return {"key": key, "name": name, "priority": priority, "by_id": {e["card_id"]: e for e in priority}, "ab_target": ab_target,
+            "plan_tag": plan_tag, "react": react or {}, "sleep": sleep or {}, "exclude": exclude or {}, "sources": list(sources)}  # fmt: skip
+
+
+PROFILES = {
+    "yaruki": _profile("yaruki", "ロジック やる気（Campus 広）", MEMORY_PRIORITY, None, "-02-", REACT_TRIGGERS, SLEEP_TRIGGERS,
+                       MEMORY_EXCLUDE, ["いおん14", "いおん15", "もなみ", "wiki", "game8", "もりし"]),
+    "sense_spotlight": _profile("sense_spotlight", "センス 国民脚光", SENSE_SPOTLIGHT, (2, 2), "-01-",
+                                {"脚光": 6, "存在感": 6, "精神統一": 5, "国民的アイドル": 5}, {}, {"p_card-01-act-2_061": "破竹の勢い：要好调 8 以上，不当稳定核心 [いおん09]"},
+                                ["いおん09", "いおん01"]),
+    "review_smile": _profile("review_smile", "ロジック 好印象 笑颜", REVIEW_SMILE, (2, 2), "-02-",
+                             {"オトメゴコロ": 6, "成長痛": 6, "冒険心": 4}, {"ひなたぼっこ": 3},
+                             {}, ["いおん10", "いおん01"]),
+    "anomaly_tsuyoki": _profile("anomaly_tsuyoki", "アノマリー 强气（热意接龙）", ANOMALY_TSUYOKI, (1, 3), "-03-",
+                                {"巻き返し": 8, "エンターテイナー": 8, "オーバードライブ": 5, "ハッピー": 5, "カウントダウン": 4, "忍耐力": 4},
+                                {}, {}, ["いおん12", "いおん01"]),
+}
+
+# 偶像卡 examEffectType → 流派。全力（ExamFullPower）没有专门的社区篇，暂用强气表（热意 / 指针切换的牌通用），方案里会标出来。
+EFFECT_PROFILE = {
+    "ProduceExamEffectType_ExamCardPlayAggressive": "yaruki",
+    "ProduceExamEffectType_ExamReview": "review_smile",
+    "ProduceExamEffectType_ExamParameterBuff": "sense_spotlight",
+    "ProduceExamEffectType_ExamLessonBuff": "sense_spotlight",
+    "ProduceExamEffectType_ExamConcentration": "anomaly_tsuyoki",
+    "ProduceExamEffectType_ExamFullPower": "anomaly_tsuyoki",
+}
+PROFILE_CAVEAT = {"ProduceExamEffectType_ExamFullPower": "全力型没有专门的社区篇，借用强气表，优先级可能不准"}
+
+
+def profile_for_idol(idol_card_id: str) -> tuple[str, str | None]:
+    """偶像卡 → (流派, 说明)。idol_card_id 可以是 skin id（i_card-skin-…）。"""
+    from hiro.state.context import catalog
+
+    cid = idol_card_id.replace("i_card-skin-", "i_card-")
+    effect = catalog().one("IdolCard", cid)["examEffectType"]
+    return EFFECT_PROFILE.get(effect, DEFAULT_PROFILE), PROFILE_CAVEAT.get(effect)
+
+
+# 识别只给定制文字时的关键词（其他流派用到的定制键；OCR 文字待实机核对）
+CUSTOM_TEXT_KEYS.update({
+    "cost_parameter_buff_reduce": ("好調消費",),
+    "lesson_buff_add": ("集中+", "集中＋"),
+    "exam_playable_value_add": ("スキルカード使用数追加",),
+    "play_move_position_type_change-grave": ("捨札", "捨て札"),
+    "review_add": ("好印象+", "好印象＋"),
+    "exam_concentration": ("強気",),
+})

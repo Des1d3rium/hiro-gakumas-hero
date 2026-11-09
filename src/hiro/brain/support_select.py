@@ -8,7 +8,10 @@
   所以在编成层面算：主属性 SP 率合计 → 主属性课程走 SP 的概率 → 所有卡的 SP 触发次数（ep08：集中 SP，4-2-0 / 4-1-1）。
 - 支援事件给的技能卡：牌组用得上的加分，污染循环的扣分（ep05：送卡污染可能抵消属性收益）。查过 master：没有支援事件给
   せのびの魔法 / 届いて / デイドリ 等核心卡（决策-11 的缺口只能靠选拔里拿），所以这一项只看 夏夜 / 焼き芋 这类卡。
-- 约束：主属性（Campus 広 = Da）4 张，其余 2 张（4-2-0 或 4-1-1）；租借最多 1 张；同一张卡不重复。
+- 约束：主属性 4 张，其余 2 张（4-2-0 或 4-1-1）；租借最多 1 张；同一张卡不重复。
+- 主属性（choose_main）：三个属性各当一次主属性组编成，默认用偶像的主属性；别的属性当主属性总价值高出 REVERSE_MIN_GAIN（100）
+  以上才「逆练」（ep02：作者的经验线是 100 分，逆练后被弱化的属性要靠课程 / 考试补，也会限制拿卡）。
+  ep08 的稳妥属性线（一属性约 2000、二属性 1400、三属性 1100）写进方案说明，提醒副属性要靠课程和考试补齐。
 
 数值单位：属性点（Vo / Da / Vi 合计）。P 点、体力等按 VALUE_PER 折算（粗估，写在下面）。离线没有培育阶段模拟器，
 这里的分数只用于编成之间比较；绝对值不是预测。
@@ -21,6 +24,7 @@
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache
 
@@ -53,6 +57,9 @@ ROUTE = {
 SP_BASE = 0.25  # 没有 SP 率词条时主属性课程走 SP 的概率（粗估，待实机统计）
 SP_LESSON_EXTRA = 45  # SP 课程比普通课程多给的主属性（第十四局：SP Da+135 / 普通约 +90）
 GROWTH_BASE = {"Da": 1100, "Vo": 450, "Vi": 450}  # 成长率作用的基数：一局里课程 / 授業给的属性（粗估）
+MAIN_LESSONS, GROWTH_MAIN, GROWTH_OTHER = 7, 1100, 450  # 换主属性时 ROUTE["lessons"] / GROWTH_BASE 按这几个数重排（同上，粗估）
+REVERSE_MIN_GAIN = 100  # 逆练门槛 [ep02]：别的属性当主属性总价值至少高这么多才换
+SAFE_LINES = (2000, 1400, 1100)  # 稳妥属性线（一 / 二 / 三属性）[ep08]
 VALUE_PER = {"p": 0.4, "hp": 1.5, "max_hp": 3.0, "exam_upgrade_pct": 0.08, "drink_discount": 30.0}  # 折算到属性点（粗估）
 LESSON_P_BASE = 40  # 一次课程奖励的 P 点（粗估）
 EVENT_CARD_GOOD, EVENT_CARD_BAD = 20.0, -25.0  # 事件送卡：用得上 / 污染循环（ep02：一张卡约 20 点；ep05：污染可能抵消属性）
@@ -87,8 +94,8 @@ def _trigger_count(tid: str, sp: dict) -> float:
 
 
 @lru_cache(maxsize=None)
-def _compiled(card_id: str, level: int, limit_rank: str | None) -> tuple:
-    """(属性, ((效果类型, 效果值, 触发 ID, 次数上限), ...))。素材源给不出技能时返回 (属性, ())。"""
+def _compiled(card_id: str, level: int, limit_rank: str | None, plan: str | None = None) -> tuple:
+    """(属性, ((效果类型, 效果值, 触发 ID, 次数上限), ...))。素材源给不出技能时返回 (属性, ())。plan 与主仓库签名一致，素材源不分方案。"""
     from hiro.brain.formation import _support_skills
     from hiro.state.context import catalog
 
@@ -178,6 +185,16 @@ def plan_mismatch(entry: dict) -> str | None:
     return None
 
 
+def normalize_inventory(inventory: dict) -> dict:
+    """tools.support_inventory 写的是 {cards: {卡 ID: {...}}}；这里统一成 {cards: [{support_card_id, ...}], rentals: [...]}。"""
+    out = dict(inventory or {})
+    for k in ("cards", "rentals"):
+        v = out.get(k)
+        if isinstance(v, dict):
+            out[k] = [{"support_card_id": cid, **(e or {})} for cid, e in v.items()]
+    return out
+
+
 def make_slot(entry: dict, rental: bool = False) -> Slot | None:
     from hiro.state.context import catalog
 
@@ -186,7 +203,7 @@ def make_slot(entry: dict, rental: bool = False) -> Slot | None:
     cid = entry.get("support_card_id")
     card = catalog().one("SupportCard", cid)
     level = int(entry.get("level") or 1)
-    attr, skills = _compiled(cid, level, entry.get("limit_rank"))
+    attr, skills = _compiled(cid, level, entry.get("limit_rank"), PLAN)
     sp = {}
     for etype, value, _tid, _lim in skills:
         for a, n in NAME.items():
@@ -268,6 +285,7 @@ def _valid(slots: list[Slot]) -> bool:
 def choose(inventory: dict, *, size: int = 6) -> dict:
     """库存 + 租借列表 → 编成方案：{own: [...], rental: {...} | None, value, sp, notes, runner_up}。
     先按单卡价值贪心组一个合法编成（主属性 4 张），再做单张互换的局部搜索直到不再提升（SP 率在编成层面计价，单卡排序会低估 SP 卡）。"""
+    inventory = normalize_inventory(inventory)
     own = [s for s in (make_slot(e) for e in inventory.get("cards") or []) if s]
     rent = [s for s in (make_slot(e, rental=True) for e in inventory.get("rentals") or []) if s]
     pool = own + rent
@@ -295,7 +313,8 @@ def choose(inventory: dict, *, size: int = 6) -> dict:
 
     best = greedy()
     if len(best) < size or not _valid(best):
-        return {"error": f"凑不出 4-2 编成（主属性 {MAIN_ATTR} {sum(s.attr == MAIN_ATTR for s in pool)} 张）", "partial": [s.name for s in best]}
+        return {"error": f"凑不出 {MAIN_COUNT}-{size - MAIN_COUNT} 编成（主属性 {MAIN_ATTR} {sum(s.attr == MAIN_ATTR for s in pool)} 张）",
+                "partial": [s.name for s in best]}  # fmt: skip
     best_v, _ = formation_value(best)
     improved = True
     while improved:
@@ -331,6 +350,50 @@ def choose(inventory: dict, *, size: int = 6) -> dict:
     }  # fmt: skip
 
 
+@contextmanager
+def using(main_attr: str | None = None, plan: str | None = None, main_count: int | None = None):
+    """临时换主属性 / 方案（换偶像、比较逆练）：ROUTE["lessons"] 和 GROWTH_BASE 按主属性重排，结束后还原。
+    默认值（Da / Plan2）下重排结果与原表相同。main_count：编成里主属性要几张（只选自己 5 张、租借格开局再租主属性时用 3）。"""
+    global MAIN_ATTR, PLAN, GROWTH_BASE, MAIN_COUNT
+    saved = (MAIN_ATTR, PLAN, GROWTH_BASE, ROUTE["lessons"], MAIN_COUNT)
+    MAIN_ATTR, PLAN = main_attr or MAIN_ATTR, _norm_plan(plan) or PLAN
+    MAIN_COUNT = main_count or MAIN_COUNT
+    ROUTE["lessons"] = {a: (MAIN_LESSONS if a == MAIN_ATTR else 0) for a in NAME}
+    GROWTH_BASE = {a: (GROWTH_MAIN if a == MAIN_ATTR else GROWTH_OTHER) for a in NAME}
+    try:
+        yield
+    finally:
+        MAIN_ATTR, PLAN, GROWTH_BASE, ROUTE["lessons"], MAIN_COUNT = saved
+
+
+def choose_main(inventory: dict, *, plan: str | None = None, default_attr: str | None = None, size: int = 6,
+                main_count: int | None = None, min_gain: float = REVERSE_MIN_GAIN) -> dict:  # fmt: skip
+    """三个属性各当一次主属性组编成，按 ep02 的逆练门槛选主属性。返回 choose 的结果，另带
+    main_attr_candidates（各属性的价值 / 凑不出的原因）与 main_attr_why。default_attr 不给时取价值最高的。"""
+    results = {}
+    for a in NAME:
+        with using(a, plan, main_count):
+            results[a] = choose(inventory, size=size)
+    ok = {a: r for a, r in results.items() if "error" not in r}
+    cands = {a: (r["value"] if "error" not in r else r["error"]) for a, r in results.items()}
+    if not ok:
+        return {"error": "三个属性都凑不出 4-2 编成", "main_attr_candidates": cands}
+    best = max(ok, key=lambda a: ok[a]["value"])
+    if default_attr in ok and best != default_attr and ok[best]["value"] - ok[default_attr]["value"] < min_gain:
+        pick, why = default_attr, (f"不逆练：{best} 当主属性只高 {ok[best]['value'] - ok[default_attr]['value']}，"
+                                   f"不到门槛 {min_gain:g} [ep02]")  # fmt: skip
+    elif default_attr in ok and best != default_attr:
+        pick, why = best, f"逆练 {best}：比默认 {default_attr} 高 {ok[best]['value'] - ok[default_attr]['value']}（门槛 {min_gain:g} [ep02]）"
+    elif default_attr and default_attr not in ok:
+        pick, why = best, f"默认主属性 {default_attr} 凑不出 4 张（{cands[default_attr]}），改用价值最高的 {best}"
+    else:
+        pick, why = best, f"主属性 {best}：价值最高"
+    out = dict(ok[pick], main_attr_candidates=cands, main_attr_why=why)
+    lines = dict(zip(("一", "二", "三"), SAFE_LINES))
+    out["notes"] = [f"4 张集中在 {pick}，其余属性靠课程和考试补：稳妥线 一属性 {lines['一']} / 二属性 {lines['二']} / 三属性 {lines['三']} [ep08]"]
+    return out
+
+
 def _describe(s: Slot, sp: dict) -> dict:
     v, notes = card_value(s, sp)
     return {"support_card_id": s.card_id, "name": s.name, "attr": s.attr, "level": s.level, "limit_rank": s.limit_rank, "rental": s.rental,
@@ -351,6 +414,27 @@ def choose_rental(rentals: list[dict], own_plan: list[dict]) -> dict | None:
     if best is None:
         return None
     return {**_describe(best, sp_counts(own + [best])), "formation_value": round(best_v)}
+
+
+def rental_scorer(own_entries: list[dict], main_attr: str | None = None, plan: str | None = None):
+    """给租借列表执行侧用的打分函数：row（read_rental_list 的一行）→ 加上这张租借后整个编成的价值；
+    认不出卡、方案不一致、凑不成 4-2（不是主属性）时返回 None。同一张卡同一等级只算一次。"""
+    cache: dict = {}
+
+    def score(row: dict) -> float | None:
+        card = row.get("card") or {}
+        cid, level = card.get("support_card_id"), card.get("level")
+        if not cid or not level:
+            return None
+        key = (cid, level)
+        if key not in cache:
+            with using(main_attr, plan):
+                own = [s for s in (make_slot(e) for e in own_entries) if s]
+                slot = make_slot({"support_card_id": cid, "level": level}, rental=True)
+                cache[key] = formation_value(own + [slot])[0] if slot is not None and _valid(own + [slot]) else None
+        return cache[key]
+
+    return score
 
 
 def evaluate(cards: list[dict]) -> dict:
