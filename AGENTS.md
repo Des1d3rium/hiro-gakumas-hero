@@ -125,6 +125,7 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | `HIRO_CARD_ICON=1` | 换卡页 KAA 认不出的卡格用渲染卡图标再认一次（默认关；要先 `python -m hiro.vision.card_icon_render build`，见 docs/assets.md） |
 | `HIRO_VEIL_SIGNATURE=1` | VEIL 牌库按版本记账（默认关）：批量账本里同名卡一次性 / 客制化不同时，各算一个记账键；手里同名几张分不出时点按一次（只选中、不打出）读效果文字分辨，读完点空白取消选中。效果文字的 OCR 区域 `PROBE_TEXT_BOX` 还没实机校准，每次点按的文字都写进 trace（`veil_probe`） |
 | `HIRO_VEIL_HIF_FILL=1` | VEIL 本战 R2 按 H.I.F応援棒 记账（默认关）：开考时牌堆补到 22 张，补的「基本」牌名字不知道，先记成占位「基本?」，手里出现账本外、名字带「基本」的牌时改成真名；不开时这张牌被抽到后整副记成位置不明 |
+| `HIRO_LANDING_RETRY=1` | 出牌第一次没落地时先不禁用这张牌，重读后再点一次，第二次才禁用（默认关）。VEIL 出牌策略另有 8 个审查开关（`VEIL_CYCLE_PLAN` 等，默认关），见 docs/batch-hif.md |
 | `HIRO_VEIL_STRICT_SHUFFLE=1` | VEIL 牌堆记账按洗牌规则收紧（默认关）：抽牌数大于牌堆剩余时，牌堆里的牌必须全被抽到才认洗牌，否则整副记成位置不明 |
 
 固定编成时，租借格按 `--main-attr` 挑主属性、等级最高的一张；挑不到就停下（不开局）。

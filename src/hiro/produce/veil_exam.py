@@ -591,6 +591,15 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
     state.statuses = [s for s in state.statuses or [] if norm(s.get("name") or "") not in STANCES]
     if current is not None:
         state.statuses.append({"name": current, "value": level})
+    if observed is not None and current is not None and observed != current:
+        # VEIL_STANCE_SCREEN：账本姿态仍是决策依据，画面读到别的姿态时记下来，体力估算取掉血多的（veil.hp_loss）
+        from hiro.brain.veil import SCREEN_STANCE
+
+        state.statuses.append({"name": SCREEN_STANCE, "value": observed, "level": observed_level})
+        log = data.setdefault("veil_stance_screen_log", [])
+        entry = {"turn": memory.turn, "ledger": current, "screen": observed}
+        if not log or log[-1] != entry:
+            log.append(entry)
     if delayed:
         state.statuses.append({"name": f"次のターン開始時、{delayed}に変更"})
     return None

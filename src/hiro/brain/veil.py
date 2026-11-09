@@ -31,7 +31,9 @@ DEFAULT_ON = frozenset({"HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP
                         "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA",
                         "FP_RESERVE", "CLEAR_FIRST", "MINOR_HP", "HP_NET"})
 STRATEGY_FLAGS = ("KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP",
-                  "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET", "MINOR_HP")
+                  "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET", "MINOR_HP",
+                  "IDOL_CLEAR", "STANCE_SCREEN", "CYCLE_PLAN", "STRONG_TEACH", "CYCLE_WHEY", "DRIVE_CHECK",
+                  "STANCE_LATER", "HP_ZERO")
 
 
 def _flag(name: str) -> bool:
@@ -144,6 +146,62 @@ def hp_net():
     return _flag("HP_NET")
 
 
+# 2026-11-08 trusted trace 决策审查（以进入循环的目标回合为准，32 条 trace）后新增的 8 个开关：默认关，实机验证后再定默认值。
+# 执行层的「没点上先重试」另在 hiro.exec.exam（HIRO_LANDING_RETRY）。
+def idol_clear():
+    """VEIL_IDOL_CLEAR=1：清牌 / 过渡里，手里别的牌都清不了时，アイドルになります+ 不受「三选二」限制（手里至少两张
+    エンターテイナー+／オーバードライブ+／教えてあげる+）。画面上它不发灰，牌面只要求全力値消費3；三选二是为了它的
+    「手札のパラメータ上昇回数増加」，但清牌期留着它会推迟进循环。例：3-1 第 1 局 R1 attempt1 剩 6，手里只剩 OD 和アイドル，
+    结果 Skip，进循环晚一回合。"""
+    return _flag("IDOL_CLEAR")
+
+
+def stance_screen():
+    """VEIL_STANCE_SCREEN=1：画面姿态图标和账本姿态不一致时，体力估算取两者里掉血多的那个，决策仍以账本为准。
+    例：3-c 第 1 局 R2 attempt1 T1，账本是のんびり、画面是強気1，按 0 消耗打出頂点へ+，体力 8→1，整局被体力闸卡住，没进循环。"""
+    return _flag("STANCE_SCREEN")
+
+
+def cycle_plan():
+    """VEIL_CYCLE_PLAN=1：牌库快压缩完时（手牌之外最多还剩 1 张一次性牌 / 眠気），枚举本回合的出牌顺序（含ホエイ），
+    按姿态、夜空、全力値、体力推演，找出能让下回合开局就进循环的顺序照着打：压缩完、温存、夜空 1/2、下回合抽满。
+    过渡里推了夜空却切不回温存时就不推。审查中 3-c-3 R1 attempt2 剩 4、3-3 R2 剩 5、1107 R1 attempt2 剩 3 都因此晚了 1–2 回合。"""
+    return _flag("CYCLE_PLAN")
+
+
+def strong_teach():
+    """VEIL_STRONG_TEACH=1：清牌里「可打的只剩复用牌 → 不打、温存留到下回合」只在温存 / のんびり 下才成立。
+    不在温存时本来就没有温存可留，夜空为 2 / 3 时改打教えてあげる+：推夜空，并预约下回合多抽 2。
+    例：1-c 第 1 局 R2 attempt1 剩 8、7 连跳两回合。"""
+    return _flag("STRONG_TEACH")
+
+
+def cycle_whey():
+    """VEIL_CYCLE_WHEY=1：五卡循环的回合，手牌不到 5 张（第五张不在手里）时不喝初星ホエイプロテイン，因为多出的出牌次数没有牌可打；
+    最后一回合照喝。例：3-c 第 1 局 R1 attempt2 剩 4 白喝了一瓶，下回合过渡差一次出牌，掉出循环两回合。"""
+    return _flag("CYCLE_WHEY")
+
+
+def drive_check():
+    """VEIL_DRIVE_CHECK=1：DRIVE_FP 为攒全力値打オーバードライブ之前，先确认打完有用：
+    加完的全力値够让发灰的那张牌打出；アイドルになります+ 在打完 OD 后仍满足打出条件；全力状态下不为巻き返し+ 攒（全力下切不了姿态）。
+    例：1-c R2 剩 5、3-2 R1 attempt1、3-c-3 R1 attempt1 / R2 attempt1，OD 都白打了，还多出一张眠気。"""
+    return _flag("DRIVE_CHECK")
+
+
+def stance_later():
+    """VEIL_STANCE_LATER=1：只剩 1 次出牌、姿态限定牌（一心不乱+ / ガタゴトすやすや+）本身又不加次数时，
+    先打一张不改变当前姿态的一次性再动牌，或先喝ホエイ，再打姿态限定牌。
+    例：3-1 第 1 局 R1 剩 6，一心不乱 用掉了最后一次出牌，3 瓶ホエイ一瓶没喝。"""
+    return _flag("STANCE_LATER")
+
+
+def hp_zero():
+    """VEIL_HP_ZERO=1：状态栏有「消費体力変化」时（全身全霊+：次に使用したスキルカードの消費体力を0にする），下一张牌不掉体力。
+    原来体力闸当它照常掉血。例：3-3 第 1 局 R1 attempt2 剩 9，インフルエンサー++ 因此被留到温存。"""
+    return _flag("HP_ZERO")
+
+
 FULL_POWER_AT = 10  # 全力値到 10 自动进全力（实机）
 IDOL_CARD = "アイドルになります"  # 去「+」的基名
 FP_RESERVE_AT = 3  # アイドルになります+：全力値消費3（主数据）
@@ -233,7 +291,21 @@ def _status_value(status) -> int:
     return int(v) if isinstance(v, (int, float)) and v > 0 else 0
 
 
+SCREEN_STANCE = "_screen_stance"  # veil_exam 放进 statuses：画面姿态和账本不一致时的画面读数（VEIL_STANCE_SCREEN）
+
+
 def hp_loss(state, card, current, mods=None, *, spent=False):
+    """打出这张牌实际掉的体力（估计，宁高勿低）。VEIL_STANCE_SCREEN：current 就是账本姿态、画面读到别的姿态时，取掉血多的。"""
+    loss = _hp_loss_at(state, card, current, mods, spent=spent)
+    if stance_screen() and current is not None and current == stance(state):
+        seen = next((s for s in state.statuses or [] if s.get("name") == SCREEN_STANCE), None)
+        if seen and seen.get("value") and seen["value"] != current:
+            level = seen.get("level") if seen.get("level") in (1, 2) else None
+            loss = max(loss, _hp_loss_at(state, card, seen["value"], mods, spent=spent, level=level, use_level=True))
+    return loss
+
+
+def _hp_loss_at(state, card, current, mods=None, *, spent=False, level=None, use_level=False):
     """打出这张牌实际掉的体力（估计，宁高勿低）。
 
     主数据（2026-11-07 核对）：コスト值先加一心不乱（強気効果的牌 +7）、盛り上げ上手（アクティブ +1）；
@@ -261,11 +333,11 @@ def hp_loss(state, card, current, mods=None, *, spent=False):
         # 強気 2 段階：每张另外直接扣 STRONG2_DIRECT。实测 1-e R2 T1：第一印象++（cost 4，強気 1）33→25 = 4×2；
         # モチベ+（cost 2，強気 2）25→18 = 2×2+3；ひと呼吸+（cost 7，強気 2）18→1 = 7×2+3（原来按 +1 估，低估 2）
         # 段階不明时按二阶段估计，避免低估扣血。
-        per_card = STRONG2_DIRECT if stance_level(state, current) != 1 else 0
+        per_card = STRONG2_DIRECT if (level if use_level else stance_level(state, current)) != 1 else 0
     elif current == "のんびり":
         mult = 0.0
     elif current in WARM:
-        mult = 0.25 if stance_level(state, current) == 2 else 0.5
+        mult = 0.25 if (level if use_level and current == "温存" else stance_level(state, current)) == 2 else 0.5
     if "消費体力増加" in names:
         mult *= 2.0  # 原按 1.5；游戏里应是翻倍（未在主数据核实），按高估
     if "消費体力減少" in names:
@@ -275,8 +347,12 @@ def hp_loss(state, card, current, mods=None, *, spent=False):
     add_fix = _status_value(names.get("消費体力追加"))
     cut_fix = _status_value(names.get("消費体力削減"))
     scaled = max(0, math.ceil((cost + add_fix) * mult) - cut_fix)
-    paid = max(0, scaled - (state.genki or 0))
     direct = math.ceil((card.hp_cost or 0) * max(mult, 1.0))  # 体力消費：只往高估，温存 / のんびり 不减
+    if hp_zero() and _status_value(names.get("消費体力変化")) > 0:
+        # 全身全霊+「次に使用したスキルカードの消費体力を0にする（2回）」：状态栏「消費体力変化 N」还有次数，这一张不掉体力
+        # （元気也不花）。強気 2 段階的直接扣 1 没核实，照旧算（宁高勿低）
+        scaled = direct = 0
+    paid = max(0, scaled - (state.genki or 0))
     if spent:
         return scaled + direct + per_card
     return paid + direct + per_card
@@ -451,6 +527,149 @@ def small_deck(state):
     return not extra or next(iter(extra)) in once | {"眠気"}
 
 
+PLAN_MAX = 6  # 进循环规划最多推演的出牌数（手牌 5 + ホエイ 1）
+
+
+def plan_cycle(state, memory, hand_cards, actions, drinks, current, flower, count, played):
+    """VEIL_CYCLE_PLAN：枚举本回合出牌顺序（手牌 + 最多一瓶ホエイ），找「打完后下回合开局就能进五卡循环」的顺序。
+    返回 (第一步, 整个顺序的名字)，第一步是 CardView / WHEY / None（什么都不用打）；找不到返回 None（交给原来的规则）。
+
+    推演：出牌次数（再动、温存→強気 的解除）、姿态 / 夜空（after_play）、全力値（到 10 进全力 → 不要）、体力（体力闸）。
+    条件：剩下的牌库是核心 4 张（+ 至多 1 张一次性牌 / 眠気，OD 生成的眠気算进去）；回合末在温存 / のんびり，或下回合开局会自动进温存；
+    夜空 1 / 2；下回合抽的张数不少于牌库。打法依据：prompts/游戏接手提示词.md「过渡」「循环」。
+    只在牌库快压缩完（手牌外最多 1 张非核心牌）时推演；抽到的新牌不算（拿不准是什么）。"""
+    from itertools import permutations
+
+    rem = state.remaining_turns
+    if rem is None or rem < 2 or current in (None, "全力") or flower not in (1, 2, 3):
+        return None
+    piles = state.piles
+    if piles is None or not all(isinstance(piles.get(k), list) for k in ("deck", "grave")):
+        return None
+    if len(hand_cards) != len(state.hand):
+        return None
+    once_pile = {norm(c) for c in piles.get("once") or []}
+    if REBOUND in once_pile:
+        return None
+    hand_names = Counter(norm(c.name) for c in hand_cards)
+    allc = hand_names + Counter(norm(c) for k in ("deck", "grave", "unlocated") for c in piles.get(k) or [])
+    if any(allc[c] != 1 for c in CORE):
+        return None
+    once_known = once_pile | {norm(c.name) for c in hand_cards if c.tags.once} | set(memory.strategy_data.get("veil_known_once") or ())
+    outside = (allc - Counter(CORE)) - hand_names
+    if outside.total() > 1 or any(n not in once_known | {"眠気"} for n in outside):
+        return None
+    fp0 = memory.strategy_data.get("veil_fp")
+    mods = cost_mods(memory.strategy_data.get("veil_log"), _master_text)
+    warm0 = warm_next_turn(state, memory)
+    draw_extra = (piles.get("next_draw") or 3) - 3 - 2 * (TEACH in played)
+    floor = hp_floor()
+
+    def usable(c, cur, fpv):
+        t = norm(c.text)
+        if "温存の場合、使用可" in t and cur not in WARM:
+            return False
+        if "強気の場合、使用可" in t and cur != "強気":
+            return False
+        need = fp_delta(c)[1]
+        if need and (fpv is None or fpv < need):
+            return False
+        if f"play:{c.slot}" in actions:
+            return True
+        # 现在打不了：只认「现在的姿态 / 全力値不满足牌面条件」这种本回合会变的原因；条件现在已满足还打不了的（体力、读错…）不算
+        if c.tags.genki_min is not None:
+            return False
+        return bool(("温存の場合、使用可" in t and current not in WARM) or ("強気の場合、使用可" in t and current != "強気")
+                    or (need and (fp0 is None or fp0 < need)))
+
+    def run(seq):
+        acts, cur, fl, fpv = count, current, flower, fp0
+        spent = gain = 0
+        cleared, sleeps, teach, warm, bad_next, swapped = Counter(), 0, TEACH in played, warm0, False, False
+        for item in seq:
+            if acts < 1 or swapped:
+                return None
+            if item == WHEY:
+                acts += 1
+                continue
+            c = item
+            if not usable(c, cur, fpv):
+                return None
+            spent += hp_loss(state, c, cur, mods, spent=True)
+            gain += genki_gain(c)
+            to_strong = destination(c) == "強気" if release_gain() else after_play(cur, fl, c)[0] == "強気"
+            acts += c.tags.extra_actions + int(to_strong and cur in WARM) - 1
+            if fpv is not None:
+                g, cost = fp_delta(c)
+                fpv = fpv - cost + g
+                if fpv >= FULL_POWER_AT:
+                    return None
+            cur, fl = after_play(cur, fl, c)
+            if cur is None:
+                return None
+            name = norm(c.name)
+            nxt = next_stance(c)
+            if nxt in WARM or name.startswith(STAR):
+                warm = True
+            elif nxt is not None:
+                bad_next = True
+            if c.tags.once or c.tags.is_sleep or name in once_known:
+                cleared[name] += 1
+            sleeps += int(c.tags.makes_sleep)
+            teach = teach or name == TEACH
+            swapped = "手札をすべて入れ替える" in norm(c.text)
+        if fl not in ORDERS or bad_next or not (cur in WARM or warm):
+            return None
+        left = allc - cleared + Counter({"眠気": sleeps})
+        total = left.total()
+        extra = left - Counter(CORE)
+        if any(left[c] != 1 for c in CORE) or total not in (4, 5) or any(n not in once_known | {"眠気"} for n in extra):
+            return None
+        if 3 + draw_extra + 2 * teach < total:
+            return None
+        hp_after = None
+        if state.hp is not None:
+            hp_after = state.hp - max(0, spent - (state.genki or 0) - gain)
+            if hp_guard() and hp_after < floor and not (hp_net() and hp_after >= 1):
+                return None
+        idol_left = any(n.rstrip("+") == IDOL_CARD for n in extra)
+        return (total == 4, not idol_left or (fpv or 0) >= FP_RESERVE_AT, -len(seq), hp_after or 0)
+
+    items = list(hand_cards) + ([WHEY] if WHEY in drinks else [])
+    best = None
+    for k in range(min(len(items), PLAN_MAX) + 1):
+        for seq in permutations(items, k):
+            score = run(seq)
+            if score is not None and (best is None or score > best[0]):
+                best = (score, seq)
+    if best is None:
+        return None
+    seq = best[1]
+    names = [x if x == WHEY else norm(x.name) for x in seq]
+    return (seq[0] if seq else None), names
+
+
+def drive_useful(drive, starved, fp, current, hand) -> bool:
+    """VEIL_DRIVE_CHECK：打 オーバードライブ 攒全力値之后，发灰的牌里至少有一张真能打出：全力値够；
+    巻き返し+ 不在全力下（全力切不了姿态，攒了也没用）；アイドルになります+ 在 OD 离手后仍满足三选二（或开了 IDOL_CLEAR）。"""
+    if not drive_check():
+        return True
+    if fp is None:
+        return False
+    after = fp + fp_delta(drive)[0]
+    for c in starved:
+        name = norm(c.name).rstrip("+")
+        need = fp_delta(c)[1] or (FP_RESERVE_AT if name == IDOL_CARD else 1)
+        if after < need:
+            continue
+        if name == REBOUND.rstrip("+") and current == "全力":
+            continue
+        if name == IDOL_CARD and not idol_clear() and len({ENTERTAINER, TEACH} & set(hand)) < 2:
+            continue
+        return True
+    return False
+
+
 class VeilAdvisor:
     def on_round_start(self, round_no, context):
         pass
@@ -536,6 +755,9 @@ class VeilAdvisor:
                 if drink == SODA and cycle_soda() and len(state.hand) + 2 > HAND_MAX \
                         and (state.remaining_turns is None or state.remaining_turns > 1):
                     continue  # 满手喝ソーダ 抽的 2 张作废（VEIL_CYCLE_SODA）
+                if drink == WHEY and cycle_whey() and len(state.hand) < HAND_MAX \
+                        and (state.remaining_turns is None or state.remaining_turns > 1):
+                    continue  # 第五张不在手：多的次数没牌打，留给下回合过渡（VEIL_CYCLE_WHEY）
                 if drink in drinks:
                     return act(drinks[drink], f"循环：使用 {drink}")
             # 第五张是アイドルになります+：它要求手里至少两张 エンターテイナー+／オーバードライブ+／教えてあげる+，
@@ -586,10 +808,26 @@ class VeilAdvisor:
                     return play(by_name[fifth], "五卡循环收尾")
             return skip("本回合循环完成")
 
+        if cycle_plan() and not (cycle and cycle["turn"] == state.turn):
+            planned = plan_cycle(state, memory, hand_cards, actions, drinks, current, flower, count, played)
+            if planned is not None:
+                first, names = planned
+                why = "→".join(names) if names else "不用再打"
+                if first is None:
+                    return skip(f"进循环规划：下回合开局就能进循环（{why}）")
+                if first == WHEY:
+                    return act(drinks[WHEY], f"进循环规划：{why}")
+                return play(first, f"进循环规划：{why}")
+
         final_turn = last_turn_play() and state.remaining_turns == 1
         eligible = [c for name, c in by_name.items() if (final_turn or name.rstrip("+") != DRIVE.rstrip("+")) and (
             name.rstrip("+") != "アイドルになります" or len({ENTERTAINER, DRIVE, TEACH} & hand) >= 2
         )]
+        if idol_clear() and not any(c.tags.once or c.tags.is_sleep for c in eligible):
+            # 三选二挡住的 アイドルになります+ 是手里唯一能清的一次性牌：照打（画面不灰就是游戏允许；VEIL_IDOL_CLEAR）
+            idol_card = next((c for n, c in by_name.items() if n.rstrip("+") == IDOL_CARD and c not in eligible), None)
+            if idol_card is not None:
+                eligible.append(idol_card)
         if compact and not final_turn:
             if flower is None and not played:
                 raise ResumeBlocked("VEIL 已进入过渡，但夜空を従える花+剩余次数读不出")
@@ -618,7 +856,7 @@ class VeilAdvisor:
             if need_warm and rebound is not None and REBOUND not in by_name and fp is not None \
                     and fp < (fp_delta(rebound)[1] or 1):
                 starved.append(rebound)
-            if drive_fp() and drive and starved:
+            if drive_fp() and drive and starved and drive_useful(drive, starved, fp, current, hand):
                 names = "、".join(norm(c.name) for c in starved)
                 return play(drive, f"过渡：全力値 {fp} 打不了 {names}，先打 オーバードライブ 攒全力値")
             mods = cost_mods(memory.strategy_data.get("veil_log"), _master_text) if hp_guard() else None
@@ -669,10 +907,24 @@ class VeilAdvisor:
                 # 使用者 2026-11-07：下回合能进循环是第一优先；预判下回合仍是过渡（次数不够 / 夜空回到 3 / 切不回温存）时，
                 # 过渡牌白打，先清一次性牌
                 return play(shed, "过渡：下回合仍进不了循环，先清一次性牌")
+            def warm_back(c):
+                """VEIL_CYCLE_PLAN：打完 c 后本回合还能回到温存（或下回合开局自动进温存）。推了夜空切不回温存，
+                下回合开局在強気，这回合的过渡全白做（3-3 第 3 局 R2 剩 5：教えて 后又打 エンタ，T9–T11 一直过渡）。"""
+                cur, _ = after_play(current, flower, c)
+                if cur in WARM or warm_next or next_stance(c) in WARM:
+                    return True
+                if memory.strategy_data.get("veil_star") != 0:
+                    return True  # 一番星次数不明（状态栏常读不出名字）：可能下回合自动のんびり，不拦（3-b 第 1 局 R1 attempt1 剩 4）
+                left = count - 1 + c.tags.extra_actions + int(destination(c) == "強気" and current in WARM)
+                return REBOUND in by_name and REBOUND not in played and c is not by_name[REBOUND] and left >= 1
             if teach and (need_flower or need_draw):
+                if cycle_plan() and need_flower and not warm_back(teach):
+                    return skip("过渡：推夜空后切不回温存，留到下回合")
                 return play(teach, "过渡：推进夜空计数／预约抽牌" if need_flower else "过渡：预约下回合抽两张")
             if need_flower:
                 strong = next((c for c in eligible if destination(c) == "強気"), None)
+                if strong and cycle_plan() and not warm_back(strong):
+                    return skip("过渡：推夜空后切不回温存，留到下回合")
                 if strong:
                     return play(strong, "过渡：推进夜空计数")
             if need_warm and current is None and not played:
@@ -712,13 +964,24 @@ class VeilAdvisor:
         for name, allowed in (("ガタゴトすやすや", current in WARM), ("一心不乱", current == "強気")):
             card = stance_cards.get(name)
             if allowed and card and f"play:{card.slot}" in actions and affordable(card):
+                if stance_later() and count == 1 and not card.tags.extra_actions:
+                    # 它用掉最后一次出牌就结束回合：先打一张不改掉这个姿态的一次性再动牌，或先喝ホエイ（VEIL_STANCE_LATER）
+                    keeps = (lambda c: after_play(current, flower, c)[0] in WARM) if name == "ガタゴトすやすや" else \
+                        (lambda c: after_play(current, flower, c)[0] == "強気")
+                    first = next((c for c in eligible if c is not card and c.tags.extra_actions and c.tags.once
+                                  and not c.tags.makes_sleep and keeps(c) and affordable(c) and "手札をすべて入れ替える" not in norm(c.text)), None)
+                    if first is not None:
+                        return play(first, f"清牌：先打不改姿态的再动牌，{name} 留后")
+                    if WHEY in drinks and any(c is not card and (c.tags.once or c.tags.is_sleep) for c in eligible):
+                        return act(drinks[WHEY], f"清牌：{name} 会用掉最后一次出牌，先喝ホエイ")
                 return play(card, "清牌：姿态限定牌优先")
         if drive_fp() and (fp := memory.strategy_data.get("veil_fp")) is not None:
             drive = next((c for n, c in by_name.items() if n.rstrip("+") == DRIVE.rstrip("+")), None)
             starved = [n for n, c in observed.items() if not c.available
                        and n.rstrip("+") in (IDOL_CARD, REBOUND.rstrip("+"))
                        and fp < (fp_delta(c)[1] or (FP_RESERVE_AT if n.rstrip("+") == IDOL_CARD else 1))]
-            if drive and starved and not any(fp_delta(c)[0] for c in eligible) and affordable(drive):
+            if drive and starved and not any(fp_delta(c)[0] for c in eligible) and affordable(drive) \
+                    and drive_useful(drive, [observed[n] for n in starved], fp, current, hand):
                 return play(drive, f"清牌：全力値 {fp} 打不了 {'、'.join(starved)}，オーバードライブ 是唯一来源，先攒全力値")
         playable = list(eligible)  # 体力闸过滤前：被闸暂时压住的一次性牌（切回温存后再打）也算后面有牌可接
         if guard:
@@ -929,6 +1192,9 @@ class VeilAdvisor:
         if clear_first() and not last_turn and eligible and not any(clears(c) for c in playable):
             # 1-g R2 再挑戦 剩 10：全力値 0、巻き返し+ 灰着，手里只剩复用牌 エンターテイナー+ 也打了（切強気用掉温存，
             # 加的次数没有一次性牌可接）。清牌阶段可打的只剩复用牌时不打，温存留到下回合
+            if strong_teach() and current not in WARM and flower in (2, 3) and TEACH in by_name and TEACH not in played:
+                # 不在温存：没有温存可留。教えて 推夜空、预约下回合多抽 2（VEIL_STRONG_TEACH；1-c R2 attempt1 剩 8、7 连跳）
+                return play(by_name[TEACH], "清牌：只剩复用牌、不在温存，打 教えてあげる+ 推夜空并预约抽牌")
             grey = [n for n, c in observed.items() if not c.available and clears(c)]
             return skip("清牌：可打的只剩复用牌" + (f"（{'、'.join(grey)} 发灰）" if grey else "") + "，不打、温存留到下回合")
         if count > len(eligible) and not unlocks(best):

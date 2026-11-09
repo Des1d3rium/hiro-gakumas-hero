@@ -1366,8 +1366,11 @@ def run_exam(
                 rec.log("battle_play_not_landed", exam=exam, action=d.action, reason=missed, failures=failures)
                 memory.plan = []
                 # 本回合先禁用这张，让决策换别的牌（验证局 1-c：画面认成可打、实际发灰的 タフネス+ 连点到看门狗 184s 停机）
-                memory.block(d.action)
-                landing_blocks.add(d.action)
+                # HIRO_LANDING_RETRY=1：第一次没落地先不禁用、重读后再点一次，第二次才禁用（3-c 第 2 局 R2 attempt1 剩 4：
+                # 循环里 教えて 点了没出 SELECT，被禁用后当成发灰跳过回合，掉出循环两回合）
+                if os.environ.get("HIRO_LANDING_RETRY", "0") != "1" or failures >= 2:
+                    memory.block(d.action)
+                    landing_blocks.add(d.action)
                 if session is not None:
                     session.recover("tap_no_effect", f"{d.action} {missed}（第 {failures} 次）")
                 if failures >= 3 and strict:
