@@ -74,6 +74,8 @@ def parse_screen(boxes, names=None) -> dict:
     group = None
     for t, _ in inside:
         n = norm(t)
+        # 括号里的 0 常读成英文字母 O（codex-20261109-1-q：「+捨札(O)」「+除外(O)」），标题认不出、没法判读全
+        n = re.sub(r"([(（][^)）]*)", lambda m: m[1].replace("O", "0").replace("o", "0"), n) if re.search(r"(保留|手札|山札|捨札|除外)", n) else n
         if h := _HEADER.match(n):
             group = h[1]
             headers[group] = int(h[2])
@@ -132,6 +134,25 @@ def _align(out: list, rows: list, j: int) -> list | None:
     return res + list(rows[i:])
 
 
+def _read_all(screens: list, headers: dict, total: int | None) -> bool:
+    """已经读全，不用再滑：总张数已知、拼出来的张数到了，且有分组时最后一组「除外」的标题已出现、各组张数都对上。
+    考试中一览背后是半透明的舞台动画，到底后相邻两屏像素差仍有 10–30，按像素判不出到底（codex-20261109-1-q R1：
+    第 15 屏已到底，一直滑到 32 屏上限）。"""
+    if total is None:
+        return False
+    rows = merge_rows(screens)
+    if len(rows) < total:
+        return False
+    if not headers:
+        return True
+    if "除外" not in headers:
+        return False
+    got: dict = {}
+    for g, _ in rows:
+        got[g] = got.get(g, 0) + 1
+    return all(got.get(g, 0) == k for g, k in headers.items())
+
+
 def read_list(*, shoot: Callable, click: Callable, swipe: Callable, ocr_boxes: Callable, view_diff: Callable,
               sleep: Callable = time.sleep, save: Callable | None = None, names=None) -> dict:  # fmt: skip
     """一览已经打开：切到列表显示 → 每屏 OCR、往下滑直到滑不动 → 切回网格。
@@ -150,16 +171,19 @@ def read_list(*, shoot: Callable, click: Callable, swipe: Callable, ocr_boxes: C
     else:
         img = before
     imgs, screens, headers, unknown = [img], [], {}, []
-    total = None
+    total, last_headers = None, None
     for i in range(MAX_SCREENS):
         boxes = ocr_boxes(imgs[-1])
         if total is None:
             total = next((int(m[1]) for t, _, _ in boxes if (m := _TOTAL.search(norm(t)))), None)
         page = parse_screen(boxes, names)
+        if screens and page["rows"] and page["rows"] == screens[-1] and page["headers"] == last_headers:
+            break  # 读到的内容和上一屏一样 = 滑不动了（到底）
         screens.append(page["rows"])
+        last_headers = page["headers"]
         headers.update(page["headers"])
         unknown.extend(page["unknown"])
-        if i == MAX_SCREENS - 1:
+        if i == MAX_SCREENS - 1 or _read_all(screens, headers, total):
             break
         swipe(*SWIPE, 0.6)
         sleep(0.7)

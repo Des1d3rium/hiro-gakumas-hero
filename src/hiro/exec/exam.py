@@ -35,6 +35,7 @@ from hiro.perception.lesson import _read_int
 from hiro.produce import ops
 from hiro.recorder import Recorder
 from hiro.produce import hif_buttons as BTN
+from hiro.exec import landing
 
 logger = logging.getLogger(__name__)
 
@@ -912,6 +913,22 @@ def _play_not_landed(frame, x: int | None, name: str | None = None) -> str | Non
         device.click(*DESELECT_TAP)
         sleep(DESELECT_WAIT)
         return "卡名仍在原位（选中后没显示 SELECT），没打出，已取消选中"
+    if x is not None and landing.enabled():
+        # HIRO_LANDING_ART：按卡图认牌比对整手牌（hiro.exec.landing）。认得准就以它为准，认不准（unclear / 超时还在动）才走下面的旧核对
+        h0 = landing.read_ids(frame.img)
+        slot = min(range(len(h0.xs)), key=lambda i: abs(h0.xs[i] - x)) if h0 is not None and h0.xs else -1
+        if slot >= 0 and abs(h0.xs[slot] - x) > SELECT_DX:
+            slot = -1
+        state, why, last = landing.settle(device.screenshot, h0, slot, sleep=sleep)
+        PLAY_RESULT["landing"] = dict(landing.LAST)
+        logger.info("卡图落地核对：%s（%s）", state, why)
+        if state == "played":
+            return None
+        if state == "none":
+            if "抬起" in why or _select_at(last, x):
+                device.click(*DESELECT_TAP)
+                sleep(DESELECT_WAIT)
+            return f"卡图核对：{why}，没打出"
     confirmed = PLAY_RESULT.get("confirmed")
     _screen_calm(PLAY_RETAP_CALM_S)
     after = device.screenshot()

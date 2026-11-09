@@ -127,6 +127,7 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | `HIRO_CARD_ICON=1` | 换卡页 KAA 认不出的卡格用渲染卡图标再认一次（默认关；要先 `python -m hiro.vision.card_icon_render build`，见 docs/assets.md） |
 | `HIRO_VEIL_SIGNATURE=1` | VEIL 牌库按版本记账（默认关）：批量账本里同名卡一次性 / 客制化不同时，各算一个记账键；手里同名几张分不出时点按一次（只选中、不打出）读效果文字分辨，读完点空白取消选中。效果文字的 OCR 区域 `PROBE_TEXT_BOX` 还没实机校准，每次点按的文字都写进 trace（`veil_probe`） |
 | `HIRO_VEIL_HIF_FILL=1` | VEIL 本战 R2 按 H.I.F応援棒 记账（默认关）：开考时牌堆补到 22 张，补的「基本」牌名字不知道，先记成占位「基本?」，手里出现账本外、名字带「基本」的牌时改成真名；不开时这张牌被抽到后整副记成位置不明 |
+| `HIRO_LANDING_ART=1` | 出牌落地核对按卡图认牌（默认关，`hiro.exec.landing`）：点之前和结算稳定后各认一遍整手牌（定位 + 卡面相关，约 18ms），目标牌少一张 = 打出、整手牌没变 = 没打出（被抬起就先取消选中），认不准才走 SELECT / 卡名 / 签名 / 像素差的旧核对。离线回放：`tools/audit/landing_replay.py` |
 | `HIRO_LANDING_RETRY=1` | 出牌第一次没落地时先不禁用这张牌，重读后再点一次，第二次才禁用（默认关）。VEIL 出牌策略另有 8 个审查开关（`VEIL_CYCLE_PLAN` 等，默认关），见 docs/batch-hif.md |
 | `HIRO_VEIL_SUPPORT_BOOST=1` | 考试中支援卡的临时强化按总档位算效果（默认关）：卡图右上角叠的支援卡头像个数 = 临时强化次数（`hiro.vision.support_boost`），卡名「+」被盖住时效果换成「账本档位 + 头像数」那一档；账本不记临时强化。5 张手牌时被盖住的牌数不出头像，只有多一档会改变姿态 / 全力値 / 出牌次数 / 抽牌 / 元気 等、且不在循环状态（手里有核心 4 张）时，点开读一次说明定档位，本回合沿用 |
 | `VEIL_PILE_ENGINE=1` | VEIL 牌堆记账换成三层模块 `hiro.brain.piles`（默认关）：效果层按主数据登记每手应抽几张（牌 / 饮料 / 回忆能力）；牌堆层把「应抽却到回合结束都没出现」的记成暗抽，洗牌时对上；对账层遇到「账面山札有剩却抽到捨札的牌」只倒推山札已空、剩下的记存疑，存疑的牌洗回山札后又抽空一轮都没出现就判出局，不再整副位置不明。出矛盾时点右下角牌库一览按分组读一次，以画面为准重置。回放核对：`tools/audit/pile_replay.py` |

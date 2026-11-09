@@ -69,3 +69,31 @@ def test_merge_rows_tolerates_one_missed_row(screens, want):
     """codex-20261109-1-h：一屏 OCR 漏读一行，重叠对不上整屏又接一遍（读到 23 / 22）。对齐容许一处漏读。"""
     rows = [[(None, n) for n in s] for s in screens]
     assert "".join(n for _, n in dt.merge_rows(rows)) == want
+
+
+def test_read_list_stops_when_all_read_despite_moving_background():
+    """codex-20261109-1-q：考试中一览背后是舞台动画，到底后相邻两屏像素差仍有 10–30，按像素判不出到底，一直滑满 32 屏。
+    改成按内容判：各组张数、总张数都对上就停；内容和上一屏一样也停。"""
+    import numpy as np
+
+    frames = [np.full((1280, 720, 3), v, np.uint8) for v in (0, 50, 100, 150, 200, 250)]
+    shots = iter(frames + [frames[-1]] * 40)
+    p1 = [box("スキルカード(3)", 1040), box("+手札(1)", 420), box("頂点へ+", 470), box("+山札(2)", 580), box("教えてあげる+", 630)]
+    p2 = [box("教えてあげる+", 300), box("エンターテイナー+", 350), box("+捨札(O)", 450), box("+除外(0)", 550)]
+    pages = {id(frames[1]): p1, id(frames[2]): p2, id(frames[3]): p2, id(frames[4]): p2, id(frames[5]): p2}
+    out = dt.read_list(shoot=lambda: next(shots), click=lambda x, y: None, swipe=lambda *a: None,
+                       ocr_boxes=lambda im: pages.get(id(im), []), view_diff=lambda a, b: 30.0, sleep=lambda s: None, names=NAMES)
+    assert out["complete"] and out["screens"] == 2
+    assert out["headers"] == {"手札": 1, "山札": 2, "捨札": 0, "除外": 0}
+
+
+def test_read_list_stops_on_same_content():
+    import numpy as np
+
+    frames = [np.full((1280, 720, 3), v, np.uint8) for v in (0, 50, 100, 150)]
+    shots = iter(frames + [frames[-1]] * 40)
+    p = [box("頂点へ+", 470), box("教えてあげる+", 630)]
+    pages = {id(f): p for f in frames[1:]}
+    out = dt.read_list(shoot=lambda: next(shots), click=lambda x, y: None, swipe=lambda *a: None,
+                       ocr_boxes=lambda im: pages.get(id(im), []), view_diff=lambda a, b: 30.0, sleep=lambda s: None, names=NAMES)
+    assert out["screens"] == 2  # 第 2 屏内容和第 1 屏一样就停，不滑满 32 屏
