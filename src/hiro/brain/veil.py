@@ -575,6 +575,10 @@ class VeilAdvisor:
                 if fifth and fifth.rstrip("+") == "アイドルになります" and len({ENTERTAINER, DRIVE, TEACH} & hand) < 2:
                     return skip("循环：第五张受アイドルになります+禁打条件限制")
                 if fifth:
+                    if fifth not in by_name and fifth in observed:
+                        # 验证局 1-d R2 再挑戦 剩 4：第五张 アンダンテ+（全力値消費2），OD +2 后 巻き返し+ 花 1，剩 1 打不出。
+                        # 在手里但打不出 → 本回合结束（同上面「下一张在手里但打不出」），不停机
+                        return skip(f"循环：第五张 {fifth} 在手里但打不出，本回合结束")
                     if fifth not in by_name:
                         raise ResumeBlocked(f"VEIL 循环第五张尚未打出，当前不可用：{fifth}")
                     return play(by_name[fifth], "五卡循环收尾")

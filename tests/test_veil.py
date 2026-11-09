@@ -1649,3 +1649,18 @@ def test_plain_stance_change_level_tracked_in_ledger(guard):
     state.statuses = []
     assert read_position(state, mem, Counter(), lambda: 2) is None
     assert (stance(state), next(s["value"] for s in state.statuses if s["name"] == "温存")) == ("温存", 1)
+
+
+def test_cycle_fifth_in_hand_but_unplayable_ends_turn():
+    """验证局 1-d R2 再挑戦 剩 4：循环四张打完，第五张 アンダンテ+ 全力値不够、在手里但发灰 → 结束回合，不停机。"""
+    from dataclasses import replace
+
+    andante = replace(card(4, "アンダンテ+", "全力値消費2強気に変更パラメータ+18"), available=False)
+    state, mem = case(andante, status="温存", flower=1)
+    mem.turn = 9
+    state.turn = 9
+    mem.strategy_data["veil_cycle"] = {"turn": 9, "flower": 1, "fifth": "アンダンテ+"}
+    from hiro.brain.veil import ORDERS
+
+    mem.this_turn = [f"打 {n}" for n in ORDERS[1]]
+    assert choose(state, mem) == "skip"
