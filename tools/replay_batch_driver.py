@@ -11,6 +11,7 @@ from pathlib import Path
 
 from batch_driver import begin, finish, next_step
 from batch_rules import DEFAULTS
+from hiro.strategies.profiles import code_defaults
 
 
 def replay_cases(path):
@@ -18,6 +19,7 @@ def replay_cases(path):
     for case in json.loads(Path(path).read_text(encoding="utf-8")):
         state = copy.deepcopy(case["state"])
         rules = copy.deepcopy(DEFAULTS)
+        rules["interval"]["customize"] = code_defaults()["customize"]  # 回忆档案代码缺省（不读本机档案，回放可重复）
         rules["driver"]["enabled"] = True
         for key, value in (case.get("rules") or {}).items():
             rules[key].update(value)

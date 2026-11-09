@@ -15,12 +15,13 @@ import time
 
 from batch_ledger import norm
 from hiro.produce import hif_buttons as BTN
+from hiro.ui import buttons as UIB
 
 INTERVAL_BTN = BTN.INTERVAL_CUSTOMIZE
 GRID = (40, 545, 680, 1060)
-GRID_CUSTOMIZE, GRID_BACK = (500, 1160), (215, 1160)
-MENU_X, MENU_Y = (141, 360, 578), 935
-MENU_EXEC, MENU_BACK = (500, 1160), (215, 1160)
+GRID_CUSTOMIZE, GRID_BACK = UIB.get("customize.GRID_CUSTOMIZE"), UIB.get("customize.GRID_BACK")  # 按钮注册表
+MENU_X, MENU_Y = UIB.get("customize.MENU_X"), UIB.get("customize.MENU_Y")
+MENU_EXEC, MENU_BACK = UIB.get("customize.MENU_EXEC"), UIB.get("customize.MENU_BACK")
 CONFIRM_TAP = BTN.DIALOG_OK
 TOAST_TAP = BTN.TOAST
 TICK = 0.3

@@ -1,0 +1,46 @@
+{
+  "schema": "idol-profile/1",
+  "idol": "i_card-skin-hmsz-3-016",
+  "label": "[VEIL] 秦谷美玲",
+  "note": "第一份偶像档案：4 核心 + 夜空 + 全力値 + アイドルになります 的五卡循环。改这里的值等于改 hiro.brain.veil 的常量；使用者覆盖放 conf/strategies/idols/i_card-skin-hmsz-3-016.json（只写要改的项）。",
+  "engine": "cycle",
+  "capabilities": {"needs_ledger": true, "fp_balance": true, "burst_auto_route": true},
+  "cards": {
+    "entertainer": "エンターテイナー+",
+    "drive": "オーバードライブ+",
+    "teach": "教えてあげる+",
+    "rebound": "巻き返し+",
+    "idol_card": "アイドルになります",
+    "star": "星々を見下ろす一番星"
+  },
+  "core": ["entertainer", "drive", "teach", "rebound"],
+  "orders": {
+    "2": ["drive", "rebound", "teach", "entertainer"],
+    "1": ["drive", "teach", "rebound", "entertainer"]
+  },
+  "limits": {"r1": 700000, "r2": 1400000},
+  "hand_max": 5,
+  "plan_max": 6,
+  "minor_loss": 7,
+  "drinks": {
+    "boost": "ブーストエキス",
+    "soda": "センブリソーダ",
+    "whey": "初星ホエイプロテイン",
+    "extra_turn": "初星湯"
+  },
+  "full_power": {"at": 10, "reserve": 3, "high": 7, "low": 3, "skip": ["オーバードライブ"]},
+  "stance_limited": {
+    "ガタゴトすやすや": {"stance": "warm", "unlock_from": "!warm"},
+    "一心不乱": {"stance": "強気", "unlock_from": "warm"}
+  },
+  "play_later": ["ひと呼吸"],
+  "flags": {
+    "default_on": ["HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP",
+                   "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA",
+                   "FP_RESERVE", "CLEAR_FIRST", "MINOR_HP", "HP_NET", "PITEM_FLOWER", "ENCHANT_ENGINE"],
+    "known": ["KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP",
+              "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET", "MINOR_HP",
+              "IDOL_CLEAR", "STANCE_SCREEN", "CYCLE_PLAN", "STRONG_TEACH", "CYCLE_WHEY", "DRIVE_CHECK",
+              "STANCE_LATER", "HP_ZERO", "CYCLE_TAP", "IDOL_FP_GATE", "PITEM_FLOWER", "ENCHANT_ENGINE", "STANCE_UNLOCK"]
+  }
+}

@@ -17,7 +17,13 @@
 
 ## 周回模式默认规则（conf/batch-rules.json）
 
-所有默认选择都列在 `conf/batch-rules.json`（本机文件，`conf/` 不进仓库；没有这个文件时用 `tools/batch_rules.py` 里的 `DEFAULTS`，`write_defaults()` 可重新生成一份）。每次用到时重读，改完下一步就生效；`HIRO_BATCH_RULES` 可换路径，`HIRO_WATCH_TAP_GAP` 等环境变量仍可临时覆盖。
+流程开关列在 `conf/batch-rules.json`（本机文件，`conf/` 不进仓库；没有这个文件时用 `tools/batch_rules.py` 里的 `DEFAULTS`，`write_defaults()` 可重新生成一份）。每次用到时重读，改完下一步就生效；`HIRO_BATCH_RULES` 可换路径，`HIRO_WATCH_TAP_GAP` 等环境变量仍可临时覆盖。
+
+**挑选规则不在这里**：客制化清单、换卡换入 / 换出、差し入れ技能卡、饮料优先表 / 高价值饮料、结算回忆优先级在**回忆档案**里，
+考试打法（核心牌、出牌顺序、停手阈值、开关默认值）在**偶像档案**里，见 [docs/strategies.md](strategies.md)。
+批次首检和每局开局时快照档案，改档案下一局生效；`batch_hif.py --batch <ID> profile show` 打印本批次正在用的版本（代理以它为准）。
+旧文件里还写着 `prep.drink_priority`、`interval.customize`、`shop.high_value` 等旧位置时照样生效（兼容期，档案优先），
+`profile migrate --memory <回忆> --ids --write` 把它们写成回忆档案。
 
 | 段 | 键 | 默认 | 作用 |
 |---|---|---|---|
@@ -32,14 +38,8 @@
 | prep | `action` / `last_day` | 差し入れ / 相談 | 行动页永远选差し入れ，只剩相談时选相談 |
 | prep | `consult_shop` | true | 相談里先 `shop-auto` 再「終了」 |
 | prep | `consult_lazy` | false | 相談懒处理（`HIRO_CONSULT_LAZY=1` 同效）：不判断画面上是不是获得演出，只在「相談主画面就绪」（右下白色「終了」正常亮度 V 218–235、没有获得名称栏、没有白色キャンセル）时才跑 `shop-auto`；「終了」被星星层压暗或有名称栏就点货架空隙 (360,700) 再看（回到主画面后误点也不选中商品），弹窗等别的状态只等不点；12s 没就绪照旧停给代理，同一停点最多再试 3 次。codex-20261109-1-c：P 道具送的第 2 瓶饮料获得演出 OCR 认不出，shop-auto 在演出帧上跑失败、停点只试一次 |
-| prep | `drink_priority` / `drink_fallback` | センブリソーダ… / rightmost | 差し入れ选饮料：逐个点开读名字按表选；都不在表里选最右（`hold` = 停下） |
-| prep | `card_prefer` / `card_avoid` | 空 | 差し入れ选技能卡：按顺序选第一张命中的（卡名带不带 + 都算） |
-| prep | `card_fallback` / `card_column` | once / 3 | 没命中时一次性卡优先，第 3 张是一次性就选它；`hold` = 停下 |
-| prep | `change_in` / `change_column` | once / 3 | 换卡阶段 1：一次性卡优先，第 3 列优先 |
-| prep | `change_out` / `change_out_once` / `change_out_swapped` / `change_out_duplicate` | 立ち回りの基本 → 表現の基本 → アピールの基本 / true / true / true | 换卡阶段 2：先换出 N 卡，再换出本局之前从 N 卡换进来的牌，再换出同名重复卡里没客制化的那张；客制化过的卡一律不换，都没有就停下。`change_out_once`（使用者 2026-11-08）：`change_out` 里每个名字本局只换出一次，第二次换卡换出前面换进来的卡（只换一次ハッピー♪，不是换两张ハッピー♪） |
 | prep | `exam_briefing` | true | 考前说明页（優勝条件 + タップして次へ）点 `(360,300)` 进入考试（watch 直接判，倍率演出时等），出牌页再停下交给代理跑 `exam` |
-| interval | `customize` / `shop_auto` | インフルエンサー+ 強気追加；巻き返し+ 成長追加（限已制限削除） | 轮间客制化（代理按这里执行） |
-| shop | `high_value` | ブーストエキス / センブリソーダ / 初星ホエイプロテイン | `shop-auto` 只买这些 |
+| interval | `shop_auto` | true | 轮间客制化之后 `shop-auto` 补给（客制化清单在回忆档案 `customize`） |
 | memory | `no_hit` | first | 回忆所有版本都没命中优先项：选第一个（再生成前），不唤醒代理；`hold` = 停下 |
 | retry | `on_defeat` | auto | 敗退「再挑戦確認」：自动模式下自己点「再挑戦」（免费次数 / 再挑戦チケット，每轮最多 3 次，要花ジュエル就停下不点）。使用者 2026-11-08：「把再挑战选择做成默认选项，不再返回到agent。只有再挑战变灰：不可选的时候再选择终了。」`hold` = 停下交给代理 |
 | retry | `tickets` | true | 没有免费次数时也用再挑戦チケット |

@@ -1,4 +1,9 @@
-"""Opt-in H.I.F finals strategy for [VEIL] 秦谷美玲."""
+"""H.I.F 本战「五卡循环」引擎（engine = "cycle"）。第一份档案是 [VEIL] 秦谷美玲。
+
+牌名、核心牌、出牌顺序、停手阈值、手牌上限、考试饮料、全力値阈值、姿态限定牌、开关默认值都来自偶像档案
+（hiro/strategies/data/idols/<偶像>.json，使用者覆盖 conf/strategies/idols/<偶像>.json，见 docs/strategies.md）。
+导入时读一次：批次绑定了档案快照（hiro.strategies.profiles.bind）就用快照里的偶像档案，本局不变。
+"""
 
 from __future__ import annotations
 
@@ -13,29 +18,50 @@ from collections import Counter
 from hiro.contracts import Decision
 from hiro.loop.errors import ResumeBlocked
 
-IDOL = "i_card-skin-hmsz-3-016"
-ENTERTAINER, DRIVE, TEACH, REBOUND = "エンターテイナー+", "オーバードライブ+", "教えてあげる+", "巻き返し+"
-CORE = frozenset((ENTERTAINER, DRIVE, TEACH, REBOUND))
-BOOST, SODA, WHEY = "ブーストエキス", "センブリソーダ", "初星ホエイプロテイン"
-EXTRA_TURN = "初星湯"  # ターン追加+1体力消費2消費体力増加1ターン
-WARM = {"温存", "温存1段階目", "温存2段階目", "のんびり"}
+IDOL = "i_card-skin-hmsz-3-016"  # 这个引擎缺省用的偶像档案
+
+
+def _load_profile(idol: str) -> dict:
+    from hiro.strategies import profiles, registry
+
+    snap = profiles.bound()
+    if snap and snap.get("idol") == idol and snap.get("idol_profile"):
+        return snap["idol_profile"]
+    profile = registry.idol_profile(idol)
+    if profile is None or profile.get("engine") != "cycle":
+        raise RuntimeError(f"没有偶像 {idol} 的 cycle 引擎档案（hiro/strategies/data/idols/）")
+    return profile
+
+
+PROFILE = _load_profile(IDOL)
+_CARDS = PROFILE["cards"]
+ENTERTAINER, DRIVE, TEACH, REBOUND = (_CARDS[k] for k in ("entertainer", "drive", "teach", "rebound"))
+CORE = frozenset(_CARDS[k] for k in PROFILE["core"])
+BOOST, SODA, WHEY = (PROFILE["drinks"][k] for k in ("boost", "soda", "whey"))
+EXTRA_TURN = PROFILE["drinks"]["extra_turn"]  # 初星湯：ターン追加+1体力消費2消費体力増加1ターン
+WARM = {"温存", "温存1段階目", "温存2段階目", "のんびり"}  # 游戏机制，不进档案
 STANCES = ("温存", "温存1段階目", "温存2段階目", "のんびり", "強気", "全力", "指針解除")
-ORDERS = {2: (DRIVE, REBOUND, TEACH, ENTERTAINER), 1: (DRIVE, TEACH, REBOUND, ENTERTAINER)}
-LIMITS = {"r1": 700_000, "r2": 1_400_000}
-HAND_MAX = 5  # 手牌上限：抽牌超出的作废
+ORDERS = {int(k): tuple(_CARDS[r] for r in v) for k, v in PROFILE["orders"].items()}  # 夜空剩余次数 → 出牌顺序
+LIMITS = dict(PROFILE["limits"])  # 各轮停手阈值
+HAND_MAX = PROFILE["hand_max"]  # 手牌上限：抽牌超出的作废
+STANCE_LIMITED = dict(PROFILE.get("stance_limited") or {})  # 姿态限定牌（基名）→ {stance, unlock_from}
+PLAY_LATER = frozenset(PROFILE.get("play_later") or ())  # 有别的牌可打时留后的牌（基名）
+
+
+def in_stance(current, spec: str) -> bool:
+    """档案里的姿态写法：warm = 温存类；!warm = 非温存类；其余按姿态名比较（!名 = 不是它）。"""
+    if spec.startswith("!"):
+        return not in_stance(current, spec[1:])
+    return current in WARM if spec == "warm" else current == spec
 
 
 # 默认开的策略开关（使用者 2026-11-07，22 个 trace 回放后定）：设 VEIL_<name>=0 关掉。其余默认关，=1 打开
 # 2026-11-08 trusted trace 复盘后：DRAW_ALL / LAST_TURN / CYCLE_SODA / STUCK_SODA 也默认开（使用者确认）；HP_NET 默认关
 # 2026-11-08 验证局 1-c R1 倒数第三回合后：FP_RESERVE / CLEAR_FIRST / MINOR_HP 默认开（使用者：「按方案改」）
 # 2026-11-08 验证局 1-d R2 剩 12：HP_NET 默认开（使用者：「做方案A」）——体力 12 时 みずたまりスキップ+（元気+10、再动）被保底线拦
-DEFAULT_ON = frozenset({"HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP",
-                        "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA",
-                        "FP_RESERVE", "CLEAR_FIRST", "MINOR_HP", "HP_NET", "PITEM_FLOWER", "ENCHANT_ENGINE"})
-STRATEGY_FLAGS = ("KEEP_WARM", "HP_GUARD", "RELEASE_GAIN", "FP_RESERVE", "DRAW_LAST", "CLEAR_FIRST", "DRIVE_FP", "FP_CAP",
-                  "DRAW_ALL", "LAST_TURN", "CYCLE_SODA", "STUCK_SODA", "HP_NET", "MINOR_HP",
-                  "IDOL_CLEAR", "STANCE_SCREEN", "CYCLE_PLAN", "STRONG_TEACH", "CYCLE_WHEY", "DRIVE_CHECK",
-                  "STANCE_LATER", "HP_ZERO", "CYCLE_TAP", "IDOL_FP_GATE", "PITEM_FLOWER", "ENCHANT_ENGINE", "STANCE_UNLOCK")
+# 默认开的一组现在在偶像档案 flags.default_on（以上记录照旧作来历说明）。
+DEFAULT_ON = frozenset(PROFILE["flags"]["default_on"])
+STRATEGY_FLAGS = tuple(PROFILE["flags"]["known"])
 
 
 def _flag(name: str) -> bool:
@@ -60,7 +86,7 @@ def hp_guard():
     return _flag("HP_GUARD")
 
 
-MINOR_LOSS = 7  # 強気下实际掉血 < 8、打完仍在保底线上的牌不留到温存（使用者 2026-11-08：「当前会消耗小于8的都可以打」）
+MINOR_LOSS = PROFILE["minor_loss"]  # 強気下实际掉血 < 8、打完仍在保底线上的牌不留到温存（使用者 2026-11-08：「当前会消耗小于8的都可以打」）
 
 
 def minor_hp():
@@ -219,9 +245,9 @@ def cycle_tap():
     return _flag("CYCLE_TAP")
 
 
-FULL_POWER_AT = 10  # 全力値到 10 自动进全力（实机）
-IDOL_CARD = "アイドルになります"  # 去「+」的基名
-FP_RESERVE_AT = 3  # アイドルになります+：全力値消費3（主数据）
+FULL_POWER_AT = PROFILE["full_power"]["at"]  # 全力値到 10 自动进全力（实机）
+IDOL_CARD = _CARDS["idol_card"]  # 去「+」的基名
+FP_RESERVE_AT = PROFILE["full_power"]["reserve"]  # アイドルになります+：全力値消費3（主数据）
 
 # 全力値：牌面「全力値+N」「全力値消費N」「全力値増加量増加+X%（Nターン）」。只看打出时立即结算的部分：
 # 「以降」「次のターン」「ターン開始時」「成長：」之后是延迟 / 常驻 / 成长效果（如 待ち望んだ瞬間 的「直接効果で全力値が増加後…全力値+1」），不在打出时记。
@@ -467,7 +493,7 @@ def next_stance(card):
 
 
 NEUTRAL = "指針なし"  # 考试第 1 回合还没切过姿态（画面没有姿态图标）：切強気不推夜空计数，也没有温存解除
-STAR = "星々を見下ろす一番星"  # 以降3回まで、ターン開始時、非温存状態の場合、のんびりに変更
+STAR = _CARDS["star"]  # 以降3回まで、ターン開始時、非温存状態の場合、のんびりに変更
 
 
 HAND_SWAP = "ProduceExamEffectType_ExamHandGraveCountCardDraw"  # 手札をすべて入れ替える
@@ -639,7 +665,7 @@ def small_deck(state):
     return not extra or next(iter(extra)) in once | {"眠気"}
 
 
-PLAN_MAX = 6  # 进循环规划最多推演的出牌数（手牌 5 + ホエイ 1）
+PLAN_MAX = PROFILE["plan_max"]  # 进循环规划最多推演的出牌数（手牌 5 + ホエイ 1）
 
 
 def plan_cycle(state, memory, hand_cards, actions, drinks, current, flower, count, played):
@@ -892,7 +918,7 @@ class VeilAdvisor:
                     return act(drinks[drink], f"循环：使用 {drink}")
             # 第五张是アイドルになります+：它要求手里至少两张 エンターテイナー+／オーバードライブ+／教えてあげる+，
             # 放到最后时三张都已打出、永远打不了。改为循环第一张（温存に変更、+1 出牌次数，不动夜空计数，循环条件不变）。
-            idol = next((n for n in (cycle.get("fifth"),) if n and n.rstrip("+") == "アイドルになります"), None)
+            idol = next((n for n in (cycle.get("fifth"),) if n and n.rstrip("+") == IDOL_CARD), None)
             if idol and not played and idol in by_name and len({ENTERTAINER, DRIVE, TEACH} & hand) >= 2:
                 cycle["idol_first"] = True
                 return play(by_name[idol], "五卡循环：アイドルになります+ 先打（打出条件要核心牌在手）")
@@ -922,7 +948,7 @@ class VeilAdvisor:
                 extra = next((name for name, c in observed.items() if name not in CORE
                               and (c.tags.once or c.tags.is_sleep or name in once)), None)
                 fifth = extra or cycle.get("fifth")
-                if fifth and fifth.rstrip("+") == "アイドルになります" and len({ENTERTAINER, DRIVE, TEACH} & hand) < 2:
+                if fifth and fifth.rstrip("+") == IDOL_CARD and len({ENTERTAINER, DRIVE, TEACH} & hand) < 2:
                     return skip("循环：第五张受アイドルになります+禁打条件限制")
                 if fifth:
                     fp_now = memory.strategy_data.get("veil_fp")
@@ -950,7 +976,7 @@ class VeilAdvisor:
 
         final_turn = last_turn_play() and state.remaining_turns == 1
         eligible = [c for name, c in by_name.items() if (final_turn or name.rstrip("+") != DRIVE.rstrip("+")) and (
-            name.rstrip("+") != "アイドルになります" or len({ENTERTAINER, DRIVE, TEACH} & hand) >= 2
+            name.rstrip("+") != IDOL_CARD or len({ENTERTAINER, DRIVE, TEACH} & hand) >= 2
         )]
         if (idol_clear() and (not _flag("IDOL_FP_GATE") or len(CORE & hand) >= 2)
                 and not any(c.tags.once or c.tags.is_sleep for c in eligible)):
@@ -1074,7 +1100,7 @@ class VeilAdvisor:
             raise ResumeBlocked("VEIL 核心同手，尚未核实完整牌库，暂停以确认剩余牌")
         stance_cards = {
             name.rstrip("+"): c for name, c in observed.items()
-            if name.rstrip("+") in ("ガタゴトすやすや", "一心不乱")
+            if name.rstrip("+") in STANCE_LIMITED
         }
         guard = hp_guard()
         mods = cost_mods(memory.strategy_data.get("veil_log"), _master_text) if guard else None
@@ -1091,13 +1117,13 @@ class VeilAdvisor:
             return hp_net() and state.hp - loss >= 1 and (
                 norm(card.name) in CORE or usable_net(state, card, current, mods) >= 0)
 
-        for name, allowed in (("ガタゴトすやすや", current in WARM), ("一心不乱", current == "強気")):
+        for name, spec in STANCE_LIMITED.items():
+            allowed = in_stance(current, spec["stance"])
             card = stance_cards.get(name)
             if allowed and card and f"play:{card.slot}" in actions and affordable(card):
                 if stance_later() and count == 1 and not card.tags.extra_actions:
                     # 它用掉最后一次出牌就结束回合：先打一张不改掉这个姿态的一次性再动牌，或先喝ホエイ（VEIL_STANCE_LATER）
-                    keeps = (lambda c: after_play(current, flower, c)[0] in WARM) if name == "ガタゴトすやすや" else \
-                        (lambda c: after_play(current, flower, c)[0] == "強気")
+                    keeps = (lambda c, want=spec["stance"]: in_stance(after_play(current, flower, c)[0], want))
                     first = next((c for c in eligible if c is not card and c.tags.extra_actions and c.tags.once
                                   and not c.tags.makes_sleep and keeps(c) and affordable(c) and not swaps_hand(c)), None)
                     if first is not None:
@@ -1195,8 +1221,8 @@ class VeilAdvisor:
 
         def unlocks(card):
             dest = resulting_stance(card)
-            return (dest in WARM and current not in WARM and "ガタゴトすやすや" in stance_cards
-                    or dest == "強気" and current in WARM and "一心不乱" in stance_cards)
+            return any(in_stance(dest, spec["stance"]) and in_stance(current, spec["unlock_from"]) and name in stance_cards
+                       for name, spec in STANCE_LIMITED.items())
 
         keep = keep_warm()
         once_known = set((state.piles or {}).get("once") or ()) | set(memory.strategy_data.get("veil_known_once") or ())
@@ -1246,7 +1272,7 @@ class VeilAdvisor:
                 return skip("清牌：只剩复用牌，打出会用掉温存或可留到下回合的再动")
 
         # Preserve a later play for ひと呼吸 whenever another legal card is available.
-        preferred = [c for c in eligible if norm(c.name).rstrip("+") != "ひと呼吸"]
+        preferred = [c for c in eligible if norm(c.name).rstrip("+") not in PLAY_LATER]
         if clear_first() and not any(clears(c) for c in preferred):
             preferred = []  # ひと呼吸 只让给别的一次性牌：剩下的全是复用牌时它照常参与排序（一次性优先）
         best = max(preferred or eligible, key=priority)
@@ -1320,7 +1346,7 @@ class VeilAdvisor:
                        "多留 %d 次出牌" % (top4[1] - from_best[1]) if top4[1] > from_best[1] else
                        "少打复用牌" if top4[2] > from_best[2] else "抽牌少作废 %d 张" % (top4[3] - from_best[3]))
                 return play(pick, f"清牌：按出牌顺序推演先打它（{why}）")
-        late = next((c for c in eligible if norm(c.name).rstrip("+") == "ひと呼吸"), None)
+        late = next((c for c in eligible if norm(c.name).rstrip("+") in PLAY_LATER), None)
         if late and count == 1 and gains_now(late) > gains_now(best) and WHEY not in drinks:
             best = late
         if clear_first() and not last_turn and eligible and not any(clears(c) for c in playable):

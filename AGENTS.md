@@ -3,11 +3,12 @@
 你拿到的是「数字小广」（hiro-gakumas-hero）的开源部分：一套让大模型自动玩《学园偶像大师》H.I.F 模式的框架。
 读完这份文件，你应该能装好环境、在使用者自己的 Mac 上打一局，并在出问题时知道去哪里查。
 
-先读这三份：
+先读这四份：
 
 1. 本文件（规则、架构、怎么跑、怎么查）。
 2. `docs/assets.md`：识别要用的素材从哪来、缺了会怎样、怎么补。
 3. `docs/hif-playbook.md`：H.I.F 的社区打法（策略层的先验）。
+4. `docs/strategies.md`：使用者可以替换的策略档案（回忆档案、偶像档案、按钮坐标）。
 
 ## 一、绝对不能做的事（代码里有拦截，你也不要绕过）
 
@@ -112,6 +113,7 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 |---|---|
 | `HIRO_SUPPORT_SET` / `HIRO_MEMORY_SET` | 游戏里的编成号。没设、也没有开局编成方案时，在碰游戏前退出（码 2）。写 `auto` 等于 KAA「おまかせ」，支援卡会直接确认列表第一张租借卡，只在你明确想这样时用 |
 | `HIRO_MEMORY_CARDS` | 回忆编成带进培育的技能卡 ID（逗号分隔）。决策器把它们算作已有，三选一里不再找；不设时用开局编成方案里的，都没有就当空。手动设编成号时记得一起设 |
+| `HIRO_STRATEGIES` | 策略档案目录，默认 `conf/strategies`（回忆档案 `memories/`、偶像档案 `idols/`）。周回模式的客制化、换卡、饮料、结算回忆优先级和考试打法都在档案里，见 [docs/strategies.md](docs/strategies.md)；`batch_hif.py --batch <ID> profile show` 打印本批次正在用的版本 |
 | `HIRO_FORMATION_PLAN` | 开局编成方案文件，默认 `conf/formation-plan.json`；`off` = 不读。见 [docs/formation-plan.md](docs/formation-plan.md) |
 | `HIRO_LLM` | LLM，如 `claude:sonnet`（默认，走 `claude -p`）、`openai:<model>`（OpenAI 兼容）。`--no-llm` 只用规则 |
 | `HIRO_KAA_GAME_DATA` | KAA 公开数据目录（含 `game.db`），默认 `resources/game_data` |

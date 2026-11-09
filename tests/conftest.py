@@ -22,6 +22,8 @@ if not FIXTURES.exists() and os.environ.get("HIRO_FIXTURES") and Path(os.environ
     FIXTURES.symlink_to(Path(os.environ["HIRO_FIXTURES"]).resolve(), target_is_directory=True)
 HAVE_FIXTURES = FIXTURES.is_dir() and any(FIXTURES.iterdir())  # 空目录 / 断链都算没有样例
 
+# 按钮注册表（hiro.ui.buttons）在导入时取值：测试不读使用者本机的 conf/ui/buttons.json
+os.environ.setdefault("HIRO_BUTTONS", str(Path(__file__).resolve().parent / ".no-user-buttons.json"))
 if os.environ.get("HIRO_KAA_GAME_DATA"):
     try:  # 先把 KAA 的数据目录指过去（hiro.vision 导入时做）：别的测试模块先导入 KAA 会在当前目录建空的 resources/game_data
         import hiro.vision  # noqa: F401
@@ -272,6 +274,17 @@ def _isolate_batch_rules(tmp_path, monkeypatch):
     要测覆盖的用例自己再设 HIRO_BATCH_RULES。"""
     if "HIRO_BATCH_RULES" not in os.environ:
         monkeypatch.setenv("HIRO_BATCH_RULES", str(tmp_path / "batch-rules.none.json"))
+    # 策略档案（hiro.strategies）：不读使用者本机的 conf/strategies，也不让上一个用例绑定的批次快照漏过来
+    if "HIRO_STRATEGIES" not in os.environ:
+        monkeypatch.setenv("HIRO_STRATEGIES", str(tmp_path / "strategies.none"))
+    try:
+        from hiro.strategies import profiles
+
+        profiles.bind(None)
+        yield
+        profiles.bind(None)
+    except ImportError:
+        yield
 
 
 @pytest.fixture(autouse=True)

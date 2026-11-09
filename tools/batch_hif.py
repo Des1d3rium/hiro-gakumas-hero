@@ -13,6 +13,7 @@ import time
 import unicodedata
 from pathlib import Path
 from hiro.produce import hif_buttons as BTN
+from hiro.ui import buttons as UIB  # 按钮注册表（hiro/ui/buttons.json，使用者覆盖 conf/ui/buttons.json）
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / "reports" / "batches"
@@ -28,7 +29,7 @@ QUICK_ANIMATIONS = {"commu", "GIFT", "ACQUIRE", "UPGRADE_RESULT", "CUSTOMIZE_RES
 QUICK_TRANSITIONS = {
     "message", "tap_hint", "custom_cutin", "select_bonus", "toppa", "custom_pitem", "custom_pitem_get", "pitem_note",
 }
-VEIL_IDOL = "i_card-skin-hmsz-3-016"
+VEIL_IDOL = "i_card-skin-hmsz-3-016"  # 只给测试 / 旧脚本用；判断一律问偶像档案（hiro.strategies.registry）
 STUDY_DETAIL_TOP = 420  # 授業分支：展开的选项说明在这条线以下、第一行选项以上
 STUDY_LINE_TAP = BTN.TOAST  # 授業结束后的训练员台词框
 # 角落 (12,12) 不点的页面：代理正在看牌组一览 / 考试前说明（要先登记牌组和检查点）。其余页面都点。
@@ -68,16 +69,16 @@ LIVE_FAIL = ("locked", "nogame", "failed")
 LIVE_OCR_EVERY = 2.0  # 横屏帧多久 OCR 一次找「TAP TO START」
 # LIVE 跳过（使用者 2026-11-07：「live 开启后，点击一次屏幕唤起跳过按钮，然后点击一次右上角的跳过，再点击橙色按钮」）。
 # 横屏帧 1280x720 上的相对位置，按使用者截图（2000x1250，16:9 铺满宽、上下各约 62px 黑边）换算
-LIVE_REVEAL = (0.50, 0.50)  # 画面中间：唤出控制条（快门在右侧 x≈0.91，不碰）
+LIVE_REVEAL = UIB.get("live.REVEAL")  # 画面中间：唤出控制条（快门在右侧 x≈0.91，不碰）
 # 右上角「⏭」：验证局 codex-20261107-1-b 实机帧（MaaTools 1280x720）上控制条在 y 35–150，⏭ 中心 (1201,105)（帧坐标；
 # 点击时减去顶部白条高度 top_bar，见 live_skip_step）。
 # 原来按使用者窗口截图换算成 (1203,40)，落在控制条上方，点了 4 次都没出确认框
-LIVE_SKIP = (0.938, 0.146)  # 帧坐标（含顶部白条，全屏时代），只作参考
+LIVE_SKIP = UIB.get("live.SKIP")  # 帧坐标（含顶部白条，全屏时代），只作参考
 # 点击用：屏幕坐标。2026-11-08 旋转窗口后实测（使用者：「读取目前窗口中的跳过键详细位置，记录并覆盖以前全屏时跳过的位置」）：
 # MaaTools 原始帧 1522x858（窗口 761x457 点，帧顶没有白条），⏭ 白色像素中心 (1427.6, 94.7)、范围 x 1416–1439 / y 76–114
 # → (0.938, 0.110)。原来按全屏截图 2000x1250 记的 (0.9375, 0.10) 高了约 1% 帧高
-LIVE_SKIP_FIXED = (0.938, 0.110)
-LIVE_END_OK = (0.61, 0.89)  # 「ライブ終了確認」橙色「終了する」(1220,1062) → (781,640)；OCR 认到文字时按文字点
+LIVE_SKIP_FIXED = UIB.get("live.SKIP_FIXED")
+LIVE_END_OK = UIB.get("live.END_OK")  # 「ライブ終了確認」橙色「終了する」(1220,1062) → (781,640)；OCR 认到文字时按文字点
 LIVE_SKIP_AFTER = 2.0  # LIVE 开始后等这么久再跳（等曲目页退场）
 LIVE_SKIP_EVERY = 4.0  # 没见到确认框时隔这么久重试一次
 LIVE_SKIP_MAX = 4
@@ -159,6 +160,21 @@ SETTLE_FAST_GAP = 0.3  # 回忆定下后只点不读时的间隔
 # 批量开局自动点「プロデュース開始」（HIRO_BATCH_AUTO_START=0 关掉）。命中这些字样一律不点
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import batch_rules  # noqa: E402  周回模式默认规则（conf/batch-rules.json，使用者可随时改）
+from hiro.strategies import profiles as SP  # noqa: E402  回忆档案 / 偶像档案（docs/strategies.md）
+
+
+def bind_profile(state: dict | None) -> None:
+    """批次文件里有档案快照就绑定它（本局按快照打）；旧批次没有快照时现场合并，和原来每次读 batch-rules.json 一样。"""
+    SP.bind((state or {}).get("profile"))
+
+
+def refresh_profile(state: dict) -> dict:
+    """首检 / 每局开局：按首检的偶像和回忆重新合并档案、快照进批次文件（改档案下一局生效）。不合法抛 ProfileError。"""
+    pre = state.get("preflight") or {}
+    snap = SP.snapshot(pre.get("idol"), pre.get("memory"), state.get("profile_overrides"))
+    state["profile"] = snap
+    SP.bind(snap)
+    return snap
 
 
 def _env_flag(name, rule):
@@ -207,10 +223,10 @@ def watch_gap(default: float) -> float:
     return min(1.0, max(0.1, v))
 SETTLE_STUCK = 4  # 连点这么多次画面都没变：整帧读一次（可能是认不出的按钮页）
 SETTLE_FAST_MAX = 200  # 只点不读最多这么多下（约 1 分钟多），之后全部回到逐步读
-SETTLE_POPUP_TAP = (360, 1170)  # 结算后活动弹窗底部按钮（1-e 代理手点这里回到首页）
+SETTLE_POPUP_TAP = UIB.get("batch.SETTLE_POPUP_TAP")  # 结算后活动弹窗底部按钮（1-e 代理手点这里回到首页）
 # 5s 没等到确认框后再等这么久，只认剧情页 / R2 考试页（codex-20261109-1-d：第 5.7s 才进剧情，又报了 ok:false）
 INTERVAL_COMMU_EXTRA = 7.0
-INTERVAL_GO = (513, 1160)  # 「インターバル終了確認」右「本戦へ」（hiro.produce.interval 实测）
+INTERVAL_GO = UIB.get("batch.INTERVAL_GO")  # 「インターバル終了確認」右「本戦へ」（hiro.produce.interval 实测）
 
 
 def interval_end(device, timeout: float = 15.0, *, guarded: bool = False) -> dict:
@@ -612,7 +628,7 @@ def save_retry_frame(img) -> None:
 
 RANK_WAIT_S = 5.0
 RANK_SEEN = {"at": None, "last": 0.0}
-BRIEFING_TAP = (360, 300)  # 考前说明页：点上方空白进入考试（同 batch_prep.BRIEFING_TAP）
+BRIEFING_TAP = UIB.get("BRIEFING_TAP")  # 考前说明页：点上方空白进入考试（同 batch_prep.BRIEFING_TAP）
 
 
 def briefing_step(boxes, dialog: bool):
@@ -1446,6 +1462,7 @@ def change(state, args, *, persist=None):
             raise ValueError("必须记录实测 AP、偶像和回忆")
         state["preflight"] = {"frame": "MaaTools 1717", "ap": args.ap, "skip": "verified",
                               "idol": args.idol, "memory": args.memory}
+        refresh_profile(state)
         return
     if not state["preflight"]:
         raise ValueError("先完成并记录首检")
@@ -1454,8 +1471,10 @@ def change(state, args, *, persist=None):
         sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa")]
         from hiro.produce.veil_exam import validate_deck
 
-        if state["preflight"]["idol"] != VEIL_IDOL:
-            raise ValueError("基准牌组只用于 [VEIL] 秦谷美玲")
+        from hiro.strategies import registry
+
+        if not registry.has(state["preflight"]["idol"], "needs_ledger"):
+            raise ValueError(f"基准牌组只用于偶像档案带 needs_ledger 能力位的偶像（{registry.label(state['preflight']['idol'])} 没有）")
         base = json.loads(args.deck.read_text(encoding="utf-8"))
         validate_deck(base)
         if state.get("veil_base_deck") not in (None, base):
@@ -1481,7 +1500,9 @@ def change(state, args, *, persist=None):
             raise ValueError("memory-save 要 --deck <JSON> 或 --scan（开局从牌组一览读）")
         else:
             deck = json.loads(args.deck.read_text(encoding="utf-8"))
-        if state["preflight"]["idol"] == VEIL_IDOL:
+        from hiro.strategies import registry
+
+        if registry.has(state["preflight"]["idol"], "needs_ledger"):
             from hiro.produce.veil_exam import validate_deck
 
             validate_deck(deck)
@@ -1492,6 +1513,7 @@ def change(state, args, *, persist=None):
         if active or len(state["completed"]) == state["total"]:
             raise ValueError("已有未结算局，或已达到总次数")
         state["active"] = {"run": len(state["completed"]) + 1, "phase": "opening"}
+        state["active"]["profile_sha"] = refresh_profile(state)["sha256"]
         return
     if cmd in {"complete", "settle"}:
         previous = next((r for r in state["completed"] if r["run"] == args.run), None)
@@ -1716,12 +1738,12 @@ def change(state, args, *, persist=None):
         if active["phase"] != "playing":
             raise ValueError("exam 只允许在 playing 阶段使用")
         sys.path[:0] = [str(ROOT / "src"), str(ROOT / "vendor" / "kaa")]
-        from hiro.brain.veil import IDOL
+        from hiro.strategies import registry
+
+        registry.require_engine(state["preflight"]["idol"], "cycle", "此考试入口")
         from hiro.loop.errors import ResumeBlocked
         from hiro.produce.veil_exam import apply_deck_change, run_round
 
-        if state["preflight"]["idol"] != IDOL:
-            raise ValueError("此考试入口仅适用于首检记录为 [VEIL] 秦谷美玲的批次")
         deck, ledger = args.deck, active.get("ledger")
         if ledger is not None:
             sys.path.insert(0, str(ROOT / "tools"))
@@ -1823,17 +1845,23 @@ def change(state, args, *, persist=None):
             record["ledger"] = active["ledger"]  # 本局账本（含逐条日志）随结算记录存档，复盘用（验证局 1-i 结算后账本丢了）
         if outcome and outcome.get("memories"):
             record["memories"] = outcome["memories"]  # 结算里每份回忆的评估（交接提示词优先级），最后一份是保存的
+        if active.get("profile_sha") or state.get("profile"):
+            record["profile_sha"] = active.get("profile_sha") or state["profile"]["sha256"]  # 这局按哪版档案打的（审计分组）
         state["completed"].append(record)
         state["active"] = None
         if cmd == "settle" and len(state["completed"]) < state["total"]:
             state["active"] = {"run": args.run + 1, "phase": "opening"}
+            if state.get("profile"):
+                state["active"]["profile_sha"] = refresh_profile(state)["sha256"]
             persist()
             return device_action("open")
     else:
         phase = "opening" if cmd in {"refill", "open"} else "playing"
         if active["phase"] != phase:
             raise ValueError(f"{cmd} 只允许在 {phase} 阶段使用")
-        if cmd == "burst" and state["preflight"]["idol"] == VEIL_IDOL:
+        from hiro.strategies import registry
+
+        if cmd == "burst" and registry.has(state["preflight"]["idol"], "burst_auto_route"):
             return device_action(cmd, auto_route=True)
         return device_action(cmd)
 
@@ -2101,7 +2129,7 @@ def watch(path, run, *, auto=False):
         print(json.dumps({"t": round(time.time(), 2), **line}, ensure_ascii=False), flush=True)
 
     def auto_rules():
-        rules = batch_rules.load()
+        rules = batch_rules.with_profile(batch_rules.load())  # 客制化清单来自回忆档案
         if auto:
             rules["driver"]["enabled"] = True
         return rules
@@ -2116,6 +2144,7 @@ def watch(path, run, *, auto=False):
             with (STATE_DIR / ".lock").open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 state = json.loads(path.read_text(encoding="utf-8"))
+                bind_profile(state)
                 ok = RT.finish_hold(state, action, out, lambda: save(path, state))
                 err = (state.get("active") or {}).get("driver", {}).get("error")
                 emit({"run": action["run"], "action": "auto", "command": action["command"], "ok": ok,
@@ -2144,11 +2173,13 @@ def watch(path, run, *, auto=False):
             except BlockingIOError:
                 return True
             state = json.loads(path.read_text(encoding="utf-8"))
+            bind_profile(state)
             active = state.get("active") or {}
             if len(state["completed"]) >= state["total"] or (run is not None and active.get("run") != run):
                 return False
-            if (state.get("preflight") or {}).get("idol") != VEIL_IDOL:
-                raise ValueError("常驻快点仅适用于首检记录为 [VEIL] 秦谷美玲的批次")
+            from hiro.strategies import registry
+
+            registry.require_engine((state.get("preflight") or {}).get("idol"), "cycle", "常驻快点")
             if pause_flag.ENABLED and pause_flag.reason() is not None:
                 return True
             from hiro.device import MaaToolsEmptyFrame
@@ -2272,6 +2303,32 @@ def watch(path, run, *, auto=False):
     return 0
 
 
+def profile_command(path: Path, args) -> int:
+    """profile show / validate / migrate（只读批次文件，不碰游戏）。"""
+    state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    pre = state.get("preflight") or {}
+    idol, memory = args.idol or pre.get("idol"), args.memory or pre.get("memory")
+    if args.action == "migrate":
+        if not memory:
+            raise ValueError("migrate 要 --memory（或批次首检记录的回忆）")
+        body = SP.from_legacy(memory, idol, ids=args.ids)
+        target = SP.memory_path(memory)
+        if args.write:
+            if target.exists():
+                raise ValueError(f"{target} 已存在，不覆盖")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(body, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps({"file": str(target), "written": bool(args.write), "profile": body}, ensure_ascii=False, indent=2))
+        return 0
+    use_batch = state.get("profile") and not (args.idol or args.memory)
+    snap = state["profile"] if use_batch else SP.snapshot(idol, memory, state.get("profile_overrides"))
+    if args.action == "validate":
+        print(json.dumps({"ok": True, "sha256": snap["sha256"], "layers": snap["layers"]}, ensure_ascii=False))
+        return 0
+    print(json.dumps({"source": "批次快照" if use_batch else "现场合并", **snap}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--batch", required=True, help="当前对话批次 ID")
@@ -2284,6 +2341,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("init")
     p.add_argument("total", type=int)
     p.add_argument("--debug-retries", help="debug：本战每局主动再挑戦几次「R1,R2」（如 2,1 = 打 3 次 R1、2 次 R2，攒 trace）")
+    p.add_argument("--set", action="append", metavar="键=值",
+                   help="批次覆盖回忆档案的一项（可重复），如 --set change.in.column=2 --set 'drinks.priority=[\"初星湯\"]'")
+    p = sub.add_parser("profile", help="策略档案：show = 打印本批次合并后的档案（代理以它为准）；validate = 只校验；"
+                                       "migrate = 把现在生效的规则写成回忆档案")
+    p.add_argument("action", choices=("show", "validate", "migrate"))
+    p.add_argument("--idol", help="不看批次首检，指定偶像")
+    p.add_argument("--memory", help="不看批次首检，指定回忆")
+    p.add_argument("--ids", action="store_true", help="migrate：卡 / 饮料名字经 game.db 换成 ID")
+    p.add_argument("--write", action="store_true", help="migrate：写到 conf/strategies/memories/<回忆>.json（已有就不写）")
     sub.add_parser("debug-retries", help="debug：改本批次的主动再挑戦计划「R1,R2」，off 关掉").add_argument("plan")
     sub.add_parser("status")
     p = sub.add_parser("preflight", help="实际核对实时画面、AP、跳过选项、偶像和回忆后才记录")
@@ -2417,9 +2483,14 @@ def main():
                 state = {"total": args.total, "preflight": None, "active": None, "completed": []}
                 if args.debug_retries and (plan := parse_debug_retries(args.debug_retries)):
                     state["debug_retries"] = plan
+                if args.set:
+                    state["profile_overrides"] = SP.parse_set(args.set)  # 批次覆盖：合并顺序最后一层
                 save(path, state)
+            elif args.command == "profile":
+                return profile_command(path, args)
             else:
                 state = json.loads(path.read_text(encoding="utf-8"))
+                bind_profile(state)
                 if args.command != "status":
                     result = change(state, args, persist=lambda: save(path, state))
                     if result is not None:
@@ -2435,6 +2506,9 @@ def main():
         }
         print(json.dumps(summary, ensure_ascii=False))
         return 0
+    except SP.ProfileError as e:
+        print(f"批量育成停止（策略档案）：{e}", file=sys.stderr)
+        return 2  # 同编成号没设：碰游戏前退出
     except (OSError, ValueError) as e:
         print(f"批量育成停止：{e}", file=sys.stderr)
         return 1

@@ -1,0 +1,7 @@
+{
+  "idol": "i_card-skin-hmsz-3-016",
+  "note": "示例：偶像档案的使用者覆盖。复制到 conf/strategies/idols/i_card-skin-hmsz-3-016.json；只写要改的项，其余沿用随仓库的 src/hiro/strategies/data/idols/i_card-skin-hmsz-3-016.json。",
+  "limits": {"r1": 800000},
+  "flags": {"default_on": ["HP_GUARD", "RELEASE_GAIN", "DRAW_LAST", "DRIVE_FP", "FP_CAP", "DRAW_ALL", "LAST_TURN",
+                           "CYCLE_SODA", "STUCK_SODA", "FP_RESERVE", "CLEAR_FIRST", "MINOR_HP", "HP_NET", "CYCLE_PLAN"]}
+}

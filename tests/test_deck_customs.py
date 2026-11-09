@@ -81,8 +81,8 @@ def test_change_order_once(monkeypatch):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
     import batch_prep as P
 
-    rules = {"prep.change_out": ["ハッピー♪"], "prep.change_out_once": True, "prep.change_out_swapped": True}
-    monkeypatch.setattr(P.batch_rules, "get", lambda k, d=None: rules.get(k, d))
+    rules = {"change.out": ["ハッピー♪"], "change.out_once": True, "change.out_swapped": True}
+    monkeypatch.setattr(P.S, "get", lambda k, d=None: rules.get(k, d))
     ledger = {"log": []}
     assert P.change_order(ledger)[0] == "ハッピー♪"
     ledger["log"] = [{"op": "remove", "card": "ハッピー♪", "why": "换卡换出 授業换卡"},

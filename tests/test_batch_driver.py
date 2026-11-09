@@ -25,7 +25,7 @@ def state(**driver):
 
 
 def rules(**retry):
-    r = copy.deepcopy(R.DEFAULTS)
+    r = R.with_profile(R.DEFAULTS)  # 客制化清单来自回忆档案（代码缺省）
     r["driver"]["enabled"] = True
     r["retry"].update(retry)
     return r

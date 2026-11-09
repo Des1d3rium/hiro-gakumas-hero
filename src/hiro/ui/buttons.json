@@ -1,0 +1,556 @@
+{
+ "schema": "buttons/1",
+ "note": "固定点击坐标（portrait = 720x1280 逻辑坐标；landscape = LIVE 横屏画面的比例坐标）。能用 OCR / 模板定位的按钮先定位，这里只作退路；blind_ok 的是直接点也无害的空白处。danger 的按钮调用方必须先核对文字。使用者覆盖：conf/ui/buttons.json 里写 {\"buttons\": {\"<id>\": {\"value\": …}}}。",
+ "buttons": {
+  "CORNER": {
+   "page": "通用快进",
+   "kind": "point",
+   "value": [
+    12,
+    12
+   ],
+   "note": "绝大多数页面无害：过场、名次页、スター性獲得、P 道具获得、最終プロデュース評価、LIVE 结束后",
+   "blind_ok": "过场 / 名次页 / 获得演出都无害；选择页、考试由调用方先排除"
+  },
+  "BAR_GAP": {
+   "page": "通用快进",
+   "kind": "point",
+   "value": [
+    386,
+    1200
+   ],
+   "note": "底栏第 4 格饮料（右缘 x≈352）与行动记录图标（左缘 x≈421）之间的空缺：考试 / 行动页都没有按钮",
+   "blind_ok": "底栏饮料与行动记录图标之间的空缺，没有按钮"
+  },
+  "BOTTOM_LOW": {
+   "page": "底部居中（两档高度）",
+   "kind": "point",
+   "value": [
+    360,
+    1085
+   ],
+   "note": "アイドル選択「次へ」、相談行动页唯一选项「相談」、回忆列表「OK」、"
+  },
+  "BOTTOM_HIGH": {
+   "page": "底部居中（两档高度）",
+   "kind": "point",
+   "value": [
+    360,
+    1160
+   ],
+   "note": "回忆页 / 挑选页「決定」「次へ」、单按钮弹窗（删卡 / 强化）"
+  },
+  "SETTLE": {
+   "page": "底部居中（两档高度）",
+   "kind": "point",
+   "value": [
+    360,
+    1170
+   ],
+   "note": "结算页「×」(360,1188) 与后面「次へ」圆角框的重合处：有 × 关 ×、没有点到次へ，一路回首页"
+  },
+  "BOTTOM_BLANK": {
+   "page": "底部居中（两档高度）",
+   "kind": "point",
+   "value": [
+    360,
+    1180
+   ],
+   "note": "底部空白：活动登录奖励（正中是道具框，点它不翻页）、领奖页推进",
+   "blind_ok": "底部空白"
+  },
+  "TOP_BLANK": {
+   "page": "空白处（推进 / 取消选中）",
+   "kind": "point",
+   "value": [
+    360,
+    250
+   ],
+   "note": "画面上方空白：P 道具浮条点不掉 (12,12) 时用；过场推进的备用点",
+   "blind_ok": "画面上方空白，没有按钮"
+  },
+  "STAGE_BLANK": {
+   "page": "空白处（推进 / 取消选中）",
+   "kind": "point",
+   "value": [
+    360,
+    330
+   ],
+   "note": "考试舞台空白：取消手牌选中、跳过考试动画",
+   "blind_ok": "考试舞台空白：只取消选中 / 跳过动画"
+  },
+  "TOAST": {
+   "page": "空白处（推进 / 取消选中）",
+   "kind": "point",
+   "value": [
+    360,
+    1000
+   ],
+   "note": "画面中下：「〜をカスタマイズしました」提示、授業结束后的训练员台词框",
+   "blind_ok": "提示框 / 台词框，点它只推进"
+  },
+  "SHELF_GAP": {
+   "page": "空白处（推进 / 取消选中）",
+   "kind": "point",
+   "value": [
+    360,
+    700
+   ],
+   "note": "商店货架第 2、3 列之间的空隙：跳过获得动画，回到相談后误点也不会选中商品",
+   "blind_ok": "货架第 2、3 列之间的空隙，点不到商品"
+  },
+  "DIALOG_CANCEL": {
+   "page": "弹窗两键（左取消、右确认，与大多数确认框同版式）",
+   "kind": "point",
+   "value": [
+    211,
+    1160
+   ]
+  },
+  "DIALOG_OK": {
+   "page": "弹窗两键（左取消、右确认，与大多数确认框同版式）",
+   "kind": "point",
+   "value": [
+    520,
+    1160
+   ],
+   "danger": "确认框右键：先核对框标题和危险字样"
+  },
+  "THREE_X": {
+   "page": "三选一 / 选项行",
+   "kind": "xs",
+   "value": [
+    196,
+    360,
+    521
+   ],
+   "note": "行动页三张卡（授業 ×3、公開レッスン Vo/Da/Vi）：位置和顺序固定；おでかけ / 差し入れ 只有两张，居中在 x≈278 / 444"
+  },
+  "THREE_Y": {
+   "page": "三选一 / 选项行",
+   "kind": "y",
+   "value": 1000,
+   "note": "三张卡的卡面中心（文字标签在 y≈1050–1100）"
+  },
+  "OPTION_ROWS": {
+   "page": "三选一 / 选项行",
+   "kind": "ys",
+   "value": [
+    698,
+    799,
+    901
+   ],
+   "note": "授業 / イベント选项三行。非凡（アノマリー）角色：上 = 強気、中 = 全力、下 = 未特定"
+  },
+  "REST": {
+   "page": "三选一 / 选项行",
+   "kind": "point",
+   "value": [
+    645,
+    889
+   ],
+   "note": "行动页右上「休む」"
+  },
+  "EXAM_DRINK_DISCARD": {
+   "page": "三选一 / 选项行",
+   "kind": "point",
+   "value": [
+    606,
+    890
+   ],
+   "note": "考试饮料详情框「捨てる」（OCR 找不到时的兜底）"
+  },
+  "SHOP_END": {
+   "page": "相談 / 轮间商店（位置全部固定）",
+   "kind": "point",
+   "value": [
+    640,
+    1085
+   ],
+   "note": "「終了」"
+  },
+  "SHOP_UPGRADE": {
+   "page": "相談 / 轮间商店（位置全部固定）",
+   "kind": "point",
+   "value": [
+    220,
+    968
+   ],
+   "note": "「強化」（相談）"
+  },
+  "SHOP_DELETE": {
+   "page": "相談 / 轮间商店（位置全部固定）",
+   "kind": "point",
+   "value": [
+    535,
+    968
+   ],
+   "note": "「削除」（相談）",
+   "danger": "删卡不可撤销，先核对卡名"
+  },
+  "REROLL": {
+   "page": "相談 / 轮间商店（位置全部固定）",
+   "kind": "points",
+   "value": {
+    "consult": [
+     108,
+     1085
+    ],
+    "interval": [
+     108,
+     1066
+    ]
+   },
+   "note": "「リフレッシュ」"
+  },
+  "INTERVAL_CUSTOMIZE": {
+   "page": "相談 / 轮间商店（位置全部固定）",
+   "kind": "point",
+   "value": [
+    458,
+    940
+   ],
+   "note": "轮间「スキルカードカスタマイズ」"
+  },
+  "INTERVAL_UPGRADE": {
+   "page": "相談 / 轮间商店（位置全部固定）",
+   "kind": "point",
+   "value": [
+    176,
+    928
+   ],
+   "note": "轮间「強化」"
+  },
+  "INTERVAL_RECOVER": {
+   "page": "相談 / 轮间商店（位置全部固定）",
+   "kind": "point",
+   "value": [
+    622,
+    930
+   ],
+   "note": "轮间「回復」"
+  },
+  "EXCLUDE": {
+   "page": "相談 / 轮间商店（位置全部固定）",
+   "kind": "point",
+   "value": [
+    133,
+    1096
+   ],
+   "note": "卡牌获取页左下「除外」"
+  },
+  "RESULT_RETRY": {
+   "page": "考试结果（R1 / R2 版式相同）",
+   "kind": "point",
+   "value": [
+    129,
+    1128
+   ],
+   "note": "「再挑戦」：只在核对写明免费 / 再挑戦チケット后点",
+   "danger": "只在核对写明免费 / 再挑戦チケット后点"
+  },
+  "RESULT_NEXT": {
+   "page": "考试结果（R1 / R2 版式相同）",
+   "kind": "point",
+   "value": [
+    373,
+    1133
+   ],
+   "note": "「次へ」"
+  },
+  "RETRY_DIALOG_END": {
+   "page": "考试结果（R1 / R2 版式相同）",
+   "kind": "point",
+   "value": [
+    233,
+    1210
+   ],
+   "note": "敗退后「再挑戦確認」左：プロデュース終了（= 失败，不自动点）",
+   "danger": "プロデュース終了 = 失败，不自动点"
+  },
+  "RETRY_DIALOG_RETRY": {
+   "page": "考试结果（R1 / R2 版式相同）",
+   "kind": "point",
+   "value": [
+    533,
+    1210
+   ],
+   "note": "右：再挑戦",
+   "danger": "再挑戦：先核对不花ジュエル"
+  },
+  "MEMORY_GENERATE": {
+   "page": "LIVE 后回忆",
+   "kind": "point",
+   "value": [
+    360,
+    975
+   ],
+   "note": "「MEMORY」生成页中间「生成」"
+  },
+  "MEMORY_REGEN": {
+   "page": "LIVE 后回忆",
+   "kind": "point",
+   "value": [
+    110,
+    1162
+   ],
+   "note": "回忆页 / 挑选页左下「再生成」"
+  },
+  "MEMORY_PREV": {
+   "page": "LIVE 后回忆",
+   "kind": "point",
+   "value": [
+    220,
+    1027
+   ],
+   "note": "挑选页切换版本"
+  },
+  "MEMORY_NEXT": {
+   "page": "LIVE 后回忆",
+   "kind": "point",
+   "value": [
+    498,
+    1027
+   ],
+   "note": "挑选页切换版本"
+  },
+  "MEMORY_DOTS_Y": {
+   "page": "LIVE 后回忆",
+   "kind": "y",
+   "value": 1050,
+   "note": "挑选页分页圆点（橙 = 当前）"
+  },
+  "REGEN_CONFIRM_DY": {
+   "page": "LIVE 后回忆",
+   "kind": "dy",
+   "value": 621,
+   "note": "「メモリー再生成確認」框「再生成する」：(498, 标题条顶 + 621)"
+  },
+  "FINAL_CONFIRM_DY": {
+   "page": "LIVE 后回忆",
+   "kind": "dy",
+   "value": 292,
+   "note": "「メモリー確定確認」框「生成する」：(485, 标题条顶 + 292)"
+  },
+  "AP_USE": {
+   "page": "AP 药（只用 APドリンク，流程见 hiro.loop.ap_refill，按文字核对后点）",
+   "kind": "point",
+   "value": [
+    574,
+    947
+   ],
+   "note": "「AP回復」框 APドリンク「使う」（框高度随道具行数变，优先按文字找）",
+   "danger": "只用 APドリンク，先按文字核对"
+  },
+  "AP_CLOSE": {
+   "page": "AP 药（只用 APドリンク，流程见 hiro.loop.ap_refill，按文字核对后点）",
+   "kind": "point",
+   "value": [
+    359,
+    1172
+   ],
+   "note": "「AP回復」框「閉じる」"
+  },
+  "AP_PLUS": {
+   "page": "AP 药（只用 APドリンク，流程见 hiro.loop.ap_refill，按文字核对后点）",
+   "kind": "point",
+   "value": [
+    584,
+    1033
+   ],
+   "note": "第 3 步确认框滑条右端「＋」"
+  },
+  "IDOL_NEXT": {
+   "page": "开局（只给位置，开始 / 跨设备保护照旧走文字核对）",
+   "alias": "BOTTOM_LOW",
+   "note": "アイドル選択「次へ」"
+  },
+  "START": {
+   "page": "开局（只给位置，开始 / 跨设备保护照旧走文字核对）",
+   "kind": "point",
+   "value": [
+    363,
+    1042
+   ],
+   "note": "開始確認「プロデュース開始」：绝不跳过核对",
+   "danger": "開始確認「プロデュース開始」：别的设备有进度时会破弃，必须先文字核对"
+  },
+  "MEMORY_CHANGE": {
+   "page": "开局（只给位置，开始 / 跨设备保护照旧走文字核对）",
+   "kind": "point",
+   "value": [
+    636,
+    577
+   ],
+   "note": "開始確認「選択中の選抜試験メモリー」右侧「変更」"
+  },
+  "MEMORY_SORT": {
+   "page": "开局（只给位置，开始 / 跨设备保护照旧走文字核对）",
+   "kind": "point",
+   "value": [
+    527,
+    860
+   ],
+   "note": "回忆列表排序键按钮 → ソート・フィルタ 弹窗"
+  },
+  "MEMORY_LIST_OK": {
+   "page": "开局（只给位置，开始 / 跨设备保护照旧走文字核对）",
+   "alias": "BOTTOM_LOW",
+   "note": "回忆列表底部「OK」"
+  },
+  "prep.RECEIVE": {
+   "page": "前六周固定流程（tools/batch_prep.py）",
+   "kind": "point",
+   "value": [
+    353,
+    1097
+   ],
+   "note": "差し入れ「受け取る」/ 确认页「受け取らない」"
+  },
+  "prep.DRINK_X": {
+   "page": "前六周固定流程（tools/batch_prep.py）",
+   "kind": "xs",
+   "value": [
+    222,
+    360,
+    498
+   ],
+   "note": "差し入れ选饮料三格的 x"
+  },
+  "prep.DRINK_Y": {
+   "page": "前六周固定流程（tools/batch_prep.py）",
+   "kind": "y",
+   "value": 870,
+   "note": "差し入れ选饮料三格的 y"
+  },
+  "prep.DECLINE": {
+   "page": "前六周固定流程（tools/batch_prep.py）",
+   "kind": "point",
+   "value": [
+    359,
+    1006
+   ],
+   "note": "饮料选择页「受け取らない」（栏满时才有）"
+  },
+  "BRIEFING_TAP": {
+   "page": "考试",
+   "kind": "point",
+   "value": [
+    360,
+    300
+   ],
+   "note": "考前说明页「優勝条件」：点上方空白进入考试"
+  },
+  "customize.GRID_CUSTOMIZE": {
+   "page": "轮间客制化（tools/batch_customize.py）",
+   "kind": "point",
+   "value": [
+    500,
+    1160
+   ],
+   "note": "选卡页「カスタマイズ」"
+  },
+  "customize.GRID_BACK": {
+   "page": "轮间客制化（tools/batch_customize.py）",
+   "kind": "point",
+   "value": [
+    215,
+    1160
+   ],
+   "note": "选卡页「戻る」"
+  },
+  "customize.MENU_X": {
+   "page": "轮间客制化（tools/batch_customize.py）",
+   "kind": "xs",
+   "value": [
+    141,
+    360,
+    578
+   ],
+   "note": "客制化菜单三项的 x"
+  },
+  "customize.MENU_Y": {
+   "page": "轮间客制化（tools/batch_customize.py）",
+   "kind": "y",
+   "value": 935,
+   "note": "客制化菜单项的 y"
+  },
+  "customize.MENU_EXEC": {
+   "page": "轮间客制化（tools/batch_customize.py）",
+   "kind": "point",
+   "value": [
+    500,
+    1160
+   ],
+   "note": "菜单页「実行する」"
+  },
+  "customize.MENU_BACK": {
+   "page": "轮间客制化（tools/batch_customize.py）",
+   "kind": "point",
+   "value": [
+    215,
+    1160
+   ],
+   "note": "菜单页「戻る」"
+  },
+  "batch.SETTLE_POPUP_TAP": {
+   "page": "结算（tools/batch_hif.py）",
+   "kind": "point",
+   "value": [
+    360,
+    1170
+   ],
+   "note": "结算后活动弹窗底部按钮（1-e 代理手点这里回到首页）"
+  },
+  "batch.INTERVAL_GO": {
+   "page": "轮间（tools/batch_hif.py）",
+   "kind": "point",
+   "value": [
+    513,
+    1160
+   ],
+   "note": "「インターバル終了確認」右「本戦へ」（hiro.produce.interval 实测）",
+   "danger": "进本战：先核对「インターバル終了確認」标题"
+  },
+  "live.REVEAL": {
+   "page": "LIVE 横屏（tools/batch_hif.py）",
+   "kind": "ratio",
+   "value": [
+    0.5,
+    0.5
+   ],
+   "note": "画面中间：唤出控制条（快门在右侧 x≈0.91，不碰）",
+   "space": "landscape"
+  },
+  "live.SKIP": {
+   "page": "LIVE 横屏（tools/batch_hif.py）",
+   "kind": "ratio",
+   "value": [
+    0.938,
+    0.146
+   ],
+   "note": "帧坐标（含顶部白条，全屏时代），只作参考",
+   "space": "landscape"
+  },
+  "live.SKIP_FIXED": {
+   "page": "LIVE 横屏（tools/batch_hif.py）",
+   "kind": "ratio",
+   "value": [
+    0.938,
+    0.11
+   ],
+   "note": "旋转窗口实测的 ⏭",
+   "space": "landscape"
+  },
+  "live.END_OK": {
+   "page": "LIVE 横屏（tools/batch_hif.py）",
+   "kind": "ratio",
+   "value": [
+    0.61,
+    0.89
+   ],
+   "note": "「ライブ終了確認」橙色「終了する」；OCR 认到文字时",
+   "space": "landscape"
+  }
+ }
+}

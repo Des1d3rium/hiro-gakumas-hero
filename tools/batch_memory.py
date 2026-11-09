@@ -1,6 +1,7 @@
 """本战结算后的回忆生成 / 再生成挑选（给 batch_hif settle 用）。
 
-挑选规则来自交接提示词「回忆候选中，以下客制化版本优先于其他挑选条件；同时出现多张时任选其一。同名普通版不算命中」：
+挑选规则在回忆档案的 memory_regen（hiro.strategies.profiles，docs/strategies.md）：按顺序，第一条命中的版本；
+同名普通版不算命中。代码缺省（hiro/strategies/data/memory-defaults.json）来自交接提示词：
 - エンターテイナー+：パラメータ+12
 - インフルエンサー+：強気に変更
 - 仕切り直し+：消費体力減少+2
@@ -15,13 +16,17 @@ from __future__ import annotations
 import re
 import unicodedata
 
-# (规则名, 卡名基名, 效果里必须有的词, 效果里不能有的词)
-PRIORITY = (
-    ("エンターテイナー+：パラメータ+12", "エンターテイナー", ("パラメータ+12",), ()),
-    ("インフルエンサー+：強気に変更", "インフルエンサー", ("強気に変更",), ()),
-    ("仕切り直し+：消費体力減少+2", "仕切り直し", ("消費体力減少+2",), ()),
-    ("巻き返し+：パラメータ値増加+1・制限削除", "巻き返し", ("パラメータ値増加+1",), ("レッスン中1回",)),
-)
+
+def priority() -> tuple[tuple[str, str, tuple[str, ...], tuple[str, ...]], ...]:
+    """回忆档案 memory_regen → ((规则名, 卡名基名, 效果里必须有的词, 效果里不能有的词), …)。"""
+    from hiro.strategies import profiles
+
+    out = []
+    for r in profiles.get("memory_regen", []):
+        base = norm(r["card"]).rstrip("+")
+        out.append((r.get("name") or base + "+", base, tuple(r.get("need") or ()), tuple(r.get("forbid") or ())))
+    return tuple(out)
+
 CHOICE_WORDS = ("再生成前", "再生成後", "どちらのメモリー", "どちらを残")
 KEEP_WORDS = ("こちらを残す", "残す", "こちらにする", "選択する", "決定")
 
@@ -34,10 +39,11 @@ def evaluate(texts: list[str]) -> dict:
     """一份回忆的文字（卡名 + 效果，顺序任意）→ {hit: 规则名 | None, card: 认到的卡名 | None}。
     卡名要带「+」（强化版）；同名普通版（效果里没有定制后的词）不算命中。"""
     flat = "".join(norm(t) for t in texts)
-    for rule, base, need, forbid in PRIORITY:
+    rules = priority()
+    for rule, base, need, forbid in rules:
         if re.search(re.escape(base) + r"\+", flat) and all(n in flat for n in need) and not any(f in flat for f in forbid):
             return {"hit": rule, "card": base + "+"}
-    card = next((base + "+" for _, base, _, _ in PRIORITY if base + "+" in flat), None)
+    card = next((base + "+" for _, base, _, _ in rules if base + "+" in flat), None)
     return {"hit": None, "card": card}
 
 

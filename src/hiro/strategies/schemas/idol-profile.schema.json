@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "idol-profile/1",
+  "title": "偶像档案：一个偶像一套考试策略",
+  "description": "随仓库的在 hiro/strategies/data/idols/，使用者覆盖放 conf/strategies/idols/<偶像>.json（逐项合并）。没有档案的偶像走默认 advisor（engine=default）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "idol",
+    "engine"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "enum": [
+        "idol-profile/1"
+      ]
+    },
+    "idol": {
+      "type": "string",
+      "pattern": "^i_card-skin-"
+    },
+    "label": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    },
+    "engine": {
+      "type": "string",
+      "enum": [
+        "cycle",
+        "default"
+      ],
+      "description": "cycle = 清牌 → 过渡 → 循环（hiro.brain.veil）；default = 通用规则链 + LLM"
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "needs_ledger": {
+          "type": "boolean",
+          "description": "要整副牌组账本（deck-base / memory-save 校验牌组）"
+        },
+        "fp_balance": {
+          "type": "boolean",
+          "description": "换卡 / 差し入れ 按全力値来源总量调候选优先级"
+        },
+        "burst_auto_route": {
+          "type": "boolean",
+          "description": "burst 命令自带停点路由"
+        }
+      }
+    },
+    "cards": {
+      "type": "object",
+      "description": "角色 → 牌名（引擎按角色引用牌；cycle 引擎要 entertainer / drive / teach / rebound / idol_card / star）",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "core": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "description": "循环核心牌（cards 里的角色名）"
+    },
+    "orders": {
+      "type": "object",
+      "description": "夜空剩余次数 → 循环出牌顺序（角色名）",
+      "patternProperties": {
+        "^[0-9]+$": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "description": "各轮停手阈值（分数到了就不再冒险）",
+      "patternProperties": {
+        "^r[0-9]+$": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "hand_max": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "plan_max": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "进循环规划最多推演的出牌数"
+    },
+    "minor_loss": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "強気下实际掉血不超过它的牌不留到温存（VEIL_MINOR_HP）"
+    },
+    "drinks": {
+      "type": "object",
+      "description": "考试里会喝的饮料（角色 → 饮料名）",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "full_power": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "type": "integer",
+          "description": "全力値到这么多自动进全力"
+        },
+        "reserve": {
+          "type": "integer",
+          "description": "给 idol_card 留的全力値（全力値消費）"
+        },
+        "high": {
+          "type": "integer",
+          "description": "牌组全力値来源总量上限（fp_balance）"
+        },
+        "low": {
+          "type": "integer",
+          "description": "总量低于它且有 idol_card 时提高加全力値牌（fp_balance）"
+        },
+        "skip": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "不计入总量的牌（基名）"
+        }
+      }
+    },
+    "stance_limited": {
+      "type": "object",
+      "description": "姿态限定牌（基名）：stance = 只在这个姿态下打（warm = 温存类，或姿态名 強気…）；unlock_from = 从哪类姿态切过去算「解锁」它（!warm = 非温存）",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stance",
+          "unlock_from"
+        ],
+        "properties": {
+          "stance": {
+            "type": "string"
+          },
+          "unlock_from": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "play_later": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "有别的牌可打时留后的牌（基名）"
+    },
+    "flags": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "默认开的策略开关（环境变量 VEIL_<名>=0/1 仍可临时改）"
+        },
+        "known": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "引擎认识的全部开关"
+        }
+      }
+    },
+    "memory_defaults": {
+      "type": "object",
+      "description": "这个偶像的回忆档案缺省（memory-profile/1 的各项，可被回忆档案覆盖）"
+    }
+  }
+}

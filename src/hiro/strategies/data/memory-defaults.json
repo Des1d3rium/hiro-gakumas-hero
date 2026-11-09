@@ -1,0 +1,28 @@
+{
+  "schema": "memory-profile/1",
+  "customize": [
+    {"card": "インフルエンサー+", "item": "強気追加"},
+    {"card": "巻き返し+", "item": "成長追加", "need_maxed": "制限削除"}
+  ],
+  "change": {
+    "in": {"rule": "once", "column": 3},
+    "out": ["立ち回りの基本", "表現の基本", "アピールの基本"],
+    "out_once": true,
+    "out_swapped": true,
+    "out_duplicate": true,
+    "fp_balance": true,
+    "gift_card": {"prefer": [], "avoid": [], "fallback": "once", "column": 3}
+  },
+  "drinks": {
+    "high_value": ["ブーストエキス", "センブリソーダ", "初星ホエイプロテイン"],
+    "priority": ["センブリソーダ", "ブーストエキス", "初星ホエイプロテイン", "初星スーパーソーダ", "初星湯",
+                 "ジンジャーエール", "厳選初星チャイ"],
+    "fallback": "rightmost"
+  },
+  "memory_regen": [
+    {"name": "エンターテイナー+：パラメータ+12", "card": "エンターテイナー", "need": ["パラメータ+12"], "forbid": []},
+    {"name": "インフルエンサー+：強気に変更", "card": "インフルエンサー", "need": ["強気に変更"], "forbid": []},
+    {"name": "仕切り直し+：消費体力減少+2", "card": "仕切り直し", "need": ["消費体力減少+2"], "forbid": []},
+    {"name": "巻き返し+：パラメータ値増加+1・制限削除", "card": "巻き返し", "need": ["パラメータ値増加+1"], "forbid": ["レッスン中1回"]}
+  ]
+}

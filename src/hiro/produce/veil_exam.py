@@ -2110,6 +2110,18 @@ def _commit_ledger(state, memory, decision, base):
     apply_ability(data, memory, norm(card.name))
 
 
+def _profile_meta() -> dict:
+    """run.json 里记这局按哪版档案打的（批次快照的 sha256 + 偶像档案来源），审计按策略分组用。"""
+    from hiro.brain.veil import PROFILE
+    from hiro.strategies import profiles
+
+    snap = profiles.bound()
+    out = {"idol_profile": {k: PROFILE.get(k) for k in ("idol", "engine", "orders", "limits")}}
+    if snap:
+        out["profile_sha"] = snap.get("sha256")
+    return out
+
+
 OPEN_WAIT_S = 30.0  # 开场演出（回忆能力发动、ターン開始）期间不是出牌页，等它播完再接管
 
 
@@ -2312,7 +2324,7 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
         from hiro import plugins
 
         trace = TraceWriter(root=directory.parent, name=directory.name,
-                            meta={"mode": "main", "idol": IDOL, "advisor": "veil", "round": round_no,
+                            meta={"mode": "main", "idol": IDOL, "advisor": "veil", "round": round_no, **_profile_meta(),
                                   "plugins": {k: plugins.source(k) for k in ("exam_state_source", "exam_advisor")}})
         session = Session(trace)
         watch = pause_flag.Watcher(kvars.flow, session=session).start()
