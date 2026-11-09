@@ -928,21 +928,29 @@ def read_hif_hud(img: MatLike, *, fallback: bool = False) -> dict:
             "genki": read(img, BOX_GENKI, align=True)}  # fmt: skip
 
 
-def read_hif_exam(img: MatLike, *, cache: RegionCache | None = EXAM_CACHE, batch_names: bool = False) -> dict:
+def read_hif_exam(img: MatLike, *, cache: RegionCache | None = EXAM_CACHE, batch_names: bool = False,
+                  carry: str | None = None) -> dict:
     """考试画面完整读取。cache 为区域缓存：整帧与上次几乎相同时直接返回上次结果；
-    否则只重读变了的区域（状态栏槽位、手牌、P 道具、饮料、文字、HUD 数字、排名栏）。"""
+    否则只重读变了的区域（状态栏槽位、手牌、P 道具、饮料、文字、HUD 数字、排名栏）。
+    carry：同一场考试的标识（HIRO_TURN_CARRY，见 _read_hif_exam），None = 每帧全读。"""
     if cache is None:
-        return _read_hif_exam(img, None, batch_names=batch_names)
-    return cached(cache, f"frame:{batch_names}", cv2.resize(img, (img.shape[1] // 2, img.shape[0] // 2), interpolation=cv2.INTER_AREA),
-                  lambda: _read_hif_exam(img, cache, batch_names=batch_names))  # fmt: skip
+        return _read_hif_exam(img, None, batch_names=batch_names, carry=carry)
+    return cached(cache, f"frame:{batch_names}:{carry}", cv2.resize(img, (img.shape[1] // 2, img.shape[0] // 2), interpolation=cv2.INTER_AREA),
+                  lambda: _read_hif_exam(img, cache, batch_names=batch_names, carry=carry))  # fmt: skip
 
 
-def _read_hif_exam(img: MatLike, cache: RegionCache | None, *, batch_names: bool = False) -> dict:
+# 回合内沿用（使用者 2026-11-08）：状态栏、名次 / NPC / 分数、P 道具、属性 / 倍率只在回合开头（剩余回合数变了）读一次，
+# 回合内沿用；手牌、剩余回合 / HP / 元気 / 夜空数字、饮料栏每帧照读。实测（codex-20261108-1 R1，30 帧无缓存）：
+# 状态栏 0.79s、名次条 0.56s、P 道具 0.13s、属性 0.08s，合计约 1.5s / 帧；手牌 0.21s，数字 0.09s，饮料 0.07s。
+# 姿态 / 一番星 / 夜空 / 全力値 由 VEIL 账本推算；沿用的字段名写进 out["carried"]，trace 里看得出哪些是回合开头的读数。
+TURN_CARRY: dict = {}
+CARRY_FIELDS = ("statuses", "status", "pitems", "multiplier_pct", "multiplier_votes", "attr", "finals_round",
+                "npc_scores", "my_rank_index", "my_score", "my_score_read", "rank_line", "participants")
+
+
+def _read_hif_exam(img: MatLike, cache: RegionCache | None, *, batch_names: bool = False, carry: str | None = None) -> dict:
     letters = sorted(_locate_letters(img), key=lambda r: r.x1)
     finals = is_finals_strip(img)  # 本战：没有突破线，顶部是 3 人名次条
-    texts = _texts({"attr": _attr_crop(img)} if finals else {"attr": _attr_crop(img), "break": _breakthrough_crop(img)}, cache)
-    hand, missing = read_hand(img, letters=letters, cache=cache, batch_names=batch_names)
-    statuses = read_status_column(img, cache=cache)
 
     def num(name: str, box) -> int | None:
         x1, y1, x2, y2 = box
@@ -950,14 +958,13 @@ def _read_hif_exam(img: MatLike, cache: RegionCache | None, *, batch_names: bool
         align = name in ("turns", "hp", "genki")
         return cached(cache, f"num:{name}", img[y1:y2, x1:x2], lambda: read_number(img, box, align=align))
 
-    x1, y1, x2, y2 = RANK_STRIP
+    turns = num("turns", BOX_TURNS)
+    key = (carry, turns, finals)
+    memo = TURN_CARRY.get("fields") if carry and turns is not None and TURN_CARRY.get("key") == key else None
+    hand, missing = read_hand(img, letters=letters, cache=cache, batch_names=batch_names)
     drink_slots = read_drink_slots(img, cache=cache)
     out = {
-        "remaining_turns": num("turns", BOX_TURNS),
-        **_parse_attr(texts["attr"]),
-        "finals_round": None,  # 本战时由 read_finals_ranking 覆盖为 1 / 2
-        **cached(cache, "ranking", img[y1:y2, x1:x2], lambda: read_ranking(img)),
-        **(_parse_breakthrough(texts["break"]) if not finals else {"rank_line": None, "participants": None}),
+        "remaining_turns": turns,
         "finals": finals,
         "genki": num("genki", BOX_GENKI),
         "hp": num("hp", BOX_HP),
@@ -966,16 +973,43 @@ def _read_hif_exam(img: MatLike, cache: RegionCache | None, *, batch_names: bool
         "drinks": [{k: d[k] for k in ("slot", "asset", "name", "center", "score", "margin")} if d["state"] == "drink" else None
                    for d in drink_slots],
         "drink_slots": drink_slots,
-        "pitems": read_pitems(img, cache=cache),
-        "statuses": statuses,
-        "status": status_summary(statuses),
         "hand": hand,
         "hand_layout": "overlay" if _overlay_on_hand(img, letters) else hand_layout([r.x1 + r.w // 2 for r in letters]),
         "unrecognized_cards": missing,
     }
+    if memo is not None:
+        out.update(memo)
+        out["carried"] = {"since_turns": turns, "fields": sorted(memo)}
+        return out
+    texts = _texts({"attr": _attr_crop(img)} if finals else {"attr": _attr_crop(img), "break": _breakthrough_crop(img)}, cache)
+    statuses = read_status_column(img, cache=cache)
+    x1, y1, x2, y2 = RANK_STRIP
+    out.update({
+        **_parse_attr(texts["attr"]),
+        "finals_round": None,  # 本战时由 read_finals_ranking 覆盖为 1 / 2
+        **cached(cache, "ranking", img[y1:y2, x1:x2], lambda: read_ranking(img)),
+        **(_parse_breakthrough(texts["break"]) if not finals else {"rank_line": None, "participants": None}),
+        "pitems": read_pitems(img, cache=cache),
+        "statuses": statuses,
+        "status": status_summary(statuses),
+    })
     out["multiplier_pct"], out["multiplier_votes"] = _vote_multiplier(img, out["multiplier_pct"], cache, out["attr"])
     if out["finals"] and (out.get("remaining_turns") or 0) > 9:
         # 剩余回合 > 9 只可能是 R2（R1 9 回合、R2 12 回合）：NPC 分数被特效挡住，或首位数字被裁掉
         # （464,588 读成 64,588 → 误判 R1）时都以回合数为准
         out["finals_round"] = 2
+    if carry and turns is not None:
+        # 回合开头这帧要读全（状态栏有姿态、分数读到）才留作本回合的读数；没读全下一帧再读
+        stance_seen = any(norm_status(e) for e in statuses or [])
+        if stance_seen and out.get("my_score") is not None and out.get("hand_layout") != "overlay":
+            TURN_CARRY.clear()
+            TURN_CARRY.update(key=key, fields={k: out.get(k) for k in CARRY_FIELDS if k in out})
     return out
+
+
+_STANCE_WORDS = ("強気", "温存", "のんびり", "全力", "指針")
+
+
+def norm_status(entry: dict) -> bool:
+    """状态栏这一项是不是姿态（回合开头读到姿态才算读全）。"""
+    return any(w in (entry.get("name") or "") for w in _STANCE_WORDS)

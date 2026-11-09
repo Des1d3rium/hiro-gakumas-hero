@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 import re
 import sys
 import time
@@ -863,6 +864,12 @@ def fp_grey_by_stale_frame(state, fp) -> list:
 # 其余情况记下原因（veil_uncertain_why），停机提示里写原因和清除命令；清除要给出「所持スキルカード」的张数，和账本对上才清。
 
 
+def turn_carry():
+    """HIRO_TURN_CARRY=1：状态栏、名次 / 分数、P 道具、属性只在回合开头读一次，回合内沿用（见 hiro.vision.hif.TURN_CARRY）；
+    回合内姿态全靠账本。使用者 2026-11-08：识别每帧约省 1.2s。默认关。"""
+    return os.environ.get("HIRO_TURN_CARRY", "0") == "1"
+
+
 def flower_screen():
     """HIRO_VEIL_FLOWER_SCREEN=0 关掉「夜空计数和画面对账」（默认开：只记差异，不改账本）。"""
     return os.environ.get("HIRO_VEIL_FLOWER_SCREEN", "1") != "0"
@@ -1130,7 +1137,9 @@ class VeilScreen(ScreenExamStateSource):
                 "fp": data.get("veil_fp"), "fp_gap": data.get("veil_fp_gap"),
                 "fp_boosts": data.get("veil_fp_boosts") or None, "actions_left": memory.actions_left,
                 "cycle": data.get("veil_cycle"), "uncertain": bool(data.get("veil_uncertain")),
-                "uncertain_why": (data.get("veil_uncertain_why") or [None])[-1], **self.trace_board(state, memory)}
+                "uncertain_why": (data.get("veil_uncertain_why") or [None])[-1],
+                "carried": ((getattr(self, "last_raw", None) or {}).get("carried") or {}).get("fields"),  # HIRO_TURN_CARRY：沿用回合开头读数的字段
+                **self.trace_board(state, memory)}
 
     def trace_board(self, state, memory) -> dict:
         """可信 trace 库（使用者 2026-11-07）：决策实际用的牌面。原来 steps.jsonl 只有规整前的手牌（OCR 漏 / 多「+」），
@@ -1229,11 +1238,17 @@ class VeilScreen(ScreenExamStateSource):
         from hiro.vision.hif import read_hif_exam
 
         if getattr(frame, "raw", None) is None:
-            frame.raw = read_hif_exam(frame.img, batch_names=True)
+            carry = None
+            if turn_carry():
+                carry = memory.strategy_data.setdefault("veil_carry_id", uuid.uuid4().hex[:12])
+            frame.raw = read_hif_exam(frame.img, batch_names=True, carry=carry)
         before_remaining = memory.last_remaining
         state, why = super().read(frame, memory)
         if state is None:
             return state, why
+        if (self.last_raw or {}).get("carried"):
+            # 状态栏是回合开头的读数：姿态 / 段階 交给账本（read_position 当作画面没读到姿态），其余状态照用
+            state.statuses = [s for s in state.statuses or [] if norm(s.get("name") or "") not in STANCES]
         uncertain = []
         if self.customs:
             state.hand = apply_customs(state.hand, self.customs, copies=self.copies, uncertain=uncertain)
