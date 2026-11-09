@@ -86,6 +86,10 @@ def begin(state, action, persist):
 def finish(state, action, out, persist):
     """命令返回明确成功才清 pending 并推进阶段；否则记 error（花钱的）或留 pending 等下一次（可重做的）。"""
     active = state["active"]
+    if active is None:
+        # settle 记完最后一局，批次完成、active 已清空（codex-20261108-1：这里原来 AttributeError，watch 退出）
+        persist()
+        return bool(out and out.get("ok") is True)
     driver = active.setdefault("driver", {})
     if not out or out.get("ok") is not True or out.get("ledger_todo"):
         if action["command"] not in IDEMPOTENT or driver.get("tries", 0) >= IDEMPOTENT_TRIES:

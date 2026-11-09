@@ -396,3 +396,25 @@ def test_retry_exhausted_reads_badge_not_colour():
 def test_zero_free_left_counts_as_ticket(retry):
     with pytest.raises(retry.HoldPage, match="再挑戦チケット"):
         retry.debug_retry_step(DEFEAT + [box("本日あと0回無料", 1083)], True)
+
+
+def test_finish_after_final_settle_clears_active():
+    """codex-20261108-1：settle 记完最后一局，批次完成、active 清空，finish 原来 AttributeError、watch 退出。"""
+    s = state(stage="after_r2")
+    action = D.next_step(s, MEMORY, rules())
+    assert action["command"] == "settle"
+    D.begin(s, action, lambda: None)
+    s["active"] = None  # settle 自己把批次记完成
+    assert D.finish(s, action, {"ok": True}, lambda: None) is True
+
+
+def test_photo_pages_route_to_settle():
+    """结算选回忆照片 / 保存确认：归到「结算回忆」，自动模式跑 settle（原来停在「选择页」「确认框」等代理）。"""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    import batch_hif as B
+
+    photo = B.hold_reason(["このフォトをアルバムに保存", "メモリーにするフォトを選んでください", "端末保存", "次へ"])
+    save = B.hold_reason(["確認", "選択したフォトをメモリーとして保存しますか？", "キャンセル", "決定"])
+    assert photo.startswith("结算回忆") and save.startswith("结算回忆")
+    s = state(stage="after_r2")
+    assert D.next_step(s, photo, rules())["command"] == "settle"
