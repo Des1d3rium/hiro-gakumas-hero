@@ -133,7 +133,18 @@ def _texts(img: MatLike) -> list[tuple[str, tuple[int, int, int, int]]]:
 
 
 def _has(boxes, word: str, y_range: tuple[int, int] = (0, 1280)) -> tuple | None:
-    return next((b for t, b in boxes if word in t and y_range[0] <= (b[1] + b[3]) // 2 <= y_range[1]), None)
+    from hiro.vision.ocr import engine
+
+    loose = len(word) >= 4 and engine() != "vision"  # RapidOCR 等常错一个字（「スター性獲得」→「ネター性獲得」）
+    return next((b for t, b in boxes if (word in t or (loose and _contains_near(t, word))) and y_range[0] <= (b[1] + b[3]) // 2 <= y_range[1]), None)
+
+
+def _contains_near(text: str, word: str) -> bool:
+    """text 里有一段与 word 等长、只差一个字；≥6 字的 word 掉了首字或末字也算（RapidOCR「カスタマイズメニュ」丢了末尾长音）。"""
+    n = len(word)
+    if n >= 6 and (word[:-1] in text or word[1:] in text):
+        return True
+    return any(sum(a != b for a, b in zip(text[i : i + n], word, strict=True)) <= 1 for i in range(len(text) - n + 1))
 
 
 _last: tuple[bytes, tuple[str, dict] | None] | None = None
@@ -289,7 +300,9 @@ def _brief_pct(img: MatLike, digits: str, b) -> int | None:
     dddd = read_dddd(img, (max(0, x1 - 4), max(0, y1 - 4), x2 + 4, y2 + 4))
     if dddd is None:
         return None
-    return next((int(c) for c in (digits, digits[1:]) if len(c) >= 2 and str(dddd).startswith(c)), None)
+    # 反过来也会发生：RapidOCR 给的框更宽、把「>>」框进去了，ddddocr 读出的首位是箭头（2026-11-06：「1962%」→ 71962）
+    reads = (str(dddd), str(dddd)[1:])
+    return next((int(c) for c in (digits, digits[1:]) if len(c) >= 2 and any(r.startswith(c) for r in reads)), None)
 
 
 def read_exam_briefing(img: MatLike, boxes) -> dict:
@@ -310,7 +323,8 @@ def read_exam_briefing(img: MatLike, boxes) -> dict:
     for attr, cy in BRIEF_ROWS.items():
         row = [(t, b) for t, b in boxes if abs((b[1] + b[3]) // 2 - cy) <= 30]
         p = next((int(t) for t, b in row if re.fullmatch(r"\d{2,4}", t) and b[0] < 230), None)
-        hit = next(((mm.group(1), b) for t, b in row if (mm := re.match(r"(\d{2,6})%", t)) and 260 <= b[0] <= 340), None)
+        # 「%」可能被漏认（RapidOCR：「1413%」→「1413」）；倍率列靠横坐标 260–340 限定，和左边的属性值（< 230）分得开
+        hit = next(((mm.group(1), b) for t, b in row if (mm := re.match(r"(\d{2,6})%?$", t.strip())) and 260 <= b[0] <= 340), None)
         params[attr], mult[attr] = p, _brief_pct(img, *hit) if hit else None
     star = next((int(t) for t, b in boxes if re.fullmatch(r"\d{1,4}", t) and abs((b[1] + b[3]) // 2 - 852) <= 25 and b[0] < 230), None)
     # 「親愛度ボーナス」演出中倍率在往上跳（314% → 471% → 1413%），这时的数不是最终值
@@ -364,7 +378,7 @@ def read_finals_ranking_page(img: MatLike, boxes) -> dict:
     """本战名次页「現在順位」：已演出的人按名次从上到下（大字 1st / 2nd + 右下「399,645Pt」），玩家卡是青色底；
     还没演出时玩家卡在「NEXT」下面、没有分数。
     {entries: [{rank, score, me}], next: 有「NEXT」, my_score, rank（玩家已演出才有）, finals_round: 1 / 2 / None}。
-    finals_round 按 NPC 最高分：≥ 50 万为 R2（主数据 produce_008-02），否则 R1。"""
+    finals_round 按 NPC 目标分落在主数据哪一轮的区间（hif.finals_round_from_npc）。"""
     from hiro.vision.hif import _result_score, finals_round_from_npc, read_retry
 
     title = next((t for t, b in boxes if "ラウンド" in t and "結果" in t), None)
@@ -413,7 +427,7 @@ def _merged_gain(img: MatLike, listed: str, box, n_total: int, n_gain: int) -> i
     x1, y1, x2, y2 = box
     cut = _gain_cut(img, box, n_total, n_gain)
     crop = img[max(0, y1 - 6) : y2 + 6, cut : min(img.shape[1], x2 + 6)]
-    again = re.sub(r"\D", "", "".join(t for t, _ in ocr(cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC))))
+    again = re.sub(r"\D", "", "".join(t for t, _ in ocr(cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC), scale=1)))
     dddd = read_dddd(img, (cut + GAIN_PLUS_W, max(0, y1 - 4), min(img.shape[1], x2 + 4), y2 + 4))
     d = str(dddd) if dddd is not None else None
     if d and listed and len(d) == len(listed) + 1 and d[0] == "4":
@@ -437,7 +451,7 @@ def _merged_total(img: MatLike, listed: str, box, n_total: int, n_gain: int) -> 
     # 只看框中间几行、从框宽 35% 往右找（框边缘有进度条等蓝色，总分至少占框的三分之一）
     cut = _gain_cut(img, box, n_total, n_gain)
     crop = img[max(0, y1 - 6) : y2 + 6, max(0, x1 - 6) : cut]
-    text = "".join(t for t, _ in ocr(cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)))
+    text = "".join(t for t, _ in ocr(cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC), scale=1))
     again = re.sub(r"\D", "", re.split(r"[+＋]", text)[0])
     dddd = read_dddd(img, (max(0, x1 - 4), max(0, y1 - 4), cut, y2 + 4))
     votes = [listed or None, again or None, str(dddd) if dddd is not None else None]
@@ -469,6 +483,28 @@ def _idol_name(text: str) -> str | None:
     return best if best and SequenceMatcher(None, text, best).ratio() >= 0.6 else None
 
 
+RESULT_SCORE_MAX = 2_999_999  # 本战两轮合计的上限（历史最高 1,303,847；NPC 约 108 万），超过一定是读错
+RESULT_ROW_Y = (324, 503, 682)  # 结算页三行分数框的中心 y（10 张实机图 ±3 像素）
+
+
+def _rank_by_row_y(cy: int) -> int | None:
+    """名次大字没读到时按分数行的位置定名次。按行序数会在漏读一行时错位（Windows 第三局 r2 00228：倉本行没读到，我方第 3 被当成第 2）。"""
+    return next((i + 1 for i, y in enumerate(RESULT_ROW_Y) if abs(cy - y) <= 40), None)
+
+
+def _split_gain_box(boxes, b) -> tuple[str | None, tuple]:
+    """最终页一行的总分和加分被 OCR 拆成两个框（Windows 第七局 r2 00312：「873,015」与「1274,711」，「+」读成「1」）：
+    找同一行紧挨在总分框右边的数字框当加分，去掉读错的「+」（1 / 十 / +），返回 (加分文字, 合并后的框)。没有就 (None, b)。"""
+    cy = (b[1] + b[3]) / 2
+    for t, b2 in boxes:
+        if b2 is b or not (-25 <= b2[0] - b[2] <= 30 and b2[2] > b[2] and abs((b2[1] + b2[3]) / 2 - cy) <= 15):
+            continue
+        g = re.fullmatch(r"[+＋十1]?\s*(\d{1,3}(?:[,、]\d{3})+)", t.replace(" ", ""))
+        if g:
+            return g.group(1).replace("、", ","), (b[0], min(b[1], b2[1]), b2[2], max(b[3], b2[3]))
+    return None, b
+
+
 def _read_round_result(img: MatLike, boxes, title: str | None) -> dict:
     """本战演出后的名次页（结算页布局）：左侧名次数字、名字、分数（带逗号、无 Pt），玩家行白框 + 右侧「ログ」，左下再挑戦。
     - 轮次结果「H.I.F本戦 ラウンド1結果 現在順位」：每行一个分数；
@@ -480,23 +516,30 @@ def _read_round_result(img: MatLike, boxes, title: str | None) -> dict:
     m = re.search(r"ラウンド\s*(\d)", title or "")
     log = next((b for t, b in boxes if t.startswith("ログ")), None)
     rows = []
+    final_page = m is None  # 没有「ラウンドN」：R2 后的最终页，每行「总分 +加分」
     for t, b in boxes:
         t = re.sub(r"[、，.]", ",", t)  # 加分的逗号常读成「、」（「820,463+455、281」整行没对上，名次也跟着错位）
         # 加分的逗号 OCR 常漏（第二十一局 R2 我方行「1,045,084+504068」整行没对上 → 我方第 None 名）：加分部分允许没有逗号
-        mm = re.fullmatch(rf"({num})(?:\s*[+＋:：;]\s*(\d{{1,3}}(?:,\d{{3}})+|\d{{1,7}}))?", t)  # 「+」偶尔读成「:」（main15 #280）
+        # 「+」常读错：「:」（main15 #280）、「#」（Windows 第三局 r2 00228，那一行整行丢了、名次跟着错）——分隔符收任意 1–2 个非数字字符
+        mm = re.fullmatch(rf"({num})(?:\s*[^\d,\s]{{1,2}}\s*(\d{{1,3}}(?:,\d{{3}})+|\d{{1,7}}))?", t)
         if mm and 200 <= b[0] <= 420:
-            rows.append((b, mm.group(1), mm.group(2)))
+            gain = mm.group(2)
+            if gain is None and final_page:
+                gain, b = _split_gain_box(boxes, b)
+            rows.append((b, mm.group(1), gain))
     rows.sort(key=lambda r: r[0][1])
     # 名次读左侧大字（1 / 2 / 3，与分数同一行），读不到再按行序
     digits = [(int(t), (b[1] + b[3]) // 2) for t, b in boxes if re.fullmatch(r"[1-9]", t) and b[2] <= 140]
     entries = []
     for i, (b, total, gain) in enumerate(rows):
         cy = (b[1] + b[3]) // 2
-        rank = next((d for d, y in digits if abs(y - cy) <= 60), i + 1)
+        rank = next((d for d, y in digits if abs(y - cy) <= 60), None) or _rank_by_row_y(cy) or i + 1
         if gain:
             score = _merged_total(img, re.sub(r"\D", "", total), b, len(total), len(gain) + 1)
         else:
             score, _ = _result_score(img, re.sub(r"\D", "", total), b)
+        if score is not None and score > RESULT_SCORE_MAX:
+            score = None  # Windows 第四局 r2 00219：十王 1,079,363 读成 36350791（Mac 同一帧读对，复现不了），名次照用
         me = log is not None and abs((log[1] + log[3]) // 2 - (b[1] + b[3]) // 2) <= 50
         g = _merged_gain(img, re.sub(r"\D", "", gain), b, len(total), len(gain) + 1) if gain else None
         entries.append({"rank": rank, "name": _row_name(boxes, b), "score": score, "gain": g, "me": me,
@@ -582,7 +625,8 @@ def read_comm_error(img: MatLike, header_y: int | None = None) -> dict:
 
     text = "".join(t for t, _ in boxes)
     retry, close = button("リトライ"), button("閉じる")
-    return {"retry": retry, "title": button("タイトルへ"), "close": close, "text": text,
+    # 「へ」和片假名「ヘ」字形相同，RapidOCR 会读成后者（2026-11-06）
+    return {"retry": retry, "title": button("タイトルへ", "タイトルヘ"), "close": close, "text": text,
             "forced_title": retry is None and (close is not None or "タイトルに戻" in text)}  # fmt: skip
 
 

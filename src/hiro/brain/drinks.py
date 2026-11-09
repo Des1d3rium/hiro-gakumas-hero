@@ -1,4 +1,4 @@
-# 来源：digital-hiro src/hiro/brain/drinks.py @ c3fc27f（GPL-3.0-or-later）；去掉模拟比较，只按社区规则
+# 来源：digital-hiro src/hiro/brain/drinks.py（develop 864e037）；模拟比较只在模拟器可用时（hiro.brain.deciders._sim_ready）
 """饮料持有决策：拿 / 换哪瓶 / 不拿 / 买（用户 2026-11-02 第十六局复盘，经总控 / 协调转达，用户已 review；同日更正）。
 
 总原则（用户更正）：社区规则是「优先参考的优质社区概念」，给默认优先级、默认选择和兜底；完整对局模拟确实算出更好
@@ -10,7 +10,8 @@
    - 抽牌类（抽牌 / 换手）超过 DRAW_CAP 的 → 4 档（默认限量：喝早会转乱牌堆，用户批注）；
    - 空位算 3.5 档：比回复 / 元気 差，比好印象 / 超限抽牌 好。
 3. 候选持有组合按「档位从好到坏排序后的列表」比较，取规则默认。
-4. 开源版只用规则默认（主仓库另有模拟比较：候选比规则默认好 > 2 个标准误才偏离，这里不包含）。
+4. 模拟：规则默认和其余候选（下一场考试的合成开局，同一批种子配对打完整局，hiro.sim.resource，和轮间 B3 同一套方法）。
+   某个候选比规则默认好 > 2 个标准误 → 改选它，记录偏离（reports/deviations.jsonl，定期汇总给协调由用户 review）。
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ EMPTY_TIER = 3.5
 OVERRIDE_SE = 2.0  # 模拟要好过规则默认几个标准误才改（用户更正 2026-11-02：建议 > 2 个标准误，跨档也可以）
 MAX_SIM_OPTIONS = 8
 NOOP = ("keep", "skip", "none")  # 「不动」的候选键  # 一次最多模拟几个候选（按规则排名取前几个）
-SIM = False  # 开源版没有模拟器：只按社区规则（私有实现可以接回模拟比较）
+SIM = True  # 测试 / 兜底开关：False 时只按规则
 
 
 def stage_of(mode: str | None, *, interval: bool = False, after_r1: bool = False) -> str:
@@ -96,13 +97,65 @@ class Option:
 
 def choose(options: list[Option], stage: str, capacity: int, *, sim_context: dict | None = None, seeds=range(100), where: str = "") -> dict:
     """规则默认 + 模拟。返回 {pick: Option, rule: Option, rows: [...], why: str, sim: bool, deviation: dict | None}。
-    sim_context：保留参数以兼容调用方；开源版不做模拟比较，只按规则。"""
+    sim_context：{deck, hp, max_hp, permil, exam}（hiro.sim.resource.setup_for 的参数）；None 或 SIM=False 时只按规则。"""
     keyed = [(holding_key(o.drinks, stage, capacity), i, o) for i, o in enumerate(options)]
     keyed.sort(key=lambda x: (x[0], x[2].key not in NOOP, x[1]))  # 组合打平时不动（不收 / 不拿 / 不买）
     best_key, _, rule = keyed[0]
     tiers_txt = lambda k: "/".join(f"{t:g}" for t in tiers_of(k))  # noqa: E731
     rows = [{"key": o.key, "label": o.label, "tiers": tiers_txt(k), "rule_rank": n + 1, "cost": o.cost} for n, (k, _, o) in enumerate(keyed)]
     out = {"pick": rule, "rule": rule, "rows": rows, "sim": False, "deviation": None, "why": f"社区默认：{rule.label}（档位 {tiers_txt(best_key)}）"}
+    seen, others = {tuple(sorted(d for d in rule.drinks if d))}, []
+    for k, _, o in keyed[1:]:
+        sig = tuple(sorted(d for d in o.drinks if d))
+        if sig not in seen:
+            seen.add(sig)
+            others.append((k, o))
+    others = others[:MAX_SIM_OPTIONS]
+    if not others or not SIM or sim_context is None:
+        return out
+    try:
+        from hiro.sim import interval as iv
+        from hiro.sim import resource as rv
+
+        ctx = dict(sim_context)
+        exam = ctx.pop("exam")
+        base, notes = rv.setup_for(exam, drinks=[d for d in rule.drinks if d], **ctx)
+        if notes:
+            # 输入是参考值（牌组没记账 / 倍率没有）时不许跨档偏离（第十八局本战 22:20），跨档候选就不必模拟（协调 2026-11-03：
+            # 第二十一局选拔 16 次饮料模拟 5.2 分钟，多数是这种白算）。只模拟同档候选；没有就直接按社区默认
+            others = [(k, o) for k, o in others if tiers_of(k) == tiers_of(best_key)]
+            if not others:
+                out["why"] += f"；{'、'.join(notes)}：不跨档偏离，同档没有别的候选，不模拟"
+                return out
+        setups = [base] + [iv._with(base, drinks=[d for d in o.drinks if d]) for _, o in others]
+        res = rv.adaptive_eval(setups, threshold=OVERRIDE_SE, workers=4)
+    except Exception as e:  # 模拟器不支持本场牌组等：按规则
+        logger.warning("饮料模拟失败，按社区默认：%s", e)
+        out["why"] += f"；模拟失败（{e}），按社区默认"
+        return out
+    out["sim"] = True
+    by_key = {rule.key: res[0]} | {o.key: r for (_, o), r in zip(others, res[1:])}
+    for row in rows:
+        r = by_key.get(row["key"])
+        if r is not None:
+            row.update(sim_mean=r["mean"], sim_gain=r["gain"], sim_gain_se=r["gain_se"])
+    (k, o), r = max(zip(others, res[1:]), key=lambda x: x[1]["gain"])
+    note = f"（模拟 {rv.POLICY} 续打 {res[0]['n']} 局配对（自适应，最多 {rv.BATCHES[-1]}），下一场 {exam}{'；' + '、'.join(notes) if notes else ''}）"
+    cross = tiers_of(k) != tiers_of(best_key)
+    if cross and notes:
+        # 牌组 / 倍率用的是参考值（第十八局本战 22:20：「牌组没记账：用参考牌组」却跨档拿了 おしゃれハーブティー）：输入是假的，不允许跨档偏离
+        out["why"] += f"；模拟里 {o.label} 比它 {r['gain']:+,} ± {r['gain_se']:,}，但{('、'.join(notes))}，不跨档偏离{note}"
+        return out
+    if r["gain"] > OVERRIDE_SE * max(r["gain_se"], 1):
+        out["pick"] = o
+        out["deviation"] = {"where": where, "stage": stage, "rule": rule.label, "rule_tiers": tiers_txt(best_key), "pick": o.label,
+                            "pick_tiers": tiers_txt(k), "gain": r["gain"], "gain_se": r["gain_se"], "cross_tier": cross,
+                            "policy": rv.POLICY, "seeds": res[0]["n"], "notes": notes}  # fmt: skip
+        out["why"] = (f"偏离社区默认（{'跨档' if cross else '同档'}）：选 {o.label}，比社区默认 {rule.label} {r['gain']:+,} ± {r['gain_se']:,}"
+                      f"（> {OVERRIDE_SE:g} 个标准误）{note}")  # fmt: skip
+        log_deviation(out["deviation"])
+    else:
+        out["why"] += f"；模拟里最好的其他候选 {o.label} 比它 {r['gain']:+,} ± {r['gain_se']:,}，不到 {OVERRIDE_SE:g} 个标准误，不改{note}"
     return out
 
 

@@ -95,6 +95,12 @@ def read_menu(img: MatLike, boxes) -> dict | None:
     """「カスタマイズメニュー」→ {items: [{item_index, name, price, left, maxed, available, selected, center}], total_left}；没有菜单时 None。"""
     hdr = next((b for t, b in boxes if "カスタマイズメニュー" in t), None)
     if hdr is None:
+        from hiro.vision.ocr import engine
+        from hiro.vision.pages import _contains_near
+
+        if engine() != "vision":  # RapidOCR 常错一个字
+            hdr = next((b for t, b in boxes if _contains_near(t.replace(" ", ""), "カスタマイズメニュー")), None)
+    if hdr is None:
         return None
     hy = _cy(hdr)
     orange = _orange(cv2.cvtColor(img, cv2.COLOR_BGR2HSV))

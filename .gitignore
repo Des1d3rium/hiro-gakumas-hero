@@ -22,3 +22,11 @@ __pycache__/
 /tests/.calib-test/
 # scripts/setup.sh 生成 KAA R.py 的日志
 /.setup-make-resources.log
+
+# 模拟器主数据：vendor/gakumas-player/scripts/fetch_master.py 下载、构建（只提交 source-files.json）
+vendor/gakumas-player/data/master/current.json
+vendor/gakumas-player/data/master/*/raw/
+vendor/gakumas-player/data/master/*/catalog*.sqlite
+vendor/gakumas-player/data/master/*/manifest.json
+vendor/gakumas-player/data/master/*/build.json
+vendor/gakumas-player/**/__pycache__/

@@ -10,6 +10,7 @@ verdict：read_error（读数不合理，丢弃重读）/ model_gap（读数合�
 规则（名称即 Check.rule）：
 - range            属性 0..param_cap、体力 0..max_stamina、P 点 / 星数 ≥ 0
 - digit_count      分数 / 属性 / 星数比上一采信值少了位数，且新值是旧值去掉一位后的连续片段（37719→3771、1070→70）；
+                   考试分数还拦「多读一位」：新值是旧值末尾或开头多一位（2890→28900）；
                    考试元気只拦「四位数去掉开头一两位」（1388→388、1010→10，_genki_lost_head）；
                    P 点会正常花掉，只认「去掉末位」的情形
 - score_monotonic  同一场考试内分数不减（同一场：剩余回合不增加超过 1）
@@ -108,6 +109,18 @@ def _dropped_digit(old: int, new: int, *, suffix_only: bool = False) -> bool:
     if suffix_only:
         return a.startswith(b)
     return b in a
+
+
+def _added_digit(old: int, new: int) -> bool:
+    """new 正好是 old 多读了一位：末尾多一位（2890→28900、2890→28905）或开头多一位（2890→12890）。
+    Windows 第十五局 #123：2890 读成 28900 被采信，之后 10 步的正确读数（10012…19255）全被 score_monotonic 拦下。
+    正常出牌让分数恰好落在这种值上的概率极小；old < 100 时不判（小分数段自然增长容易撞上）。"""
+    if old is None or new is None or old < 100 or new <= old:
+        return False
+    a, b = str(old), str(new)
+    if len(b) != len(a) + 1:
+        return False
+    return b.startswith(a) or b.endswith(a)
 
 
 def _genki_lost_head(old: int, new: int) -> bool:
@@ -222,6 +235,7 @@ def check_invariants(prev, obs, *, events: list[dict] | None = None, debug: bool
         if score is not None and same and exam.get("score") is not None:
             old = exam["score"]
             judge(_dropped_digit(old, score), "exam.score", old, score, "digit_count", note="掉位")
+            judge(_added_digit(old, score), "exam.score", old, score, "digit_count", note="多读一位")
             judge(score < old, "exam.score", {"min": old}, score, "score_monotonic")
         genki, old_genki = f.get("genki"), exam.get("genki")
         if genki is not None and same and old_genki is not None:

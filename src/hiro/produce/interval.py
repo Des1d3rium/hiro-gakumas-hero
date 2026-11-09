@@ -77,6 +77,7 @@ TITLE_CROP = (0, 0, 260, 100)  # TITLE_REGION 外扩一圈（与 tools/batch_sho
 
 def read_hp(img: np.ndarray, ocr) -> tuple[int, int] | None:
     """顶部「体力/上限」。数字按 DIGIT_FIX 纠正常见 OCR 混淆，前面的心形图标等杂字忽略（「♥16/33」）。只读顶部这一块。"""
+    misread = False
     for t, _, (x1, y1, x2, y2) in _crop_ocr(ocr, img, HP_CROP):
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
         if HP_BAND[0] <= cx <= HP_BAND[2] and HP_BAND[1] <= cy <= HP_BAND[3]:
@@ -84,7 +85,13 @@ def read_hp(img: np.ndarray, ocr) -> tuple[int, int] | None:
                 hp, mx = int(m.group(1)), int(m.group(2))
                 if 0 < mx <= 99 and hp <= mx:
                     return hp, mx
-    return None
+                misread = misread or mx >= 10  # 「33/21」：两边都读全了却矛盾，读错了就不信
+    if misread:
+        return None
+    # 没读到或上限被截成一位（RapidOCR「21/3」）：头部体力和选行动页同一位置，用它那套逐块放大读（含斜杠误读规则）兜底
+    from hiro.vision.action import read_stamina
+
+    return read_stamina(img)
 
 
 def find_item(page_fields: dict, index: int) -> dict | None:

@@ -25,6 +25,21 @@ def note_exam(label: str, *, deck=None, drinks=None, permil=None, trace_dir=None
             (Path(trace_dir) / CONTEXT_FILE).write_text(json.dumps(CONTEXT, ensure_ascii=False), encoding="utf-8")
         except OSError:
             pass
+    _notify_sim(label, permil, trace_dir)
+
+
+def _notify_sim(label: str, permil, trace_dir) -> None:
+    """模拟器在时（hiro.sim）：轮间缓存目录 + R2 预热。没装引擎 / 主数据时什么都不做。"""
+    try:
+        from hiro.brain.deciders import _sim_ready
+
+        if not _sim_ready():
+            return
+        from hiro.sim import interval
+
+        interval.on_context(label, permil=permil, trace_dir=trace_dir)
+    except Exception:  # noqa: BLE001  预热失败不影响考试
+        pass
 
 
 def load_context(trace_dir) -> dict:

@@ -42,3 +42,16 @@ def test_memory_value_seen_tolerates_one_digit_confusion():
     page = "Pアイドル設定⑨145445.5%229644.4%Q2117941.3%"
     assert memory_value_seen("1434", page) and memory_value_seen("2296", page) and memory_value_seen("1179", page)
     assert not memory_value_seen("1510", page) and not memory_value_seen("1424", "x1454x")
+
+
+def test_child_env_keeps_caller_pythonpath(monkeypatch):
+    """GKMS 第四局：PYTHONPATH 被覆盖成 src，插件 hiro_gkms_advisor 在本战考试导入失败。src 放最前，原有路径保留。"""
+    import os
+
+    import play_game
+
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(["/x/plugins", "/y"]))
+    parts = play_game.child_env()["PYTHONPATH"].split(os.pathsep)
+    assert parts == [str(play_game.ROOT / "src"), "/x/plugins", "/y"]
+    monkeypatch.delenv("PYTHONPATH")
+    assert play_game.child_env()["PYTHONPATH"] == str(play_game.ROOT / "src")

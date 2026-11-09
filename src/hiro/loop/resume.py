@@ -26,6 +26,7 @@ ENTER_TIMEOUT = 40.0
 
 
 from hiro.loop.errors import ResumeBlocked  # noqa: E402,F401  定义挪到 hiro.loop.errors（不依赖 KAA）
+from hiro import imgio
 
 
 def _discard_dialog_visible() -> bool:
@@ -249,7 +250,7 @@ def finish_produce_end(*, timeout: float = 180.0, go_home: bool = False) -> bool
 
         p = Path("reports/live/calib") / f"{time.strftime('%Y%m%d-%H%M%S')}-finish-timeout.png"
         p.parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(p), dev.screenshot())
+        imgio.imwrite(str(p), dev.screenshot())
         logger.warning("结算收尾超时，存帧 %s，画面文字：%s", p, " / ".join(t.text for t in ocr.ocr())[:200])
     except Exception:  # noqa: BLE001
         pass

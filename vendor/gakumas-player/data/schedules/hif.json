@@ -1,0 +1,554 @@
+{
+  "schema_version": 1,
+  "master_commit": "d31baf6608ee4553091f28446f628cd3ad66ff01",
+  "provenance": {
+    "calendar_url": "https://seesaawiki.jp/gakumasu/d/H.I.F",
+    "calendar_source_sha256": "2dd73c71fdbc75d3813d636075935cfb13d0f2a54fdd60e4c4fc5c4deda3c6b3",
+    "calendar_authority": "community observed schedule; not a native schedule table",
+    "rewards_authority": "ProduceStepOpenLesson pinned master rows",
+    "captured_date": "2026-10-15"
+  },
+  "modes": {
+    "produce-007": {
+      "produce": {
+        "id": "produce-007",
+        "name": "選抜試験",
+        "baseStepLevel": 1,
+        "maxRefreshCount": 0,
+        "produceSelectScreenOrderType": "ProduceSelectScreenOrderType_First",
+        "challengeViewConditionSetId": "",
+        "viewConditionSetId": "",
+        "unlockConditionSetId": "cd-hif_selection_produce-unlock_open",
+        "examSettingId": "p_exam_setting-1",
+        "produceSettingId": "p_setting-7",
+        "idolCardParameterGrowthLimit": 3000,
+        "maxProduceEventCharacterGrowthNumber": 0,
+        "steps": 20,
+        "actionPointQuantity": 20,
+        "assetId": "produce-hif-1",
+        "produceNavigationNormalId": "p_navi-produce_group-003-normal",
+        "produceNavigationAuditionId": "p_navi-produce_group-003-audition",
+        "produceNavigationLoseId": "p_navi-produce_group-003-lose",
+        "gradientColor1": "5050F2",
+        "gradientColor2": "7EADF7",
+        "easyProduceItemIds": [],
+        "easyConditionSetId": "",
+        "easyProduceConditionSetId": "",
+        "produceSplitType": "ProduceSplitType_Selection",
+        "splitPairProduceId": "produce-008",
+        "selectionMemoryEmbedProduceCardId": "exam_contest_embed_produce_card-produce_008",
+        "order": 1
+      },
+      "setting": {
+        "id": "p_setting-7",
+        "initialProducePoint": 0,
+        "produceDrinkPossessLimit": 3,
+        "refreshStaminaRecoveryPermil": 500,
+        "customizeProduceCardCount": 2,
+        "stepSkipStaminaRecoveryPermil": 250,
+        "beforeAuditionRefreshStaminaRecoveryPermil": 500,
+        "stepCustomizeStartAlertProducePointThreshold": 49,
+        "examStartAlertStaminaThreshold": 10,
+        "continueCount": 3,
+        "produceAuditionTrendAssessmentPermilUpper": 110,
+        "produceAuditionTrendAssessmentPermilLower": 110,
+        "maxLegendProduceCardCount": 1,
+        "stepIntervalUpgradeProduceCardCount": 1,
+        "stepIntervalCustomizeProduceCardCount": 2,
+        "selectionMemoryNeedProduceCardCount": 1,
+        "produceDrinkPossessMaxLimit": 4
+      },
+      "stages": [
+        {
+          "day": 1,
+          "kind": "choice",
+          "options": [
+            "shop",
+            "gift",
+            "special_guidance"
+          ],
+          "position": 1,
+          "source_table_index": 16,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 2,
+          "training_focus": "star",
+          "kind": "choice",
+          "options": [
+            "training"
+          ],
+          "position": 2,
+          "source_table_index": 16,
+          "open_lesson_ids": [
+            "p_step_open_lesson-produce_007-01-star-sp-sub_da",
+            "p_step_open_lesson-produce_007-01-star-sp-sub_vi",
+            "p_step_open_lesson-produce_007-01-star-sp-sub_vo",
+            "p_step_open_lesson-produce_007-01-star-sub_da",
+            "p_step_open_lesson-produce_007-01-star-sub_vi",
+            "p_step_open_lesson-produce_007-01-star-sub_vo"
+          ],
+          "base_p_points": 30,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 3,
+          "kind": "choice",
+          "options": [
+            "class"
+          ],
+          "position": 3,
+          "source_table_index": 16,
+          "class_base_parameter": 120,
+          "class_hp_cost": 5,
+          "requires_dynamic_inputs": [
+            "offered card/swap choices and their effects"
+          ],
+          "rest_when_wounded": true
+        },
+        {
+          "day": 4,
+          "training_focus": "parameter",
+          "kind": "choice",
+          "options": [
+            "training"
+          ],
+          "position": 4,
+          "source_table_index": 16,
+          "open_lesson_ids": [
+            "p_step_open_lesson-produce_007-01-parameter-sp-sub_da",
+            "p_step_open_lesson-produce_007-01-parameter-sp-sub_vi",
+            "p_step_open_lesson-produce_007-01-parameter-sp-sub_vo",
+            "p_step_open_lesson-produce_007-01-parameter-sub_da",
+            "p_step_open_lesson-produce_007-01-parameter-sub_vi",
+            "p_step_open_lesson-produce_007-01-parameter-sub_vo"
+          ],
+          "base_p_points": 30,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 5,
+          "kind": "choice",
+          "options": [
+            "outing",
+            "shop"
+          ],
+          "position": 5,
+          "source_table_index": 16,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 6,
+          "kind": "choice",
+          "options": [
+            "class"
+          ],
+          "position": 6,
+          "source_table_index": 16,
+          "class_base_parameter": 120,
+          "class_hp_cost": 5,
+          "requires_dynamic_inputs": [
+            "offered card/swap choices and their effects"
+          ],
+          "rest_when_wounded": true
+        },
+        {
+          "day": 7,
+          "exam_number": 1,
+          "kind": "exam",
+          "options": [
+            "exam"
+          ],
+          "position": 7,
+          "source_table_index": 16,
+          "requires_dynamic_inputs": [
+            "idol-card/difficulty selection",
+            "current stats/star/item modifiers",
+            "turn attribute order",
+            "supported deck and triggered effects"
+          ]
+        },
+        {
+          "day": 8,
+          "kind": "choice",
+          "options": [
+            "outing",
+            "gift"
+          ],
+          "position": 8,
+          "source_table_index": 16,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 9,
+          "training_focus": "star",
+          "kind": "choice",
+          "options": [
+            "training"
+          ],
+          "position": 9,
+          "source_table_index": 16,
+          "open_lesson_ids": [
+            "p_step_open_lesson-produce_007-02-star-sp-sub_da",
+            "p_step_open_lesson-produce_007-02-star-sp-sub_vi",
+            "p_step_open_lesson-produce_007-02-star-sp-sub_vo",
+            "p_step_open_lesson-produce_007-02-star-sub_da",
+            "p_step_open_lesson-produce_007-02-star-sub_vi",
+            "p_step_open_lesson-produce_007-02-star-sub_vo"
+          ],
+          "base_p_points": 30,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 10,
+          "kind": "choice",
+          "options": [
+            "class"
+          ],
+          "position": 10,
+          "source_table_index": 16,
+          "class_base_parameter": 150,
+          "class_hp_cost": 5,
+          "requires_dynamic_inputs": [
+            "offered card/swap choices and their effects"
+          ],
+          "rest_when_wounded": true
+        },
+        {
+          "day": 11,
+          "training_focus": "parameter",
+          "kind": "choice",
+          "options": [
+            "training"
+          ],
+          "position": 11,
+          "source_table_index": 16,
+          "open_lesson_ids": [
+            "p_step_open_lesson-produce_007-02-parameter-sp-sub_da",
+            "p_step_open_lesson-produce_007-02-parameter-sp-sub_vi",
+            "p_step_open_lesson-produce_007-02-parameter-sp-sub_vo",
+            "p_step_open_lesson-produce_007-02-parameter-sub_da",
+            "p_step_open_lesson-produce_007-02-parameter-sub_vi",
+            "p_step_open_lesson-produce_007-02-parameter-sub_vo"
+          ],
+          "base_p_points": 30,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 12,
+          "kind": "choice",
+          "options": [
+            "shop",
+            "special_guidance"
+          ],
+          "position": 12,
+          "source_table_index": 16,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 13,
+          "exam_number": 2,
+          "kind": "exam",
+          "options": [
+            "exam"
+          ],
+          "position": 13,
+          "source_table_index": 16,
+          "requires_dynamic_inputs": [
+            "idol-card/difficulty selection",
+            "current stats/star/item modifiers",
+            "turn attribute order",
+            "supported deck and triggered effects"
+          ]
+        },
+        {
+          "day": 14,
+          "kind": "choice",
+          "options": [
+            "outing",
+            "gift"
+          ],
+          "position": 14,
+          "source_table_index": 16,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 15,
+          "training_focus": "star",
+          "kind": "choice",
+          "options": [
+            "training"
+          ],
+          "position": 15,
+          "source_table_index": 16,
+          "open_lesson_ids": [
+            "p_step_open_lesson-produce_007-03-star-sp-sub_da",
+            "p_step_open_lesson-produce_007-03-star-sp-sub_vi",
+            "p_step_open_lesson-produce_007-03-star-sp-sub_vo",
+            "p_step_open_lesson-produce_007-03-star-sub_da",
+            "p_step_open_lesson-produce_007-03-star-sub_vi",
+            "p_step_open_lesson-produce_007-03-star-sub_vo"
+          ],
+          "base_p_points": 30,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 16,
+          "kind": "choice",
+          "options": [
+            "outing",
+            "shop",
+            "gift"
+          ],
+          "position": 16,
+          "source_table_index": 16,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 17,
+          "kind": "choice",
+          "options": [
+            "class"
+          ],
+          "position": 17,
+          "source_table_index": 16,
+          "class_base_parameter": 150,
+          "class_hp_cost": 5,
+          "requires_dynamic_inputs": [
+            "offered card/swap choices and their effects"
+          ],
+          "rest_when_wounded": true
+        },
+        {
+          "day": 18,
+          "training_focus": "parameter",
+          "kind": "choice",
+          "options": [
+            "training"
+          ],
+          "position": 18,
+          "source_table_index": 16,
+          "open_lesson_ids": [
+            "p_step_open_lesson-produce_007-03-parameter-sp-sub_da",
+            "p_step_open_lesson-produce_007-03-parameter-sp-sub_vi",
+            "p_step_open_lesson-produce_007-03-parameter-sp-sub_vo",
+            "p_step_open_lesson-produce_007-03-parameter-sub_da",
+            "p_step_open_lesson-produce_007-03-parameter-sub_vi",
+            "p_step_open_lesson-produce_007-03-parameter-sub_vo"
+          ],
+          "base_p_points": 30,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 19,
+          "kind": "choice",
+          "options": [
+            "shop",
+            "special_guidance"
+          ],
+          "position": 19,
+          "source_table_index": 16,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 20,
+          "exam_number": 3,
+          "kind": "exam",
+          "options": [
+            "exam"
+          ],
+          "position": 20,
+          "source_table_index": 16,
+          "requires_dynamic_inputs": [
+            "idol-card/difficulty selection",
+            "current stats/star/item modifiers",
+            "turn attribute order",
+            "supported deck and triggered effects"
+          ]
+        }
+      ]
+    },
+    "produce-008": {
+      "produce": {
+        "id": "produce-008",
+        "name": "本戦",
+        "baseStepLevel": 1,
+        "maxRefreshCount": 0,
+        "produceSelectScreenOrderType": "ProduceSelectScreenOrderType_First",
+        "challengeViewConditionSetId": "",
+        "viewConditionSetId": "",
+        "unlockConditionSetId": "cd-hif_final_produce-unlock_open",
+        "examSettingId": "p_exam_setting-1",
+        "produceSettingId": "p_setting-8",
+        "idolCardParameterGrowthLimit": 3000,
+        "maxProduceEventCharacterGrowthNumber": 0,
+        "steps": 9,
+        "actionPointQuantity": 20,
+        "assetId": "produce-hif-2",
+        "produceNavigationNormalId": "p_navi-produce_group-003-normal",
+        "produceNavigationAuditionId": "p_navi-produce_group-003-audition",
+        "produceNavigationLoseId": "p_navi-produce_group-003-lose",
+        "gradientColor1": "5050F2",
+        "gradientColor2": "7EADF7",
+        "easyProduceItemIds": [],
+        "easyConditionSetId": "",
+        "easyProduceConditionSetId": "",
+        "produceSplitType": "ProduceSplitType_Final",
+        "splitPairProduceId": "produce-007",
+        "selectionMemoryEmbedProduceCardId": "exam_contest_embed_produce_card-produce_008",
+        "order": 2
+      },
+      "setting": {
+        "id": "p_setting-8",
+        "initialProducePoint": 0,
+        "produceDrinkPossessLimit": 3,
+        "refreshStaminaRecoveryPermil": 500,
+        "customizeProduceCardCount": 2,
+        "stepSkipStaminaRecoveryPermil": 250,
+        "beforeAuditionRefreshStaminaRecoveryPermil": 500,
+        "stepCustomizeStartAlertProducePointThreshold": 49,
+        "examStartAlertStaminaThreshold": 10,
+        "continueCount": 3,
+        "produceAuditionTrendAssessmentPermilUpper": 110,
+        "produceAuditionTrendAssessmentPermilLower": 110,
+        "maxLegendProduceCardCount": 1,
+        "stepIntervalUpgradeProduceCardCount": 1,
+        "stepIntervalCustomizeProduceCardCount": 2,
+        "selectionMemoryNeedProduceCardCount": 1,
+        "produceDrinkPossessMaxLimit": 4
+      },
+      "stages": [
+        {
+          "day": 1,
+          "kind": "choice",
+          "options": [
+            "class"
+          ],
+          "position": 1,
+          "source_table_index": 29,
+          "class_base_parameter": 180,
+          "class_hp_cost": 5,
+          "requires_dynamic_inputs": [
+            "offered card/swap choices and their effects"
+          ],
+          "rest_when_wounded": true
+        },
+        {
+          "day": 2,
+          "training_focus": "star",
+          "kind": "choice",
+          "options": [
+            "training"
+          ],
+          "position": 2,
+          "source_table_index": 29,
+          "open_lesson_ids": [
+            "p_step_open_lesson-produce_007-04-star-sp-sub_da",
+            "p_step_open_lesson-produce_007-04-star-sp-sub_vi",
+            "p_step_open_lesson-produce_007-04-star-sp-sub_vo",
+            "p_step_open_lesson-produce_007-04-star-sub_da",
+            "p_step_open_lesson-produce_007-04-star-sub_vi",
+            "p_step_open_lesson-produce_007-04-star-sub_vo"
+          ],
+          "base_p_points": 50,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 3,
+          "kind": "choice",
+          "options": [
+            "outing",
+            "gift"
+          ],
+          "position": 3,
+          "source_table_index": 29,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 4,
+          "kind": "choice",
+          "options": [
+            "class"
+          ],
+          "position": 4,
+          "source_table_index": 29,
+          "class_base_parameter": 180,
+          "class_hp_cost": 5,
+          "requires_dynamic_inputs": [
+            "offered card/swap choices and their effects"
+          ],
+          "rest_when_wounded": true
+        },
+        {
+          "day": 5,
+          "training_focus": "parameter",
+          "kind": "choice",
+          "options": [
+            "training"
+          ],
+          "position": 5,
+          "source_table_index": 29,
+          "open_lesson_ids": [
+            "p_step_open_lesson-produce_007-04-parameter-sp-sub_da",
+            "p_step_open_lesson-produce_007-04-parameter-sp-sub_vi",
+            "p_step_open_lesson-produce_007-04-parameter-sp-sub_vo",
+            "p_step_open_lesson-produce_007-04-parameter-sub_da",
+            "p_step_open_lesson-produce_007-04-parameter-sub_vi",
+            "p_step_open_lesson-produce_007-04-parameter-sub_vo"
+          ],
+          "base_p_points": 50,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 6,
+          "kind": "choice",
+          "options": [
+            "shop"
+          ],
+          "position": 6,
+          "source_table_index": 29,
+          "rest_when_wounded": true
+        },
+        {
+          "day": 7,
+          "kind": "round1",
+          "options": [
+            "round1"
+          ],
+          "position": 7,
+          "source_table_index": 29,
+          "requires_dynamic_inputs": [
+            "idol-card/difficulty selection",
+            "current stats/star/item modifiers",
+            "turn attribute order",
+            "supported deck and triggered effects"
+          ]
+        },
+        {
+          "day": 7,
+          "kind": "interval",
+          "options": [
+            "interval"
+          ],
+          "position": 8,
+          "source_table_index": 29
+        },
+        {
+          "day": 7,
+          "kind": "round2",
+          "options": [
+            "round2"
+          ],
+          "position": 9,
+          "source_table_index": 29,
+          "requires_dynamic_inputs": [
+            "idol-card/difficulty selection",
+            "current stats/star/item modifiers",
+            "turn attribute order",
+            "supported deck and triggered effects"
+          ]
+        }
+      ]
+    }
+  }
+}

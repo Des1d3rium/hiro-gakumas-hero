@@ -43,7 +43,8 @@ def test_advisor_without_llm_picks_legal_action():
     assert d.action.legal_key() in {a.legal_key() for a in legal}
 
 
-def test_advisor_with_previews_follows_best_expected():
+def test_advisor_with_previews_follows_best_expected(monkeypatch):
+    monkeypatch.setenv("HIRO_EXAM_POLICY", "expert")  # expert：按预演期望选；默认 llm 时预演只进提示词
     st, mem = _state([_card(0, "A", "c-a"), _card(1, "B", "c-b")])
     legal = [Action.from_legal(a) for a in st.legal_actions()]
     previews = [Preview(action=Action.from_legal("play:0"), expected=1000.0, vs_best_se=0.0),

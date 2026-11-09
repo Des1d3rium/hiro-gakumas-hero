@@ -25,6 +25,7 @@ from collections.abc import Callable
 from kotonebot import device, logging
 from kotonebot.primitives import Rect
 from hiro.produce import hif_buttons as BTN
+from hiro import imgio
 
 logger = logging.getLogger(__name__)
 
@@ -271,14 +272,18 @@ def scan_dialog_deck(region: tuple[int, int, int, int], *, expected: int | None 
     if not first or not dialog_scroll(img, region)["scrollable"]:
         return {"cards": first, "complete": bool(first), "screens": 1, "problems": [] if first else ["卡格没读到"]}
     screens = [first]
+    frames = [img]
     merged = merge_dialog_screens(screens, expected=expected)
     for _ in range(max_screens):
         _dialog_swipe(region, True, swipe)
         sleep(CARD_OP_SCROLL_SETTLE)
-        screens.append(read_card_dialog(shoot(), region, icons=icons)["cards"])
+        frames.append(shoot())
+        screens.append(read_card_dialog(frames[-1], region, icons=icons)["cards"])
         merged = merge_dialog_screens(screens, expected=expected)
         if merged["new_rows"][-1] == 0:
             break
+    if not merged["complete"]:
+        _save_scan_frames(frames, merged["problems"])
     for _ in range(len(screens)):  # 滑回顶部（点卡时按内容找，不依赖精确位置）
         if dialog_scroll(shoot(), region).get("at_top"):
             break
@@ -286,6 +291,23 @@ def scan_dialog_deck(region: tuple[int, int, int, int], *, expected: int | None 
         sleep(CARD_OP_SCROLL_SETTLE)
     cards = [{**c, "index": c["deck_index"]} for c in merged["cards"]]
     return {"cards": cards, "complete": merged["complete"], "screens": len(screens), "problems": merged["problems"]}
+
+
+def _save_scan_frames(frames, problems) -> None:
+    """整副拼接不可信时把每一屏存下来（Windows 第三局：MuMu 上换卡阶段 2 每局都「没有重叠的行」，要离线复现）。只观察，失败不影响流程。"""
+    try:
+        import cv2
+
+        from hiro.produce.ops import CALIB_DIR
+
+        d = CALIB_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}-牌组拼接"
+        d.mkdir(parents=True, exist_ok=True)
+        for i, f in enumerate(frames):
+            imgio.imwrite(str(d / f"screen{i:02d}.png"), f)  # PNG：JPEG 压缩后卡图识别结果会变（实机认出的卡离线成了「?」），复现不了
+        (d / "problems.txt").write_text("\n".join(map(str, problems)), encoding="utf-8")
+        logger.info("牌组拼接不可信，%d 屏存到 %s", len(frames), d)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("牌组拼接存帧失败：%s", e)
 
 
 def _dialog_swipe(region, down: bool, swipe) -> None:
@@ -794,7 +816,7 @@ def _memory_snap(img, tag: str) -> None:
         d = CALIB_DIR / f"{time.strftime('%Y%m%d-%H%M%S', time.localtime(_memory_snap.t0))}-回忆"
         d.mkdir(parents=True, exist_ok=True)
         _memory_snap.n += 1
-        cv2.imwrite(str(d / f"{_memory_snap.n:02d}-{tag}.jpg"), img)
+        imgio.imwrite(str(d / f"{_memory_snap.n:02d}-{tag}.jpg"), img)
     except Exception:
         pass
 
@@ -1130,7 +1152,7 @@ def _snap_step3(orig):
             d = Path("reports/live/rental")
             d.mkdir(parents=True, exist_ok=True)
             p = d / f"step3-memory-{time.strftime('%Y%m%d-%H%M%S')}.png"
-            cv2.imwrite(str(p), img)
+            imgio.imwrite(str(p), img)
             texts = [t.text for t in ocr.ocr()]
             hit = [t for t in texts if "レンタル" in t]
             logger.info("第 3 步回忆选择：截图 %s；租借字样 %s", p, hit or "无")

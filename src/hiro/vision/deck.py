@@ -199,14 +199,30 @@ def read_card_cell(crop: MatLike, img: MatLike | None = None, rect: tuple[int, i
 
     v_mean = float(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)[:, :, 2].mean())
     dimmed = v_mean < DIM_V_MAX
-    look = cv2.convertScaleAbs(crop, alpha=min(DIM_GAIN_MAX, DIM_TARGET_V / max(v_mean, 1.0))) if dimmed else crop
-    card = match_card_region(crop) or (match_card_region(look) if dimmed else None)
+    gain = min(DIM_GAIN_MAX, DIM_TARGET_V / max(v_mean, 1.0))
+    look = cv2.convertScaleAbs(crop, alpha=gain) if dimmed else crop
+    card = _dimmed_card(crop, gain, match_card_region) if dimmed else match_card_region(crop)
     if img is None or rect is None:
         img, rect = crop, (0, 0, crop.shape[1], crop.shape[0])
     card_id, name, icon = _with_icons(card, img, rect, icons)
     return {"card_id": card_id, "name": name,
             "upgrade": _plus(look) if card_id else None, "customized": _customized(look) if card_id else None,
             "dimmed": dimmed, **({"icon": icon} if icon is not None else {})}
+
+
+DIM_VOTE_GAINS = (0.8, 0.9, 1.0)  # 压暗格按这几档提亮各认一次（乘在 gain 上），至少 2 次一致才算
+
+
+def _dimmed_card(crop: MatLike, gain: float, match):
+    """压暗的格子（强化对话框里已强化的卡）：原图直接认会认成别的卡（Windows 第五局「えいえいおー」→「潜在能力」），
+    提亮过头也会（「アイドル宣言」→「ハートの合図」/「準備運動」）。几档提亮投票，多数一致才用，否则 None（拼接时当通配）。"""
+    from collections import Counter
+
+    hits = [c for k in DIM_VOTE_GAINS if (c := match(cv2.convertScaleAbs(crop, alpha=gain * k))) is not None]
+    if not hits:
+        return None
+    best, n = Counter(c._id for c in hits).most_common(1)[0]
+    return next(c for c in hits if c._id == best) if n >= 2 else None
 
 
 def read_card_grid(img: MatLike, region: tuple[int, int, int, int], geometry: str | None = None, icons: bool = False) -> list[dict]:
@@ -435,18 +451,24 @@ def _cell_match(a: dict, b: dict) -> bool | None:
     return a["card_id"] == b["card_id"] and (a.get("upgrade") is None or b.get("upgrade") is None or a["upgrade"] == b["upgrade"])
 
 
+BLOCK_CONFLICT_MIN_ROWS = 2  # 至少几行的重叠块才容许一格两屏认得不一样
+
+
 def _block_match(ra: list[list[dict]], rb: list[list[dict]]) -> bool:
     """两块行对得上：每行张数相同、每格相同或通配，且两边都认出且相同的格数 ≥ 行数（全是通配的块不作对齐依据；
-    第十四局第 1 屏末行两格都没认出，按行要求会整块对不上）。"""
-    hits = 0
+    第十四局第 1 屏末行两格都没认出，按行要求会整块对不上）。
+    ≥ 2 行的块容许一格两屏认得不一样（卡图识别偶尔认错一格；Windows 第四局 MuMu 换卡阶段 2 每次都因此「第 3 屏没有重叠的行」，
+    拼出 27–28 张），但其余格要几乎全对上（相同格 ≥ 3×行数 − 1）。"""
+    hits = conflicts = 0
     for x, y in zip(ra, rb, strict=True):
         if len(x) != len(y):
             return False
         res = [_cell_match(a, b) for a, b in zip(x, y, strict=True)]
-        if False in res:
-            return False
         hits += res.count(True)
-    return hits >= len(ra)
+        conflicts += res.count(False)
+    if conflicts == 0:
+        return hits >= len(ra)
+    return conflicts == 1 and len(ra) >= BLOCK_CONFLICT_MIN_ROWS and hits >= 3 * len(ra) - 1
 
 
 DECK_SIZE_TOL = 2  # 拼出的张数与记账张数最多差几张（记账会漏记少数事件）
@@ -464,7 +486,7 @@ def merge_dialog_screens(screens: list[list[dict]], expected: int | None = None)
     没认全的卡另列 unknown（也写进 problems），不影响 complete。
     第十四局相談删除：18 张一屏放得下，滑了一次画面没变，两屏没认出的格不同 → 旧版对不上、整屏接在后面，拼成 36 张。"""
     rows: list[list[dict]] = []
-    new_rows, problems = [], []
+    new_rows, problems, problems_soft = [], [], []  # problems_soft：只提示，不影响 complete
     for n, cards in enumerate(screens):
         by_row: dict[int, list] = {}
         for c in cards:
@@ -475,10 +497,13 @@ def merge_dialog_screens(screens: list[list[dict]], expected: int | None = None)
             if _block_match(rows[len(rows) - size :], screen_rows[:size]):
                 k = size
                 break
-        for i in range(k):  # 对齐的行：用这一屏认出的补上前一屏没认出的格
+        for i in range(k):  # 对齐的行：用这一屏认出的补上前一屏没认出的格；两屏认得不一样的格不知道信哪边，记成没认全
             old = rows[len(rows) - k + i]
             for j, (x, y) in enumerate(zip(old, screen_rows[i], strict=True)):
-                if (x.get("card_id") is None or x.get("upgrade") is None) and y.get("card_id") is not None and y.get("upgrade") is not None:
+                if _cell_match(x, y) is False:
+                    old[j] = {**x, "card_id": None, "name": None, "upgrade": None}
+                    problems_soft.append(f"第 {n + 1} 屏第 {i + 1} 行第 {j + 1} 格和上一屏认得不一样（{x.get('name')} / {y.get('name')}），记成没认全")
+                elif (x.get("card_id") is None or x.get("upgrade") is None) and y.get("card_id") is not None and y.get("upgrade") is not None:
                     old[j] = y
         if rows and k == 0 and screen_rows:
             problems.append(f"第 {n + 1} 屏和上一屏没有重叠的行（滑过了头？），按接在后面处理")
@@ -495,6 +520,7 @@ def merge_dialog_screens(screens: list[list[dict]], expected: int | None = None)
         problems.append(f"拼出 {len(out)} 张，记账 {expected} 张，差太多")
     unknown = [c["deck_index"] for c in out if c["card_id"] is None or c["upgrade"] is None]
     complete = not problems  # 个别卡没认全不算拼接错（决策不会选认不出的卡），另列 unknown
+    problems.extend(problems_soft)
     if unknown:
         problems.append(f"第 {unknown} 张没认全")
     return {"cards": out, "new_rows": new_rows, "problems": problems, "unknown": unknown, "complete": complete}
@@ -612,8 +638,15 @@ def read_confirm_dialog(img: MatLike) -> dict | None:
             break
     # 「270→221」「116 → 16」在大号 P 硬币图标右侧，可能拆成几个框；效果说明里的图标也会被认成「→」，
     # 所以以 P 图标（高 ≥40）所在行为准，找不到再用最后一个带「→」的框
-    coin = next((b for t, b in boxes if t == "P" and b[3] - b[1] >= 40), None)
+    # RapidOCR 读不出「→」、P 图标框也偏小（高 35，Vision 54；小号价格图标约 26）
+    coin = next((b for t, b in boxes if t == "P" and b[3] - b[1] >= 30), None)
     arrow = coin or next((b for t, b in reversed(boxes) if "→" in t), None)
+    if arrow is None:  # 都找不到：取最靠下、右半边有两个纯数字的一行（「116」「16」）
+        digit_rows = sorted(((b[1] + b[3]) // 2, b) for t, b in boxes if t.isdigit() and b[0] >= 250)
+        for cy, b in reversed(digit_rows):
+            if sum(abs(cy2 - cy) <= 12 for cy2, _ in digit_rows) >= 2:
+                arrow = b
+                break
     before = after = None
     if arrow is not None:
         cy = (arrow[1] + arrow[3]) // 2
@@ -661,6 +694,12 @@ def _item_from_name(text: str) -> dict | None:
         hits = [n for n in _drinks_by_name() if _fold_kana(n) == _fold_kana(t)] if t else []
         if len(hits) == 1:
             return {"kind": "drink", "drink_id": _drinks_by_name()[hits[0]], "name": hits[0]}
+    from hiro.vision.ocr import engine
+
+    if engine() != "vision":  # RapidOCR 等常错一个字（「冒険心」→「目険心」）：只差一个字且唯一时按主数据名称再认一次
+        for t in (text, text[1:]):
+            if (near := _near_name(t)) is not None:
+                return _item_from_name(near)
     return None
 
 
@@ -669,6 +708,15 @@ _SMALL_KANA = str.maketrans("ァィゥェォャュョッヮヵヶぁぃぅぇぉ
 
 def _fold_kana(text: str) -> str:
     return text.translate(_SMALL_KANA)
+
+
+def _near_name(text: str) -> str | None:
+    """主数据里与 text 等长（≥3 字）、只差一个字的名称；恰好一个才返回（卡名含「+」）。"""
+    if len(text) < 3:
+        return None
+    names = {n for n in _cards_by_full_name()} | set(_drinks_by_name()) | set(_pitems_by_name())
+    hits = {n for n in names if len(n) == len(text) and sum(a != b for a, b in zip(n, text, strict=True)) == 1}
+    return hits.pop() if len(hits) == 1 else None
 
 
 def read_acquire_popup(img: MatLike, art: bool = True) -> dict | None:

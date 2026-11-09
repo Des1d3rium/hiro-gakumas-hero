@@ -46,15 +46,17 @@ def _badge_kind(img: MatLike, x1: int, y1: int, y2: int) -> str | None:
 def _badge_fallback(img: MatLike, cy: int) -> tuple[int | None, int | None]:
     """整块识别漏掉的角标（选中后其余行压暗，小字常读不出）：单独裁按钮右上角放大再认。→ (体力消耗, P 消耗)。取自 github-f4。"""
     y1, y2 = cy + BADGE[0], cy + BADGE[1]
-    for text, _, b in ocr_boxes(img[y1:y2, 560:700], scale=6, languages=("en-US",)):
-        m = re.search(r"-?\s*(\d{1,3})", text)
-        if not m:
-            continue
-        kind = _badge_kind(img, 560 + b[0], y1 + b[1], y1 + b[3])
-        if kind is None and "-" not in text:
-            continue
-        value = int(m.group(1))
-        return (None, value) if kind == "p" or "P" in text else (value, None)
+    # 先 6 倍（Vision 小字要放大）；读不出再 3 倍补一次：RapidOCR 6 倍时把「-5」读成「5」、框也偏，判不出角标种类
+    for scale in (6, 3):
+        for text, _, b in ocr_boxes(img[y1:y2, 560:700], scale=scale, languages=("en-US",)):
+            m = re.search(r"-?\s*(\d{1,3})", text)
+            if not m:
+                continue
+            kind = _badge_kind(img, 560 + b[0], y1 + b[1], y1 + b[3])
+            if kind is None and "-" not in text:
+                continue
+            value = int(m.group(1))
+            return (None, value) if kind == "p" or "P" in text else (value, None)
     return None, None
 
 

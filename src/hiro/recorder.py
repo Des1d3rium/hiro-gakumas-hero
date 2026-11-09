@@ -11,6 +11,7 @@ from pathlib import Path
 
 import cv2
 from cv2.typing import MatLike
+from hiro import imgio
 
 
 class Recorder:
@@ -25,7 +26,7 @@ class Recorder:
         frame = None
         if image is not None:
             frame = f"frames/{self._seq:05d}-{kind}.jpg"
-            cv2.imwrite(str(self.dir / frame), image, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            imgio.imwrite(str(self.dir / frame), image, [cv2.IMWRITE_JPEG_QUALITY, 85])
         row = {"seq": self._seq, "t": time.time(), "kind": kind, "frame": frame, **data}
         self._events.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
         self._events.flush()

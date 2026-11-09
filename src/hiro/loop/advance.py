@@ -18,6 +18,8 @@ HiroController._quick_page 按它给的位置点；这里只处理认不出的�
 
 from __future__ import annotations
 
+from hiro.vision.textnorm import contains
+
 import time
 from collections.abc import Callable
 from hiro.produce import hif_buttons as BTN
@@ -48,8 +50,7 @@ BLOCK_WORDS = ("購入", "ジュエル", "破棄", "リタイア", "キャンセ
 
 def blocked(texts: list[str]) -> str | None:
     """返回命中的字样（不点的原因），没有返回 None。"""
-    flat = [t.replace(" ", "") for t in texts]
-    return next((w for w in BLOCK_WORDS if any(w in t for t in flat)), None)
+    return next((w for w in BLOCK_WORDS if any(contains(t, w) for t in texts)), None)
 
 
 def burst(texts: list[str], *, shoot: Callable, click: Callable[[int, int], None], sleep: Callable[[float], None] = time.sleep,

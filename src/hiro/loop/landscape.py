@@ -21,12 +21,12 @@
 短暂的加载黑屏可能被误转：第一次转了还黑就还原窗口、重新计时再试一次，第二次还黑才停下。
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import subprocess
 import time
-
-from AppKit import NSApplicationActivateAllWindows, NSApplicationActivateIgnoringOtherApps, NSRunningApplication, NSWorkspace
 
 BUNDLE_ID = "jp.co.bandainamcoent.BNEI0421"
 MENU_VIEW = "显示"  # 系统语言为中文；英文 / 日文系统按下面的候选找
@@ -117,6 +117,8 @@ end tell""")
 
 def _focus(pid: int) -> bool:
     """激活游戏 + 把主窗口提到最前，确认前台应用确实是游戏。"""
+    from AppKit import NSApplicationActivateAllWindows, NSApplicationActivateIgnoringOtherApps, NSRunningApplication
+
     app = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
     if app is None:
         return False
@@ -317,11 +319,15 @@ def switch_fullscreen(want: bool, *, pid: int | None = None, shoot=None, methods
 
 
 def _game_pid() -> int | None:
+    from AppKit import NSRunningApplication
+
     apps = NSRunningApplication.runningApplicationsWithBundleIdentifier_(BUNDLE_ID)
     return int(apps[0].processIdentifier()) if apps and len(apps) else None
 
 
 def _front_app():
+    from AppKit import NSWorkspace
+
     return NSWorkspace.sharedWorkspace().frontmostApplication()
 
 
@@ -356,7 +362,8 @@ class LandscapeGuard:
     EXIT_BLACK_S = 8.0
     EXIT_PORTRAIT_S = 10.0  # 全屏中竖屏且有画面持续这么久：不是 LIVE（误进全屏），退出
 
-    def __init__(self, shoot=None, rotate: bool | None = None):
+    def __init__(self, shoot=None, rotate: bool | None = None, *, active: bool = True):
+        self.active = active  # 只有 PlayCover 有横屏黑屏问题；其他平台（模拟器 / DMM）只用 in_live 判断，不切全屏
         self.shoot = shoot  # 截图函数（给了就按画面核对切换结果）
         self.rotate = rotate  # True：先旋转窗口再试全屏（watch 默认）；None：看 HIRO_LIVE_ROTATE
         self.last_result: str | None = None  # 最近一次切换的结果（方式名 / locked / nogame / failed）
@@ -379,6 +386,8 @@ class LandscapeGuard:
 
     def tick(self, img, texts: list[str] | None = None) -> bool:
         """返回 True 表示本轮做了窗口操作（调用方跳过本轮分发）。"""
+        if not self.active:
+            return False
         now = time.monotonic()
         # 只看中间区域：全屏后窗口顶部有一条白边，整帧均值会超过阈值（q8 / q9 LIVE 结束后一直没退出全屏）
         black = is_black(img)

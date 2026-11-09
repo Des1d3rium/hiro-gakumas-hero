@@ -1,0 +1,139 @@
+{
+ "by_class": {
+  "copy": {
+   "scale": 1.179,
+   "scale_raw": 1.179,
+   "cap": 66663,
+   "floor": null,
+   "expert_mean": 60114,
+   "expert_se": 3492,
+   "pairs": 6,
+   "drinks": [
+    "pdrink_02-3-010"
+   ]
+  },
+  "burst": {
+   "scale": 0.998,
+   "scale_raw": 0.998,
+   "cap": 44619,
+   "floor": null,
+   "expert_mean": 37961,
+   "expert_se": 2688,
+   "pairs": 6,
+   "drinks": [
+    "pdrink_00-2-008"
+   ]
+  },
+  "draw": {
+   "scale": 1.039,
+   "scale_raw": 1.039,
+   "cap": 74596,
+   "floor": null,
+   "expert_mean": 61995,
+   "expert_se": 3055,
+   "pairs": 6,
+   "drinks": [
+    "pdrink_00-2-010"
+   ]
+  },
+  "action": {
+   "scale": 1.44,
+   "scale_raw": 1.44,
+   "cap": 31684,
+   "floor": null,
+   "expert_mean": 26797,
+   "expert_se": 2903,
+   "pairs": 6,
+   "drinks": [
+    "pdrink_00-3-001"
+   ]
+  },
+  "swap": {
+   "scale": 1.168,
+   "scale_raw": 1.168,
+   "cap": 31028,
+   "floor": null,
+   "expert_mean": 22329,
+   "expert_se": 2986,
+   "pairs": 6,
+   "drinks": [
+    "pdrink_00-2-001"
+   ]
+  },
+  "fetch": {
+   "scale": 0.861,
+   "scale_raw": 0.861,
+   "cap": 38522,
+   "floor": null,
+   "expert_mean": 29174,
+   "expert_se": 3089,
+   "pairs": 6,
+   "drinks": [
+    "pdrink_00-2-009"
+   ]
+  },
+  "yaruki": {
+   "scale": 0.825,
+   "scale_raw": 0.825,
+   "cap": 28121,
+   "floor": null,
+   "expert_mean": 20886,
+   "expert_se": 2238,
+   "pairs": 6,
+   "drinks": [
+    "pdrink_02-3-007"
+   ]
+  },
+  "upgrade": {
+   "scale": 1.125,
+   "scale_raw": 1.125,
+   "cap": 20443,
+   "floor": null,
+   "expert_mean": 15522,
+   "expert_se": 2710,
+   "pairs": 6,
+   "drinks": [
+    "pdrink_00-2-004"
+   ]
+  },
+  "recover": {
+   "scale": 6.0,
+   "scale_raw": 179.186,
+   "cap": 31167,
+   "floor": 12367,
+   "expert_mean": 17948,
+   "expert_se": 2791,
+   "pairs": 6,
+   "drinks": [
+    "pdrink_00-2-003"
+   ]
+  },
+  "impression_cash": {
+   "scale": 2.842,
+   "scale_raw": 2.842,
+   "cap": 23765,
+   "floor": null,
+   "expert_mean": 13910,
+   "expert_se": 2364,
+   "pairs": 6,
+   "drinks": [
+    "pdrink_02-2-006"
+   ]
+  }
+ },
+ "expert_engine": {
+  "digital_hiro": "eb0ebfa",
+  "gakumas_sim": "a448e07"
+ },
+ "community_engine": {
+  "digital_hiro": "29c7402",
+  "gakumas_sim": "a448e07"
+ },
+ "expert_policy": {
+  "worlds": 3,
+  "depth": 1,
+  "drink_rule": "R1",
+  "drink_se": true
+ },
+ "made": "2026-11-04 22:22:07"
+}

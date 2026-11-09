@@ -1,0 +1,11 @@
+{
+  "note": "考试最终属性倍率的观测。actual_permil 来自考试存档；stats/stars 来自培育记录（verified=false 表示属性未在开考前核实）。",
+  "observations": [
+    {"id": "campus-20261019-r1", "client": "3.4.1", "mode": "produce-008", "position": 7, "idol_card_id": "i_card-shro-3-007",
+     "stats": {"Vo": 2231, "Da": 2375, "Vi": 1354}, "stats_verified": false, "stats_source": "state.json day5 次日观测（day6 商店日未核实）",
+     "stars": 916, "actual_permil": {"Vo": 38660, "Da": 36680, "Vi": 23670}},
+    {"id": "campus-20261019-r2", "client": "3.4.1", "mode": "produce-008", "position": 9, "idol_card_id": "i_card-shro-3-007",
+     "stats": {"Vo": 2231, "Da": 2375, "Vi": 1354}, "stats_verified": false, "stats_source": "同 R1（轮间不加属性，假设）",
+     "stars": 1096, "actual_permil": {"Vo": 37510, "Da": 35720, "Vi": 22970}}
+  ]
+}

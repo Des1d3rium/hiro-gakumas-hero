@@ -1,4 +1,4 @@
-# 来源：digital-hiro src/hiro/produce/exam_policy.py @ c3fc27f（GPL-3.0-or-later）
+# 来源：digital-hiro src/hiro/produce/exam_policy.py（develop 864e037）（GPL-3.0-or-later）
 """考试出牌的决策源（reports/analysis/expert-preview-pilot.md）。
 
     llm     现状：规则 → 本回合计划 → LLM → 硬约束 → 兜底（BattleBrain.decide）
@@ -44,6 +44,14 @@ EXPERT_RULES: set = set(RULES_ALL)  # 2026-11-01 bench 至今没有显著为负�
 # 纯加数值 = knowledge.STAT_DRINK_CLASSES（やる気 / 元気 / 好印象 / 平加：永久叠加、没有时机依赖；ブレンド、コーヒー、烏龍茶、ハーブティー、ルイボス、初星水）。
 # 手里有、能喝时直接喝（多瓶就连喝），drink_budget（每回合最多 1 瓶）和 E1（不到 1 个标准误不喝）都不拦它。
 STAT_DRINK_FIRST = True
+# D37（协调 2026-11-04，第三十二局 #236：R2 剩 12、手里只有 せのび+、已喝 コーヒー，drink_budget 拦下 パワフル漢方，预演 +9.4 万 ≈ 5 SE）：
+# 「卡手时抽牌类不拦」的两个缺口。行为变化，都默认关，由协调 / 总控决定：
+#   STUCK_FETCH_EXEMPT：豁免的类别再加检索（knowledge 的 fetch：漢方 把固有卡从山札 / 捨札拿到手里，卡手时作用和抽牌一样）；
+#   STUCK_BY_PREVIEW：「卡手」再加一种——手里能打的牌在预演里都不如结束回合（#236 せのび+ 能打但比结束回合低 5.3 万，现规则不算卡手）。
+STUCK_FETCH_EXEMPT = False  # 协调 2026-11-04 定不开：#236 实测 T1 喝 − 实机路径 −2.5 万 ± 1.6 万
+STUCK_BY_PREVIEW = False
+# 只作数据（协调 2026-11-04）：空手豁免只在剩余回合 ≤ N 时放行（None = 现行，不限）。空手豁免是用户规则，没有用户同意不改默认
+STUCK_EMPTY_MAX_REM: int | None = None
 PREVIEW_BUDGET_S = 7.5  # 专家 / shadow 模式下每步预演的时间预算（preview_actions 的 deadline）；p90 约为它 +0.2 s（离线验收）
 
 # 退回 llm 的原因（记 exam_policy_fallback）
@@ -94,7 +102,8 @@ def expert_pick(state, live_why: str | None = None) -> ExpertPick:
     stat_rows = [r for r in cands if _is_stat_drink(state, r["legal_action"])] if STAT_DRINK_FIRST else []
     blocked = drink_budget_blocks(state)
     if blocked:
-        apply("drink_budget", lambda r: not r["legal_action"].startswith("drink") or _budget_exempt(state, r["legal_action"]), blocked)
+        rows_now = list(cands)
+        apply("drink_budget", lambda r: not r["legal_action"].startswith("drink") or _budget_exempt(state, r["legal_action"], rows_now), blocked)
     if EXPERT_DRINK_SE and cands and cands[0]["legal_action"].startswith("drink"):
         # E1：饮料只比最好的非饮料动作多不到 1 个标准误：不喝（协调 4a / 用户：噪声里的差不能作为喝的理由）
         alt = next((r for r in cands if not r["legal_action"].startswith("drink")), None)
@@ -155,20 +164,38 @@ def _is_stat_drink(state, action: str) -> bool:
     return d is not None and drink_class(d.drink_id) in STAT_DRINK_CLASSES
 
 
-def _budget_exempt(state, action: str) -> bool:
+def _budget_exempt(state, action: str, rows: list | None = None) -> bool:
     """drink_budget（每回合最多 1 瓶）不拦的饮料：
     - 卡手时的抽牌类饮料（knowledge.DRAW_CLASSES：抽牌 / 换手）：手里没有能打的牌（空手 / 只剩トラブル 或不可用的牌）、还有行动。
       用户 2026-11-02「抽牌药在手头没有可打的牌的时候用」；时机曲线「卡手时喝」+3.5–6.9 万，高于社区旧规则（决策-15 §2）。
       第二十一局 R2 #140：剩 9、空手、还有 1 次行动，drink_budget 拦下 センブリソーダ，只能结束回合（预演 −10.9 万）；
-    - R1d（总控 2026-11-02 重测用）：抽牌类一律不拦。"""
+    - R1d（总控 2026-11-02 重测用）：抽牌类一律不拦。
+    D37 开关：STUCK_FETCH_EXEMPT 把检索类也算进来；STUCK_BY_PREVIEW 时 rows（这一步的预演行）里能打的牌都不如结束回合也算卡手。"""
     if not action.startswith("drink:"):
         return False
+    d = _drink_of(state, action)
+    if d is None or not _stuck_exempt_class(d.drink_id):
+        return False
+    if EXPERT_DRINK_RULE == "R1d":
+        return True
+    if _stuck(state) and (STUCK_EMPTY_MAX_REM is None or (state.remaining_turns or 0) <= STUCK_EMPTY_MAX_REM):
+        return True
+    return STUCK_BY_PREVIEW and _preview_stuck(rows)
+
+
+def _stuck_exempt_class(drink_id: str | None) -> bool:
     from hiro.state.knowledge import DRAW_CLASSES, drink_class
 
-    d = _drink_of(state, action)
-    if d is None or drink_class(d.drink_id) not in DRAW_CLASSES:
+    k = drink_class(drink_id)
+    return k in DRAW_CLASSES or (STUCK_FETCH_EXEMPT and k == "fetch")
+
+
+def _preview_stuck(rows: list | None) -> bool:
+    """预演意义上的卡手：有结束回合这一行，且每张能打的牌的期望终局分都不高于它（手里没有能打的牌也算）。"""
+    if not rows:
         return False
-    return EXPERT_DRINK_RULE == "R1d" or _stuck(state)
+    end = next((r["期望终局分"] for r in rows if r.get("legal_action") == "skip"), None)
+    return end is not None and all(r["期望终局分"] <= end for r in rows if str(r.get("legal_action", "")).startswith("play:"))
 
 
 def _stuck(state) -> bool:
