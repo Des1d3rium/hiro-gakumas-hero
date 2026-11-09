@@ -12,8 +12,14 @@
 一张牌属于哪些效果组：ProduceCard.effectGroupIds，加上已做客制化的 ProduceCardGrowEffect.effectGroupIds
 （インフルエンサー+ 本身没有「強気」组，客制化「強気追加」后才有）。
 
-这一层只做「读」：编译出的结构给账本推演 / 回放核对用；判断不了的字段如实标成未支持，matches 返回 None（不知道），
-不猜。还没有接进 VEIL 的出牌决策（见 TODO：通用 P 道具引擎）。
+判断不了的字段如实标成未支持，matches / holds 返回 None（不知道），不猜；调用方遇到 None 退回手写规则。
+
+已接进 VEIL 账本（hiro.brain.veil，开关都默认开、=0 退回手写规则）：
+  · 夜空を従える花 推不推计数（flower_counts，VEIL_PITEM_FLOWER）；
+  · 夜空计数到了的效果、一番星「回合开始非温存就切のんびり」（flower_trigger_outcome / card_start_turn_enchant +
+    start_turn_fire，VEIL_ENCHANT_ENGINE）。目前只用 Outcome 里的姿态，元気 / 熱意 等不进账本。
+  · 回忆能力表（hiro.brain.memory_ability）也由这里编译。
+还没做成通用引擎：夜空的道具 id 写死（FLOWER_ITEM），不按持有的 P 道具自动装附魔；其余触发时机、条件、发动次数见 TODO.md「通用 P 道具引擎」。
 """
 
 from __future__ import annotations

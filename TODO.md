@@ -3,14 +3,21 @@
 ## 通用 P 道具引擎（使用者 2026-11-09「怎么让 P 道具进通用逻辑」）
 
 已做：加载器 `src/hiro/brain/pitems.py`（ProduceItem → ProduceItemEffect → ProduceExamStatusEnchant → ProduceExamTrigger / ProduceExamEffect / ProduceCardSearch，1103 个全能编译）；
-夜空计数换成加载器（`VEIL_PITEM_FLOWER`，默认开，=0 退回手写规则）；回放 `tools/audit/pitem_replay.py`：54 份 trace 52 份每帧和画面「N回」一致。
+夜空计数换成加载器（`VEIL_PITEM_FLOWER`，默认开，=0 退回手写规则）；回放 `tools/audit/pitem_replay.py`：54 份 trace 52 份每帧和画面「N回」一致；
+夜空触发后的效果、一番星的回合开始切换也走加载器（`VEIL_ENCHANT_ENGINE`，默认开，=0 退回手写规则）。
+
+还差的是「通用」：现在只认写死的两样（夜空 `FLOWER_ITEM`、一番星按卡名），不按持有的 P 道具自动装附魔。
+实机 VEIL 牌组画面读到的另外两件：H.I.F応援棒（青）（考试开始补牌，由 `HIRO_VEIL_HIF_FILL` 单独处理）、ゼミパーカー（センス牌打出后切温存，VEIL 用不上），
+所以做通用引擎不会改变现在 VEIL 的行为，价值在换偶像 / 换道具时。
 
 - [x] **回忆能力换成加载器**（使用者 2026-11-09）：`hiro.brain.memory_ability.table()` 走 `pitems.enchant()`——触发卡按 enc01 牌搜索的卡 id，分类按效果类型（ExamPlayableValueAdd / +ExamCardDraw / ExamCardMove 眠気），次数按 enc02 附魔效果 count；115 项和说明文字逐项一致（`test_loader_table_matches_master_texts`），加载器给不出时退回文字分类。
-- [ ] **其他触发时机**：现在只推演「每 N 张触发」（ExamPlayCountInterval / …After）。补：回合开始（ExamStartTurn）、打牌前后（ExamCardPlay / ExamCardPlayAfter）、回合结束（ExamEndTurn）、考试开始（ExamStartExam）、每 N 回合（ExamTurnInterval / ExamPlayTurnCountInterval）、姿态变化（ExamStanceChange*）、状态变化（ExamStatusChange）。每类接到账本推演的对应时点。
-- [ ] **触发条件**：Condition.holds 只认 NoStance；补姿态 / 段階、体力、元気、全力値、剩余回合（RemainingTurn）等字段状态，以及 fieldStatusProduceCardSearchIds（「手里有 N 张某类牌」）。
-- [ ] **效果执行器**：效果目前只读出来（类型 / 数值 / 回合），没有改账本局面。按 ProduceExamEffect.effectType 映射成局面变化：姿态（Concentration / Preservation / OverPreservation / FullPower）、追加出牌次数、抽牌、全力値、元気、熱意、生成牌；认不出的类型只记。现在夜空触发后的「切のんびり」仍是 after_play 手写的。
-- [ ] **发动次数**：fireLimit / fireInterval（一场几次、隔几回合）还没记账。
-- [ ] **一番星（星々を見下ろす一番星）等**：VEIL 里手写的「回合开始非温存就切のんびり、3 次」换成加载器。
+- [ ] **按持有的 P 道具装附魔**：考试开始按画面 / 账本的 P 道具 id 逐个 `load_pitem`，装上全部附魔，替掉写死的 `FLOWER_ITEM`。开关后面、默认关，用 `pitem_replay` 对夜空回放一致后再开。
+- [ ] **核对 Common 牌算不算「某计划的牌」**：`CardSearch.matches` 把 `ProducePlanType_Common` 当成符合任意 planType。通用引擎自动装上 ゼミパーカー（搜索 planType = Plan1）后，VEIL 打通用牌会被推成「切温存」；实机核对前不要让这类搜索改账本。
+- [ ] **其他触发时机**：已推演「每 N 张触发」（ExamPlayCountInterval / …After），以及牌装上的回合开始附魔（ExamStartTurn，`start_turn_fire`，现在只用于一番星）。补：P 道具的回合开始、打牌前后（ExamCardPlay / ExamCardPlayAfter）、回合结束（ExamEndTurn）、考试开始（ExamStartExam）、每 N 回合（ExamTurnInterval / ExamPlayTurnCountInterval）、姿态变化（ExamStanceChange*）、状态变化（ExamStatusChange）。每类接到账本推演的对应时点。
+- [ ] **触发条件**：`Condition.holds`（计数用）只认 NoStance；模块级 `holds()`（回合开始附魔用）另认温存 / 強気 / 全力 三种姿态。补段階、体力、元気、全力値、剩余回合（RemainingTurn）等字段状态，以及 fieldStatusProduceCardSearchIds（「手里有 N 张某类牌」）。
+- [ ] **效果执行器**：`apply_effects` 已把姿态、追加出牌次数、抽牌、全力値、元気映射成 `Outcome`，熱意、生成牌等记进 `unknown`；但 VEIL 账本只取 `Outcome.stance`（夜空触发切のんびり、一番星切のんびり），其余几项还没落到账本局面。
+- [ ] **发动次数**：fireLimit / fireInterval（一场几次、隔几回合）还没记账；一番星的「以降3回まで」仍由账本 `veil_star` 计数。
+- [x] **一番星（星々を見下ろす一番星）**：「回合开始非温存就切のんびり」的条件和效果按加载器判（`veil.start_turn`，`VEIL_ENCHANT_ENGINE`），主数据不可用时退回手写规则。
 - [ ] **牌搜索还不支持的字段**：cardSearchTag（22 个道具用到）、stamina 上下限；遇到时返回「不知道」。
 - [ ] **账本客制化核对**：回放查出 veil-senbatsu 批次（1-d、3-b、3-c）账本给 インフルエンサー+ 记了「強気追加」，画面计数显示没有；1-e 账本漏了 veil-deck2 的「強気追加」。用 `memory-save --scan` 重读 veil-senbatsu。1-d R1、1-f R1 两份还没对上，待查。
 

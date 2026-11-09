@@ -32,7 +32,7 @@
 2. **卡牌、饮料、道具都按名字写死。** 写死的包括：核心牌 `CORE`、四张牌在循环里的位置（OD、教えて、巻き返し、エンタ）、`ORDERS`、
    アイドルになります 的三选二条件、ひと呼吸 要后打、ガタゴトすやすや / 一心不乱 的姿态要求、四种饮料 `WHEY/SODA/BOOST/EXTRA_TURN`、一番星、
    `FP_RESERVE_AT=3`、`LIMITS`。其中很多信息主数据里已经有了：使用条件、全力値消費、姿态要求、再动、抽牌、饮料效果。
-   这些都已经结构化（`card_fx`、`pitems`），只是 decide 还没改成用它们。
+   这些都已经结构化（`card_fx`、`pitems`），只是 decide 还没改成用它们（账本那一侧已经在用：夜空计数、一番星按 `pitems` 推）。
 3. **开关太多，默认值和实际跑的配置对不上。** 现在一共 27 个开关，15 个默认开。睡眠流程的启动脚本另外又打开了 11 个默认关的开关
    （CYCLE_PLAN、IDOL_CLEAR、STRONG_TEACH、CYCLE_WHEY、DRIVE_CHECK、STANCE_LATER、HP_ZERO、STANCE_SCREEN、CYCLE_TAP、IDOL_FP_GATE、STANCE_UNLOCK）。
    结果是：实机验证过的配置不是代码的默认配置，代码里还留着两套逻辑分支。
