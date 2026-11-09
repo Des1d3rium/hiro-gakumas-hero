@@ -52,18 +52,21 @@
 | 插件 | 回答什么 | 开源默认实现 |
 |---|---|---|
 | `asset_source` | 素材和主数据从哪来 | `defaults/assets.py`：KAA 公开数据 + 使用者自建素材 |
-| `exam_state_source` | 考试局面从哪来 | `defaults/exam_state.py`：画面识别 + 状态机记账（不知道牌库顺序） |
+| `exam_state_source` | 考试局面从哪来 | `defaults/exam_state.py`：画面识别 + 状态机记账（不知道牌库顺序）。另有 `hiro.sim.screen_source:SimScreenExamStateSource`：同样从画面读，再用模拟器跟踪局面、给每个候选动作附预演（不读存档） |
 | `exam_advisor` | 考试每一步怎么打 | `defaults/advisor.py`：社区规则链 + LLM 兜底 |
 
   换实现：环境变量 `HIRO_ASSET_SOURCE` / `HIRO_EXAM_STATE_SOURCE` / `HIRO_EXAM_ADVISOR`（写成 `包.模块:类名`），
   或在 `pyproject.toml` 的入口点组 `hiro_gakumas.plugins` 里登记，或代码里 `hiro.plugins.register(...)`。
 
-- **不在这个仓库里的东西**：考试存档读取、模拟器、预演搜索（带模拟器的出牌专家）、价值表。作者用私有插件接回去；
-  你用默认实现就能玩，只是考试决策没有模拟器那么强。
+- **模拟器**（`hiro/sim`，引擎 `vendor/gakumas-player/gakumas_sim`，主数据由 setup 第 6 步从社区公开的 gakumasu-diff 下载构建）：
+  轮间买什么 / 刷不刷货架、饮料取舍、本战相談按模拟算第二轮期望分（`HIRO_SIM=0` 关掉，只按社区规则）；
+  考试出牌的预演要选用 `SimScreenExamStateSource`（见上表）。主数据没构建时这些自动退回社区规则。
+- **不在这个仓库里的东西**：考试存档读取（解密）、高保真考试引擎。作者用私有插件接回去。
 
 ## 三、环境
 
-只支持 macOS（Apple Silicon）+ PlayCover 跑 iOS 版游戏；Android（ADB）留了接口，还没实现。
+平台与 KAA 支持的对齐（见下面「设备」）：**作者实机验证过的只有 macOS（Apple Silicon）+ PlayCover**；
+安卓设备 / 模拟器（ADB）、MuMu、雷电、DMM 版走 KAA 的设备工厂，代码接好了、有离线测试，但没有实机打过一局。
 
 1. 装环境（一条命令，可重复跑，做过的步骤会跳过；需要 uv、git 和网络）：
    ```bash
@@ -76,6 +79,31 @@
    默认的截图和点击走游戏进程内的 MaaTools 服务（见 `hiro/device.py` 开头注释），**不要求窗口在前台，也不动鼠标**；
    只有 MaaTools 连不上、退回 Quartz 截图 + `CGEventPostToPid` 时，才需要保持竖屏窗口在前台。
    macOS 要给运行它的终端 / 程序「屏幕录制」权限；截图报 `could not create image from display` 时先查这个权限和显示器状态。
+
+   **设备**（`HIRO_DEVICE`，与 KAA 支持的平台对齐）：
+
+   | `HIRO_DEVICE` | 平台 | 截图 / 点击 | 验证情况 |
+   |---|---|---|---|
+   | `auto`（缺省） | macOS：MaaTools 能连就 `maatools`，否则 `quartz`；其他系统要求显式设置 | — | — |
+   | `maatools` | macOS + hguandl 分支 PlayCover | 游戏进程内 MaaTools | 作者实机验证（6 次夺冠） |
+   | `quartz` | macOS + 原版 PlayCover | Quartz 截图 + `CGEventPostToPid`，要游戏在前台 | 作者实机用过 |
+   | `adb` | 任意安卓设备 / 模拟器（KAA 的 custom） | `HIRO_SCREENSHOT=adb`（缺省）或 `uiautomator2` | 未实机验证 |
+   | `mumu` | MuMu 12 | `adb`（缺省；Windows 上 `nemu_ipc` 截图可用但点击送不到游戏，别用） | Windows + MuMu 6.8 实机打过（见下） |
+   | `leidian` | 雷电模拟器 | `adb` / `uiautomator2` | 未实机验证 |
+   | `dmm` | Windows DMM 版 | `windows_background`（缺省）/ `windows_native` | 未实机验证 |
+
+   - `HIRO_ADB=ip:port` 指 adb 地址（`adb` / `leidian` 用，缺省 `127.0.0.1:5555`；`mumu` 不设时由 MuMu SDK 自动取）；
+     `HIRO_EMULATOR_INSTANCE` 指 MuMu / 雷电的实例 ID（MuMu 缺省 `0`，多开时指定）。
+     MuMu 缺省开后台模式（按游戏包名截它所在的显示；MuMu 6 把应用放在单独的显示里，不开时截到的是模拟器桌面），
+     `HIRO_MUMU_BACKGROUND=0` 关掉。组合不合法时开局前就报错（用 KAA 自己的配置校验）。
+   - 非 PlayCover 后端不做 PlayCover 专用的退路（横屏 LIVE 黑屏时切全屏、MaaTools 点了没反应时用真实鼠标再点）。
+   - 文字识别（`HIRO_OCR`）：macOS 缺省用 Apple Vision，其他系统自动改用 KAA 自带的 RapidOCR（日文 / 英文模型）。
+     RapidOCR 在作者的回归截图上的准确率与速度见 `docs/assets.md`；换平台后先用自己的截图验一遍。
+   - Windows 用 PowerShell 版安装脚本：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1`（步骤与 `setup.sh` 相同）。
+     作者的 Windows 台式机上实测过安装、自检和全套离线测试，以及 `HIRO_DEVICE=mumu`（MuMu 6.8，截图 / 点击 `adb`）
+     实机打 H.I.F 本战（2026-11-07–09，22 局 3 次夺冠，RapidOCR + Codex）。`HIRO_SCREENSHOT=nemu_ipc` 时截图正常、
+     点击不生效（页面一直不变，开局 guard_new 15 秒超时），缺省已改成 `adb`。
+     KAA 公开数据的下载镜像连不上时，从别处拷一份 `game_data` 目录，用 `-NoData` 加 `HIRO_KAA_GAME_DATA` 指过去。
 3. 素材（见 `docs/assets.md`）：识别用的卡面、图标、字体、Sprite、布局随仓库在 `assets/pack/`，开箱即用。
    客户端更新后认不出新图标时，才打一两场考试，用 `tools/assets/capture_icons.py` 补；设了 `HIRO_BUNDLED_ASSETS=0` 时则必须补，
    否则考试效果名和 P 道具名一直是 `None`，策略层只能用保守规则，分数会明显低。
@@ -110,16 +138,21 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | `HIRO_SUPPORT_SET` / `HIRO_MEMORY_SET` | 游戏里的编成号。没设、也没有开局编成方案时，在碰游戏前退出（码 2）。写 `auto` 等于 KAA「おまかせ」，支援卡会直接确认列表第一张租借卡，只在你明确想这样时用 |
 | `HIRO_MEMORY_CARDS` | 回忆编成带进培育的技能卡 ID（逗号分隔）。决策器把它们算作已有，三选一里不再找；不设时用开局编成方案里的，都没有就当空。手动设编成号时记得一起设 |
 | `HIRO_FORMATION_PLAN` | 开局编成方案文件，默认 `conf/formation-plan.json`；`off` = 不读。见 [docs/formation-plan.md](docs/formation-plan.md) |
-| `HIRO_LLM` | LLM，如 `claude:sonnet`（默认，走 `claude -p`）、`openai:<model>`（OpenAI 兼容）。`--no-llm` 只用规则 |
+| `HIRO_LLM` | LLM，如 `claude:sonnet`（默认，走 `claude -p`）、`codex[:<model>]`（走 OpenAI Codex CLI 的 `codex exec`，用 ChatGPT 账号登录，不要 API key；Windows 上能自动找到 Codex 应用自带的 `codex.exe`，或用 `HIRO_CODEX_BIN` 指定）、`openai:<model>`（OpenAI 兼容）。`--no-llm` 只用规则。需要代理的网络给进程设 `HTTPS_PROXY` |
 | `HIRO_KAA_GAME_DATA` | KAA 公开数据目录（含 `game.db`），默认 `resources/game_data` |
 | `HIRO_USER_ASSETS` | 自建素材目录（`capture_icons` 的产出），可选；与随仓库素材包并用，同类图库取文件更多的一个 |
 | `HIRO_BUNDLED_ASSETS` | 随仓库素材包目录，默认 `assets/pack`；设 `0` 关掉 |
-| `HIRO_ASSET_SOURCE` / `HIRO_EXAM_STATE_SOURCE` / `HIRO_EXAM_ADVISOR` | 换插件实现（`包.模块:类名`） |
+| `HIRO_ASSET_SOURCE` / `HIRO_EXAM_STATE_SOURCE` / `HIRO_EXAM_ADVISOR` | 换插件实现（`包.模块:类名`）。考试预演：`HIRO_EXAM_STATE_SOURCE=hiro.sim.screen_source:SimScreenExamStateSource` |
+| `HIRO_EXAM_POLICY` | 有预演时怎么用：`llm`（缺省，预演写进提示词给 LLM 参考）/ `expert`（按预演期望 + 硬规则链直接选） |
+| `HIRO_SIM=0` | 不用模拟器（轮间 / 饮料 / 相談只按社区规则） |
+| `HIRO_INTERVAL_REFRESH=0` | 关掉规则版的轮间货架刷新（没有模拟器时：货架没有复制 / 爆发饮料先刷新） |
 | `HIRO_STRATEGY` | 换培育策略类（KAA `HifGrindStrategy` 子类），默认 `hiro.produce.hif:HiroHifStrategy` |
 | `HIRO_PAUSE_FLAG` | 外部暂停旗标文件路径：文件存在就暂停对局 |
 | `HIRO_CONSULT_DRINK_SWAP=0` | 关掉相談栏满换饮料（默认开：货架上的饮料比持有里最差的一瓶好就先丢后买） |
 | `HIRO_CONSULT_LAZY=1` | 相談懒处理（默认关）：watch 交给 shop-auto 前不认获得演出，只等相談主画面就绪（「終了」正常亮度、没有获得名称栏）；盖着就点货架空隙再看，见 docs/batch-hif.md `prep.consult_lazy` |
 | `HIRO_LIVE_ROTATE=1` | LIVE 横屏黑屏时先把游戏窗口内容区宽高对调成横向（辅助功能改窗口尺寸，不切全屏、不抢前台），LIVE 结束还原原来的位置和尺寸；开着时不再切全屏，没救回画面就停下交给使用者（窗口已在全屏里时退出照旧走全屏方式）。`batch_hif watch` 默认开（设 `0` 关，退回原来的切全屏），`run_hif` 默认关。要求 PlayCover「宽高比」设为「自由」。手动实测：`PYTHONPATH=src .venv/bin/python -m hiro.loop.landscape rotate\|restore\|show` |
+| `HIRO_DEVICE` / `HIRO_ADB` / `HIRO_SCREENSHOT` / `HIRO_EMULATOR_INSTANCE` | 设备后端与连接，见「三、环境」的「设备」表 |
+| `HIRO_OCR` | 文字识别后端：`auto`（缺省）/ `vision`（Apple Vision，只有 macOS）/ `rapidocr` |
 | `HIRO_RESCUE_LLM=0` | 关掉认不出画面时的 LLM 看图兜底（默认开） |
 | `HIRO_DEBUG_RECOG=1` | 把全部识别互验写进 trace，页面变化都存帧 |
 | `HIRO_DRINK_INSITU=0` | 关掉饮料栏的实机模板读法（默认开：每一格先比实机模板——采到过的饮料用 `tools/assets/capture_drinks.py` 生成的实机中位图，其余按原画渲染成饮料栏外观——认准了就以它为准，包括原画模板判成空的格；实机模板没把握时才留原画模板的结果） |

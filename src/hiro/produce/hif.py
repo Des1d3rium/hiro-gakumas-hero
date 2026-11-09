@@ -109,6 +109,47 @@ def retry_cost(boxes) -> str | None:
         return "free"
     return None
 
+# 再挑戦止损（协调 2026-11-07）：本战 R2 打完、要夺冠还需要的 R2 分数超过本次 R2 得分的 RETRY_STOP_LOSS_FACTOR 倍时，
+# 再挑戦不用券（免费照常）。Win2：R2 第一次 19 万、要夺冠需要约 83.5 万，还用了 2 张券、越打越低。行为变化，默认关；HIRO_RETRY_STOP_LOSS=1 打开
+RETRY_STOP_LOSS = __import__("os").environ.get("HIRO_RETRY_STOP_LOSS") == "1"
+RETRY_STOP_LOSS_FACTOR = 2.0
+
+
+def finals_hopeless(f: dict) -> str | None:
+    """本战最终结果页字段 → 翻不了盘时给原因（字符串），否则 None。读数不全时不判（None）。"""
+    score, rnd = f.get("score"), f.get("round_score")
+    tops = [e.get("score") for e in f.get("entries") or [] if e.get("score") is not None and e.get("score") != score]
+    if not score or not rnd or not tops:
+        return None
+    need = max(tops) - (score - rnd)  # 我方 R1 不变，R2 至少要拿这么多才追平第一
+    if need > RETRY_STOP_LOSS_FACTOR * rnd:
+        return f"夺冠需要 R2 {need:,}，本次 R2 {rnd:,}，超过 {RETRY_STOP_LOSS_FACTOR:g} 倍"
+    return None
+
+
+def screen_retries_left(texts) -> int | None:
+    """结算页「再挑戦」按钮上方的「あと N回」→ N；读不到 None。"""
+    import re
+
+    for t in texts or []:
+        m = re.search(r"あと\s*(\d)\s*回", getattr(t, "text", "") or "")
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def finals_label_round(npc_round: int | None, turns: int | None) -> int | None:
+    """开考时判本战第几轮。R1 9 回合、R2 12 回合：剩余回合 > 9 一定是 R2；
+    否则用 NPC 目标分归的轮（识别层已按主数据区间核对、两位矛盾时给 None）；
+    NPC 判不了而剩余回合正好 9：R2 开考是 12，只能是 R1 刚开考（Windows 第三局 R1 开考帧 NPC 读成 [599562, 303083]）。
+    都判不了给 None，调用方退回 KAA。"""
+    if turns is not None and turns > 9:
+        return 2
+    if npc_round in (1, 2):
+        return npc_round
+    return 1 if turns == 9 else None
+
+
 class HiroHifStrategy(HifGrindStrategy):
     recorder: Recorder | None = None
     session: Session | None = None  # run_hif 注入；None 时自动建一个（trace 仍会写）
@@ -588,6 +629,21 @@ class HiroHifStrategy(HifGrindStrategy):
             if (d / CONTEXT_FILE).exists():
                 load_context(d)
                 logger.info("续跑：读回本战上下文 %s", d / CONTEXT_FILE)
+
+    def _r1_done_in_trace(self) -> bool:
+        """本局（当前和之前的 trace 段）已经出现过本战 R1 的轮次结果页（HIF_FINALS_RANKING kind=round_result）。"""
+        try:
+            dirs = self._prior_trace_dirs()
+        except Exception:  # noqa: BLE001  没有 trace（测试替身）就当没打过
+            return False
+        for d in dirs:
+            f = d / "steps.jsonl"
+            if not f.exists():
+                continue
+            for line in f.open(encoding="utf-8"):
+                if '"kind": "round_result"' in line and "HIF_FINALS_RANKING" in line:
+                    return True
+        return False
 
     def _prior_trace_dirs(self) -> list[Path]:
         """同一局之前的 trace 段：<基名>、<基名>-rN（不含当前目录），再加上当前目录里已有的步骤（run_hif resume --trace 同名续写，
@@ -1073,14 +1129,25 @@ class HiroHifStrategy(HifGrindStrategy):
         self.s.recover("missing_fields", f"{page} 整副拼接不可信（{scan['problems']}），只用第一屏 {len(pf['cards'])} 张")
         return False
 
+    CHANGE1_DECIDE_RETRIES = 3  # 换卡阶段 1 拿不到换卡决策时再读几帧（等页面提交进状态），之后才退回第 0 张
+    CHANGE1_DECIDE_WAIT = 0.4
+
     def on_skill_card_change(self, ctx):
         """换卡：阶段 1 按决策选换入候选（候选未识别时选第 0 张），阶段 2 按决策的 card_id 换出；决策取消时点キャンセル。
         执行在 kaa_patches.change_stage1 / change_stage2（核心卡保护、认不出就取消）。KAA 原版固定换第 0 张，第 4 局因此丢了 デイドリーミング。"""
         cancel = False
         if ctx.stage == 1:
             t0 = time.monotonic()
-            obs = self.s.observe(scene="SKILL_CARD_CHANGE_1")
-            d = self.deciders.decide("SKILL_CARD_CHANGE_1", self.s.state)
+            # 换卡页刚出现的第一帧：识别已经认出候选，但页面要连续两帧才提交进状态，状态里还是上一页（获得饮料 / 饮料已满）的字段，
+            # 决策器读不到候选只能回 Wait，下面就会盲换第 0 张（Windows 第二局两次、Mac A5b 一次，2026-11-06）。再读几帧等状态提交。
+            for attempt in range(1 + self.CHANGE1_DECIDE_RETRIES):
+                obs = self.s.observe(scene="SKILL_CARD_CHANGE_1")
+                d = self.deciders.decide("SKILL_CARD_CHANGE_1", self.s.state)
+                if d.action.kind is ActionKind.CHANGE_CARD:
+                    break
+                if attempt < self.CHANGE1_DECIDE_RETRIES:
+                    self.s.record(obs, decision=d, timings_ms={"total": (time.monotonic() - t0) * 1000})
+                    time.sleep(self.CHANGE1_DECIDE_WAIT)
             args = d.action.args if d.action.kind is ActionKind.CHANGE_CARD else {}
             cancel = bool(args.get("cancel"))
             pick = int(args.get("pick_index") or 0)
@@ -1339,15 +1406,19 @@ class HiroHifStrategy(HifGrindStrategy):
 
         scene = classify_current().scene
         if scene == "HIF_EXAM" and self.scenario != HifScenario.QUALIFY:
-            # 本战：识别-05 给 finals_round（按 NPC 最高分区分 R1 / R2）；读不到时退回 KAA 的 is_final_exam
             try:
                 from hiro.vision.hif import read_hif_exam
 
-                rnd = read_hif_exam(device.screenshot()).get("finals_round")
+                f = read_hif_exam(device.screenshot())
             except Exception:
-                rnd = None
+                f = {}
             self.exam_count += 1
             HiroHifStrategy.exams_done = self.exam_count
+            if self._r1_done_in_trace():
+                # R1 打完不会再考 R1：之后的考试一定是 R2（Windows 第十局 04:00 日切换后续跑进 R2 末回合，
+                # NPC 读不到、剩余回合不是 9，退回 KAA 颜色判断成了 r1，再挑戦按 r1 计数又多点了一次）
+                return "r2"
+            rnd = finals_label_round(f.get("finals_round"), f.get("remaining_turns"))
             if rnd in (1, 2):
                 return f"r{rnd}"
             return "r2" if ctx.is_final_exam() else "r1"
@@ -1417,6 +1488,8 @@ class HiroHifStrategy(HifGrindStrategy):
         return True
 
     exam_restarted = False  # 刚点了再挑戦、同一场考试要重新进入（见 HiroController._rearm_exam）
+    _retry_comm_error = False  # 上一次点再挑戦遇到通信エラー（不算决定不再挑戦）
+    _retry_declined: tuple | None = None  # 已决定不再挑戦的本战结算页（label, 总分, 本轮分）：同一页不再点开确认框
     RETRY_JEWEL = ("ジュエル",)
     RETRY_CONFIRM_WAIT = 15.0
     RETRY_CONFIRM_TAPS = 3
@@ -1444,10 +1517,17 @@ class HiroHifStrategy(HifGrindStrategy):
                         pass
         return n
 
-    def _click_retry(self, label: str, btn, texts) -> str | None:
+    def _click_retry(self, label: str, btn, texts, *, allow_ticket: bool = True) -> str | None:
         """点「再挑戦」并处理确认框（用户 2026-11-01 授权：免费 / 再挑戦券随便用，消耗ジュエル的绝不点）。
         返回 "free" / "ticket"，没有确认或要花ジュエル（已点キャンセル）时返回 None。"""
-        used = self._retries_so_far(label)
+        left = screen_retries_left(texts)
+        # 画面上「あと N回」是游戏自己的剩余次数，比数 trace 记录可靠：Windows 第七局通信エラー（ERR_AM_IDTOKEN_FAIL）期间
+        # 记了 3 条没真正开始的「免费再挑戦」，按记录数会以为 3 次用完
+        # 游戏上限与我们的上限（3）一致才对得上：读出的 N 比上限大（读错或规则变了）就不信，退回数 trace 记录（协调 2026-11-08）
+        if left is not None and left > self.MAX_RETRIES_PER_EXAM:
+            logger.warning("%s 画面「あと %d回」超过上限 %d，按 trace 记录计数", label, left, self.MAX_RETRIES_PER_EXAM)
+            left = None
+        used = self.MAX_RETRIES_PER_EXAM - left if left is not None else self._retries_so_far(label)
         if used >= self.MAX_RETRIES_PER_EXAM:
             self.s.note(f"{label} 已再挑戦 {used} 次，到上限 {self.MAX_RETRIES_PER_EXAM}，不再挑戦")
             logger.warning("%s 已再挑戦 %d 次（上限 %d），不再挑戦", label, used, self.MAX_RETRIES_PER_EXAM)
@@ -1463,6 +1543,12 @@ class HiroHifStrategy(HifGrindStrategy):
             device.screenshot()
             boxes = ocr.ocr()
             words = " ".join(t.text for t in boxes)
+            if "通信" in words and ("エラー" in words or "リトライ" in words):
+                # 点了再挑戦却弹出通信エラー（Windows 第七局 ERR_AM_IDTOKEN_FAIL）：这次没开始，不记账；弹窗交给 comm_error 处理
+                self.s.note(f"{label} 点再挑戦后出现通信エラー：这次不算再挑戦")
+                logger.warning("%s 点再挑戦后出现通信エラー，这次不算再挑戦", label)
+                self._retry_comm_error = True  # 不是「决定不再挑戦」：恢复后同一页还要再判断
+                return None
             if any(j in words for j in self.RETRY_JEWEL):
                 cancel = next((t for t in boxes if "キャンセル" in t.text), None)
                 if cancel is not None:
@@ -1477,6 +1563,14 @@ class HiroHifStrategy(HifGrindStrategy):
                 kind = "free"
             elif "券" in words:
                 kind = "ticket"
+            if kind == "ticket" and not allow_ticket:
+                # 止损（RETRY_STOP_LOSS）：翻不了盘时不用券，点キャンセル（免费的照常用）
+                cancel = next((t for t in boxes if "キャンセル" in t.text), None)
+                if cancel is not None:
+                    device.click(cancel.rect)
+                self.s.note(f"{label} 再挑戦要用再挑戦チケット，但差距翻不了盘：已取消（RETRY_STOP_LOSS）")
+                logger.warning("%s 再挑戦要用券，差距翻不了盘，已取消（RETRY_STOP_LOSS）", label)
+                return None
             hit = next((t for t in boxes if any(button_text(t.text, w) for w in self.RETRY_CONFIRM) and t.rect.center.y > 600), None)
             if hit is None:
                 if clicks:
@@ -1511,12 +1605,22 @@ class HiroHifStrategy(HifGrindStrategy):
         f = hit[1]
         if f.get("rank") == 1 or (f.get("outcome") and "敗退" not in str(f.get("outcome")) and f.get("passed") is not False):
             return False
+        page_key = (label, f.get("score"), f.get("round_score"))
+        if page_key == self._retry_declined:
+            return False  # 这张结算页已经决定不再挑戦：别再点开确认框，让调用方点「次へ」收尾
         texts = ocr.ocr()
         btn = next((t for t in texts if button_text(t.text, "再挑戦") and t.rect.center.y > 900), None)
         if btn is None:
             return False
-        kind = self._click_retry(label, btn, texts)
+        hopeless = RETRY_STOP_LOSS and finals_hopeless(f)
+        if hopeless:
+            logger.info("本战差距翻不了盘（%s）：再挑戦只用免费次数，不用券（RETRY_STOP_LOSS）", hopeless)
+        self._retry_comm_error = False
+        kind = self._click_retry(label, btn, texts, allow_ticket=not hopeless)
         if kind is None:
+            # Windows 第七局：止损取消后收尾循环每轮又点开再挑戦、再取消，187s 后空转看门狗停机，一直没点「次へ」
+            if not self._retry_comm_error:
+                self._retry_declined = page_key
             return False
         logger.info("本战敗退（第 %s 名，总分 %s），使用再挑戦（%s）", f.get("rank"), f.get("score"), kind)
         self.s.note(f"本战敗退（第 {f.get('rank')} 名，总分 {f.get('score')}），使用再挑戦（{kind}）")
@@ -1567,6 +1671,12 @@ class HiroHifStrategy(HifGrindStrategy):
                 logger.warning("%s 考试收尾 %.0fs 还没走完，交回主循环重新判断", label, EXAM_END_LOOP_TIMEOUT)
                 break
             before = device.screenshot()
+            if label in ("r1", "r2") and not recorded_ranking:
+                # 本战结果弹窗还没记到：入场动画中途的帧认不出，紧接着就点了「次へ」（Windows 第二局第三次再挑戦用完后
+                # 结算没读到）。先等画面停稳再认，弹窗已记过就不再等
+                settled = ops.wait_stable(timeout=EXAM_END_SETTLE).img
+                if settled is not None:  # numpy 数组不能直接 or
+                    before = settled
             self._record_round_result(before, label, recorded_ranking)  # 本战每轮结果弹窗：点「次へ」前存帧、记分（用户指示）
             if self._finals_retry(before, label):
                 return  # 本战已点再挑戦：考试重开，主循环会再次进入 on_exam_entered

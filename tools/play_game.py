@@ -10,7 +10,8 @@
 2. 选拔结束停在「開始確認」页：OCR 读选拔回忆的 Vo / Da / Vi 三个数（页面中部那一排，多帧投票），作为 --expect-memory。
 3. run_hif new --mode main --expect-memory <三个数>（本战，trace main<tag>-<时间>）；回忆对不上 run_hif 不开局。
 4. 每段结束打印耗时；整局结束打印总耗时。日志在 reports/live/<trace>.log。
-只读屏 + 起子进程；所有游戏内操作仍由 run_hif 做（含危险弹窗保护）。
+只读屏 + 起子进程；所有游戏内操作仍由 run_hif 做（含危险弹窗保护）。读屏（设置检查、读回忆）也在短命子进程里做，
+包装进程不导入识别层（不常驻 KAA / OCR 的内存）。
 开局前先做设置检查（tools/check_settings.py：只报警，不改）；设了 HIRO_PAUSE_FLAG 且旗标在时先等它撤掉。
 """
 
@@ -86,21 +87,69 @@ def run_cmd(mode: str, trace: str, common: list[str], extra: list[str]) -> list[
     return cmd
 
 
+def child_env() -> dict:
+    """子进程环境：PYTHONPATH 把仓库 src 放最前，保留调用方原有的路径（插件，如 HIRO_EXAM_ADVISOR 指的模块）。
+    以前直接覆盖成 src，GKMS 第四局本战考试导入 hiro_gkms_advisor 失败、连崩 5 次退出。"""
+    import os
+
+    old = os.environ.get("PYTHONPATH", "")
+    return {**os.environ, "PYTHONPATH": os.pathsep.join([str(ROOT / "src"), *([old] if old else [])])}
+
+
 def run(mode: str, trace: str, common: list[str], extra: list[str]) -> int:
     log = ROOT / "reports/live" / f"{trace}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     t0 = time.monotonic()
     with open(log, "w") as f:
         code = subprocess.call(run_cmd(mode, trace, common, extra), cwd=ROOT, stdout=f, stderr=subprocess.STDOUT,
-                               env={**__import__("os").environ, "PYTHONPATH": str(ROOT / "src")})  # fmt: skip
+                               env=child_env())  # fmt: skip
     with open(log, "a") as f:
         f.write(f"EXIT {code}\n")
     print(f"{mode} {trace} exit={code} {(time.monotonic() - t0) / 60:.1f} min（日志 {log}）", flush=True)
     return code
 
 
+def _probe(kind: str) -> dict:
+    """在短命子进程里做要识别层的读屏（设置检查 / 读选拔回忆），结果是一行 JSON。
+    包装进程本身不导入 KAA / OCR：它要一直挂着等 run_hif，导入一次就常驻约 2.5 GB（Windows 第十九局，和模拟器 + MuMu 一起把内存吃满）。"""
+    import json
+    import os
+
+    try:
+        out = subprocess.run([PY, str(Path(__file__).resolve()), "--probe", kind], cwd=ROOT, capture_output=True, text=True,
+                             encoding="utf-8", errors="replace", timeout=180, env=child_env())  # fmt: skip
+    except subprocess.TimeoutExpired:
+        return {"error": "读屏子进程超时"}
+    line = next((ln for ln in reversed(out.stdout.splitlines()) if ln.startswith("{")), None)
+    if line is None:
+        return {"error": f"读屏子进程没有结果（exit {out.returncode}）：{(out.stderr or '')[-300:]}"}
+    return json.loads(line)
+
+
+def _probe_main(kind: str) -> int:
+    """--probe 子进程：做一次读屏，打印一行 JSON。"""
+    import json
+
+    sys.path.insert(0, str(ROOT / "src"))
+    try:
+        if kind == "memory":
+            res = {"memory": read_memory()}
+        else:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from check_settings import check, verdict
+
+            r = check(ROOT / "reports/live/settings")
+            res = {"settings": r if isinstance(r, (dict, list, str, int, float, type(None))) else str(r), "verdict": verdict(r)}
+    except Exception as e:  # noqa: BLE001
+        res = {"error": f"{type(e).__name__}: {e}"}
+    print(json.dumps(res, ensure_ascii=False, default=str), flush=True)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["--probe"] and len(argv) == 2:
+        return _probe_main(argv[1])
     passthrough = argv[argv.index("--") + 1 :] if "--" in argv else []
     argv = argv[: argv.index("--")] if "--" in argv else argv
     ap = argparse.ArgumentParser()
@@ -113,26 +162,31 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     common = ["--idol", args.idol, *(["--main-attr", args.main_attr] if args.main_attr else []), *passthrough]
     t0 = time.monotonic()
-    sys.path.insert(0, str(ROOT / "src"))
-    from hiro.loop import pause_flag
+    # 设备操作前：外部暂停旗标在就等。也放子进程里：导入 hiro 包会连带 cv2 / kotonebot，Windows 上包装进程因此常驻约 500 MB（第二十局）
+    import os
 
-    pause_flag.wait_until_recording()  # 设备操作前：外部暂停旗标在就等
+    subprocess.call([PY, "-c", "from hiro.loop import pause_flag; pause_flag.wait_until_recording()"], cwd=ROOT,
+                    env=child_env())  # fmt: skip
     if not args.no_settings_check:
         # 开局前检查设置（重新登录后会被重置；只报警，不改，不阻断）。只打本战也要查（第二十三局）
-        try:
-            from check_settings import check, verdict
-
-            res = check(ROOT / "reports/live/settings")
-            v = verdict(res)
-            print(f"设置检查：{res}  {'' if v.startswith('ok') else '⚠ '}{v}（只报警）", flush=True)
-        except Exception as e:  # noqa: BLE001
-            print(f"设置检查失败（{e}），继续开局", flush=True)
+        r = _probe("settings")
+        if r.get("error"):
+            print(f"设置检查失败（{r['error']}），继续开局", flush=True)
+        else:
+            v = str(r.get("verdict"))
+            print(f"设置检查：{r.get('settings')}  {'' if v.startswith('ok') else '⚠ '}{v}（只报警）", flush=True)
     if not args.main_only:
         q = f"qualify{args.tag}-{datetime.now():%Y%m%d-%H%M%S}"
         if run("qualify", q, common, []) != 0:
             print("选拔进程非 0 退出，停下（先看日志再决定续跑：python -m hiro.run_hif resume --mode qualify）", flush=True)
             return 3
-    mem = tuple(int(x) for x in args.memory.split(",")) if args.memory else read_memory()
+    if args.memory:
+        mem = tuple(int(x) for x in args.memory.split(","))
+    else:
+        r = _probe("memory")
+        mem = tuple(r["memory"]) if r.get("memory") else None
+        if r.get("error"):
+            print(f"读选拔回忆出错：{r['error']}", flush=True)
     if not mem:
         print("开始确认页读不出选拔回忆数值，停下", flush=True)
         return 3

@@ -101,9 +101,10 @@ class HiroController(ProduceController):
 
     def _update(self):
         if HiroController._landscape is None:
+            from hiro.device import is_playcover
             from hiro.loop.landscape import LandscapeGuard
 
-            HiroController._landscape = LandscapeGuard()
+            HiroController._landscape = LandscapeGuard(active=is_playcover())
         self._texts = self._boxes = None  # 本轮整帧 OCR 结果（UNKNOWN 时按需识别一次，各补判共用）
         from kotonebot import device
 
@@ -425,10 +426,18 @@ class HiroController(ProduceController):
             return False
         from kotonebot import device
 
-        if self._landscape is not None and self._landscape.in_live(device.screenshot()):
+        shot = device.screenshot()
+        self._check_game_alive(shot)
+        if self._landscape is not None and self._landscape.in_live(shot):
             self._unknown_since = None  # LIVE 横屏演出：认不出是正常的，不计时（q8 LIVE 会被 3 分钟停下）
             return False
         now = time.monotonic()
+        if self._in_comm_error_episode(now):
+            # 刚点过「リトライ」：两次弹窗之间是 CONNECTING / 原页面，认不出是正常的，不计时、不问 LLM。
+            # 游戏连不上会自己弹「時間が経っているのでタイトルに戻します」，由 comm_error 点閉じる回首页续跑（Windows 第二十二局：
+            # 断网 8 分钟，リトライ 二十多次之间的 UNKNOWN 累计 220s 停机，回标题框是停机后才弹的）
+            self._unknown_since = self._unknown_reported = now
+            return False
         since = getattr(self, "_unknown_since", None)
         if since is None:
             self._unknown_since = self._unknown_reported = now
@@ -447,6 +456,15 @@ class HiroController(ProduceController):
         if now - since >= self.UNKNOWN_STOP_AFTER:
             self.strategy._stop("unknown", f"画面持续 {now - since:.0f}s 认不出（{' / '.join(texts)}）")
         return False
+
+    @staticmethod
+    def _check_game_alive(img) -> None:
+        """横屏又认不出：可能是 LIVE，也可能是学マス被杀后的安卓桌面（GKMS 第五局）。安卓后端查一下前台应用，
+        不是学マス就抛 GameNotForeground，交给 run_hif 的续跑看守（HIRO_RELAUNCH_GAME=1 时重新拉起，否则讲清原因停下）。"""
+        from hiro.loop import game_app
+
+        if game_app.is_landscape(img) and game_app.foreground(game_app.adb_shell()) is False:
+            raise game_app.GameNotForeground("学マス不在前台（截到横屏桌面）")
 
     _rescuer = None  # hiro.loop.rescue.Rescuer，首次用到时创建（整局共用：同屏计数、10 分钟次数上限、本局统计）
 
@@ -556,9 +574,13 @@ class HiroController(ProduceController):
         return self._texts
 
     def _is_date_changed(self) -> bool:
-        from hiro.loop.date_change import DATE_TITLES
+        from hiro.loop.date_change import FORCED_TITLES
 
-        return any(k in t.replace(" ", "") for t in self._ocr_texts() for k in DATE_TITLES)
+        from hiro.vision.textnorm import contains_any
+
+        texts = [t.replace(" ", "") for t in self._ocr_texts()]
+        # 标题和「タイトルへ」按钮都要在（「データ更新」这类字样别处也可能出现）
+        return any(k in t for t in texts for k in FORCED_TITLES) and any(contains_any(t, ("タイトルへ",)) for t in texts)
 
     # 盖在開始確認页上的设置框（第二十三局：データ連携重新登录后，开局点了开始先弹「早送り設定」再弹「演出スキップ設定」，
     # 背景的「2.開始確認」被 OCR 读到 → 判成开始确认页停机，实际已开局、AP 已扣）
@@ -633,7 +655,22 @@ class HiroController(ProduceController):
         # retry：点リトライ（绝不点タイトルへ）；只有「閉じる」（時間が経っているのでタイトルに戻します）：点閉じる并抛 CommErrorToTitle，
         # run_hif 按日期切换同一条路回首页续跑（第二十二局：这种框以前认不出，195s 后停机）
         done = comm_error.handle(boxes, lambda x, y: device.click(x, y))
+        if done == "retry":
+            self._note_comm_retry(time.monotonic())
         return done == "retry"
+
+    COMM_QUIET_S = 90.0  # 上次点リトライ后这么久没再弹，算这一轮通信故障结束
+    COMM_PATIENCE_S = 900.0  # 一轮通信故障最多不计时这么久（游戏通常几分钟后自己弹回标题框）；超过照常 180 秒停机
+
+    def _note_comm_retry(self, now: float) -> None:
+        first, last = getattr(self, "_comm_first", None), getattr(self, "_comm_last", None)
+        if first is None or last is None or now - last > self.COMM_QUIET_S:
+            self._comm_first = now
+        self._comm_last = now
+
+    def _in_comm_error_episode(self, now: float) -> bool:
+        first, last = getattr(self, "_comm_first", None), getattr(self, "_comm_last", None)
+        return first is not None and last is not None and now - last <= self.COMM_QUIET_S and now - first <= self.COMM_PATIENCE_S
 
     def _skip_commu(self) -> bool:  # noqa: D401
         """q13-r1：开场剧情一句句播放，UNKNOWN 138s 差点停机，总控手动点了 SKIP。剧情页 = 左上「プロデュースコミュ」+ 底栏「SKIP」。"""

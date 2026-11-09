@@ -21,6 +21,7 @@ import numpy as np
 from cv2.typing import MatLike
 
 from hiro.vision.items import _library
+from hiro.vision.ocr import engine as ocr_engine
 from hiro.vision.ocr import ocr_boxes
 
 REGION = (40, 470, 700, 1070)
@@ -108,7 +109,10 @@ def read_consult(img: MatLike) -> dict:
             nums = _nums(texts_in(xr, PRICE_BAND[top]))
             sale = len(nums) >= 2 or any("SALE" in t.upper().replace(" ", "") for t in texts_in(xr, SALE_BAND[top]))
             purchased = any("交換済" in t.replace(" ", "") for t in texts_in(xr, (top, top + CELL)))
-            shelf.append({"index": row * 4 + col, **item, "price": nums[-1] if nums else None, "sale": sale, "purchased": purchased,
+            price = nums[-1] if nums else None
+            if ocr_engine() != "vision" and not purchased:
+                price = _vote_price(img, x, PRICE_BAND[top], nums, sale=sale)
+            shelf.append({"index": row * 4 + col, **item, "price": price, "sale": sale, "purchased": purchased,
                           "center": [x + CELL // 2, top + CELL // 2]})  # fmt: skip
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     services = {}
@@ -186,9 +190,15 @@ def read_interval_shelf(img: MatLike) -> dict:
             index = row * 4 + col
             kind = INTERVAL_KINDS[index]
             xr = (x - 10, x + CELL + 10)
-            nums = _nums(texts_in(xr, INTERVAL_PRICE[top])) or _cell_price(img, x, INTERVAL_PRICE[top])
+            # 价格读成 0 / 个位数（RapidOCR 把「50」读成「;0」→ 0）当没读到：轮间没有免费或几 P 的东西，转去单格补读
+            nums = [n for n in _nums(texts_in(xr, INTERVAL_PRICE[top])) if n >= INTERVAL_MIN_PRICE]
+            nums = nums or [n for n in _cell_price(img, x, INTERVAL_PRICE[top]) if n >= INTERVAL_MIN_PRICE]
             purchased = any("交換済" in t.replace(" ", "") for t in texts_in(xr, (top, top + CELL))) or _purchased_mark(img, x, top)
-            entry = {"index": index, "price": nums[-1] if nums else None, "purchased": purchased, "center": [x + CELL // 2, top + CELL // 2]}
+            price = nums[-1] if nums else None
+            if ocr_engine() != "vision" and not purchased:
+                # Windows 第九局轮间 #151：「おしゃれハーブティー」75 读成 15（Mac 同帧 RapidOCR 读对），也用多读法投票
+                price = _vote_price(img, x, INTERVAL_PRICE[top], nums)
+            entry = {"index": index, "price": price, "purchased": purchased, "center": [x + CELL // 2, top + CELL // 2]}
             if kind == "drink":
                 d = _drink(img, x, top)
                 entry.update(drink_id=d["drink_id"], name=d["name"], confidence=d["confidence"])
@@ -225,8 +235,74 @@ def read_interval_shelf(img: MatLike) -> dict:
     return {"interval": out, "complete": hint and end_btn and opaque}
 
 
-def _cell_price(img: MatLike, x: int, band: tuple[int, int]) -> list[int]:
+INTERVAL_MIN_PRICE = 5  # 轮间货架最便宜的东西也有几十 P；更小的读数是 OCR 把首位读丢了
+
+
+def _cell_price(img: MatLike, x: int, band: tuple[int, int], scale: int = 3) -> list[int]:
     """整块 OCR 漏掉某格价格（第五局格 5 隔帧为 None）时，单独把这格的价格条放大再读。"""
     y1, y2 = band
-    crop = cv2.resize(img[y1:y2, x + 30 : x + CELL + 5], None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-    return _nums([t for t, _, _ in ocr_boxes(crop)])
+    # 只放大一次（3 倍）：原来先 resize 3 倍、ocr_boxes 又默认放大 3 倍，实际 9 倍，Apple Vision 还读得出，RapidOCR 把「50」读成「0」
+    return _nums([t for t, _, _ in ocr_boxes(img[y1:y2, x + 30 : x + CELL + 5], scale=scale)])
+
+
+SALE_RATE = 0.7  # SALE 价 = 原价 × 0.7 取整（75→52、70→49、100→70、105→73）
+PRICE_MIN = 5  # 货架价格不会低于这个数：更小的是「50」漏读首位
+SALE_PRICES_SEEN = (35, 49, 52, 53, 70, 73)  # 实机见过的 SALE 实付价（原价 50 / 70 / 75 / 100 / 105 的七折）
+SALE_PAID_MIN = 20  # SALE 实付价不会低于这个数（见过的最低 49）：更小的是丢了位
+
+
+def _sale_split(nums: list[int]) -> list[int]:
+    """原价和 SALE 价读成一个数（「7049」「10573」）：拆成原价 | 原价×0.7 取整的那一种，取 SALE 价；去掉 < PRICE_MIN 的残读。"""
+    out = []
+    for v in nums:
+        s = str(v)
+        for k in range(2, len(s) - 1) if len(s) >= 4 else ():
+            a, b = int(s[:k]), int(s[k:])
+            if a >= 10 and abs(b - a * SALE_RATE) <= 1:  # 75→52 / 75→53 都见过（取整方式不定），差 1 以内都算
+                v = b
+                break
+        out.append(v)
+    return [v for v in out if v >= PRICE_MIN]
+
+
+def _vote_price(img: MatLike, x: int, band: tuple[int, int], region_nums: list[int], *, sale: bool = False) -> int | None:
+    """非 Vision 后端的货架价格：单格 4 倍、整块、单格 3 倍、ddddocr 四种读法各取末位数投票，平票按这个顺序。
+    RapidOCR 整块读价格 80 格只对 39 格（SALE 的「49」读成「40」、「70」读成「10」，Windows 第六局 #124）；
+    加上 SALE 拆分和下限后投票 80/80（win2–win6 + A5b 的 11 帧相談货架，Vision 读数作真值）。"""
+    from collections import Counter
+
+    from hiro.vision.digits import read_dddd
+
+    y1, y2 = band
+    dddd = read_dddd(img, (x + 30, y1, x + CELL + 5, y2))
+    reads = [_sale_split(r) for r in (_cell_price(img, x, band, 4), region_nums, _cell_price(img, x, band, 3), [dddd] if dddd is not None else [])]
+    last = [r[-1] for r in reads if r]
+    if not last:
+        return None
+    if sale:
+        # SALE 格：任一读法里同时出现原价和约七折的数，取七折的那个（Windows 第七局 #115 记成原价 75，实付 53）
+        seen = {v for r in reads for v in r}
+        paid = sorted(v for v in seen if any(abs(v - o * SALE_RATE) <= 1 for o in seen if o > v))
+        if paid:
+            return paid[0]
+        # 看到了原价，读出的实付价和「原价 × 0.7」只差一位数以内（Windows 第八、十局 70→49 读成 40，几种读法一致地错）：按原价七折取整
+        votes0 = Counter(last).most_common(1)[0][0]
+        big = [o for o in seen if o >= SALE_PAID_MIN]
+        if votes0 < SALE_PAID_MIN and big:
+            # 实付价读成了个位数（Windows 第十一局 #103：105→73 读成 5）：按看到的最大原价七折取整
+            return int(max(big) * SALE_RATE)
+        if votes0 not in SALE_PRICES_SEEN:
+            # 连原价都没读到（Windows 第十四局 #96：70→49 读成 40，几种读法都只有 40）：已知 SALE 价里只差一位数字的唯一一个
+            near = [v for v in SALE_PRICES_SEEN if len(str(v)) == len(str(votes0)) and sum(x != y for x, y in zip(str(v), str(votes0))) == 1]
+            same_head = [v for v in near if str(v)[0] == str(votes0)[0]]  # 读错多在末位：40 → 49（而不是 70）
+            if len(near) == 1 or len(same_head) == 1:
+                return near[0] if len(near) == 1 else same_head[0]
+        for o in sorted(seen, reverse=True):
+            fixed = int(o * SALE_RATE)
+            a, b = str(votes0), str(fixed)
+            # 只修「同位数、只差一位数字」的读错（40↔49）；杂数（76 之类）算出来差两位的不改
+            if o > votes0 and len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1:
+                return fixed
+    votes = Counter(last)
+    top = max(votes.values())
+    return next(v for v in last if votes[v] == top)

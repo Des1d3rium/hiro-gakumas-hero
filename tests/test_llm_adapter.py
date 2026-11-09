@@ -57,7 +57,10 @@ def test_adapters_satisfy_protocol_and_spec_parsing():
         from_spec("gemini:pro")
 
 
-def test_openai_compatible_roundtrip(fake_server):
+def test_openai_compatible_roundtrip(fake_server, monkeypatch):
+    for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.delenv(k, raising=False)  # 本机假服务：环境里的代理（Windows 实机设了 HTTPS_PROXY）会把请求转走、回 502
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost")
     llm = OpenAICompatible("test-model", base_url=fake_server, api_key="sk-test", timeout=5)
     _FakeOpenAI.mode = "ok"
     r = llm.ask_json("sys", "user")

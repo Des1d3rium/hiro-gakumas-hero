@@ -19,7 +19,12 @@ import pytest
 TESTS = Path(__file__).parent
 FIXTURES = TESTS / "fixtures"
 if not FIXTURES.exists() and os.environ.get("HIRO_FIXTURES") and Path(os.environ["HIRO_FIXTURES"]).is_dir():
-    FIXTURES.symlink_to(Path(os.environ["HIRO_FIXTURES"]).resolve(), target_is_directory=True)
+    try:
+        FIXTURES.symlink_to(Path(os.environ["HIRO_FIXTURES"]).resolve(), target_is_directory=True)
+    except OSError:  # Windows 建符号链接要管理员 / 开发者模式（WinError 1314）：改建目录联接（junction），不需要权限
+        import _winapi  # noqa: PLC0415  只有 Windows 有
+
+        _winapi.CreateJunction(str(Path(os.environ["HIRO_FIXTURES"]).resolve()), str(FIXTURES))
 HAVE_FIXTURES = FIXTURES.is_dir() and any(FIXTURES.iterdir())  # 空目录 / 断链都算没有样例
 
 if os.environ.get("HIRO_KAA_GAME_DATA"):
@@ -152,6 +157,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "synthetic: 只用合成图（源码里的 .png 是自己画的），不按「读样例截图」跳过")
     config.addinivalue_line("markers", "fixtures: 要读 tests/fixtures 的截图样例（经类 / 多层辅助函数间接读，自动判断看不出来时显式标）")
     config.addinivalue_line("markers", "master: 要主数据 game.db（经决策器 / 识别层间接查，自动判断看不出来时显式标）")
+    config.addinivalue_line("markers", "sim_master: 要真跑模拟器（vendor/gakumas-player 的主数据 catalog.sqlite 已构建）")
 
 
 def _missing_user_assets(kinds) -> list[str]:
@@ -183,6 +189,9 @@ def pytest_collection_modifyitems(config, items):
             if not kaa_ok:
                 item.add_marker(pytest.mark.skip(reason="需要 KAA（pip install -e '.[play]'）"))
                 continue
+        if item.get_closest_marker("sim_master") is not None and not _sim_master_ok():
+            item.add_marker(pytest.mark.skip(reason="需要模拟器主数据（python vendor/gakumas-player/scripts/fetch_master.py）"))
+            continue
         if item.get_closest_marker("master") is not None and not _master_ok():
             item.add_marker(pytest.mark.skip(reason="需要主数据 game.db（KAA 公开数据，HIRO_KAA_GAME_DATA）"))
             continue
@@ -348,3 +357,38 @@ def pytest_runtest_makereport(item, call):
     if why:
         report.outcome = "skipped"
         report.longrepr = (str(item.fspath), item.location[1] or 0, f"Skipped: 缺截图样例 {why}")
+
+
+# ---------------------------------------------------------------- 模拟器（hiro.sim，引擎在 vendor/gakumas-player）
+def _sim_master_ok() -> bool:
+    try:
+        import hiro.sim
+
+        return hiro.sim.master_ready()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+@pytest.fixture(autouse=True)
+def _sim_test_defaults(request, monkeypatch):
+    """同主仓库：测试默认关掉培育里的饮料模拟（drinks.SIM）、轮间刷新估值的续打（drink_gains）；要测的用例自己打开 / monkeypatch。
+    引用了 hiro.sim 的测试文件：决策器的「模拟器可用」按引擎能导入算（用例自己 monkeypatch 了方案 / 增益表，不需要主数据）；
+    标了 sim_master 的用例要真跑模拟，没构建主数据（vendor/gakumas-player/scripts/fetch_master.py）时跳过。"""
+    try:
+        from hiro.brain import deciders, drinks
+        from hiro.sim import interval as iv
+    except Exception:  # noqa: BLE001  没有这些层：不用设
+        yield
+        return
+    monkeypatch.setattr(drinks, "SIM", False)
+    monkeypatch.setattr(drinks, "DEVIATIONS", "/nonexistent/deviations.jsonl", raising=False)
+
+    def _raise(*a, **k):
+        raise RuntimeError("测试里不跑刷新估值的续打")
+
+    monkeypatch.setattr(iv, "drink_gains", _raise)
+    if "hiro.sim" in _source(Path(str(request.node.fspath))):
+        monkeypatch.setattr(deciders, "_sim_ready", lambda: True)
+    else:
+        monkeypatch.setattr(deciders, "_sim_ready", lambda: False)  # 别的决策器用例只验规则（本机建了主数据也不跑模拟）
+    yield

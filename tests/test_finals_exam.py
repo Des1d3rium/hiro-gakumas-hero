@@ -191,7 +191,13 @@ def test_round_interval_cell_price_fallback():
       [("十王星南", 1, 1082489, 601653), ("篠澤広", 2, 941193, 462477), ("倉本千奈", 3, 814399, 447219)]),
      # 本地 trace（codex-20261107-1 第 1 局 R1 结果，看图核对）：我方第 1 名
      ("../trace/r1-result-first.jpg", "round_result", 577868, 577868, 1,
-      [("秦谷美鈴", 1, 577868, 577868), ("十王星南", 2, 488512, 488512), ("月村手毬", 3, 370160, 370160)])],
+      [("秦谷美鈴", 1, 577868, 577868), ("十王星南", 2, 488512, 488512), ("月村手毬", 3, 370160, 370160)]),
+     # Windows 第三局 R2 第 2 次（RapidOCR）：我方行「+」读成「#」整行丢掉；Windows 上另一行也丢过，名次按行序错成第 2
+     ("final-plus-hash-win3-228.jpg", "final", 242948, 82260, 3,
+      [("十王星南", 1, 1077462, 597988), ("倉本千奈", 2, 814317, 450618), ("篠澤広", 3, 242948, 82260)]),
+     # Windows 第七局 R2 第 3 次（RapidOCR）：我方行总分与加分拆成两个框，加分「+274,711」读成「1274,711」，以前总分也丢了
+     ("final-split-gain-win7-312.jpg", "final", 873015, 274711, 2,
+      [("十王星南", 1, 1076507, 596477), ("篠澤広", 2, 873015, 274711), ("倉本千奈", 3, 829768, 462394)])],
 )  # fmt: skip
 def test_finals_round_scores(rel, kind, score, round_score, rank, rows):
     """用户指示：本战 R1 / R2 打完后的「現在順位」弹窗读所有人的分数与名次（字段对齐 HIF_EXAM_RESULT：entries[{name, score, rank, me}] / score / rank）。
@@ -292,3 +298,40 @@ def test_finals_result_free_retry_offer(rel, kind, rnd, outcome):
     raw, _ = extract(scene, img)
     assert (raw["kind"], raw["finals_round"], raw["outcome"]) == (kind, rnd, outcome)
     assert raw["retry"] == {"left": 1, "free": True}
+
+
+@pytest.mark.parametrize(("name", "score"), [("score-overhang-gkms4-196", 123406), ("score-overhang-gkms4-230", 113066)])
+def test_finals_my_score_overhangs_card(name, score):
+    """第 3 名时 6 位分数的末位伸出玩家卡白框约 5 像素：框只到白框右缘会掉末位（GKMS 第四局 123406 → 12340）。"""
+    from hiro.vision.hif import read_finals_ranking
+
+    f = FIX / f"{name}.jpg"
+    if not f.exists():
+        pytest.skip(f"需要实机截图 {f}")
+    r = read_finals_ranking(cv2.imread(str(f)))
+    # 三票没过半给 None（沿用上一个读数，不给错值）：RapidOCR 读 196 是 [123400, None, 123406]；Vision 两帧都读对
+    assert r["my_rank_index"] == 3 and r["my_score"] in (score, None)
+
+
+def test_finals_my_score_box_covers_overhang(monkeypatch):
+    """三种读法拿到的玩家分数框右缘都要盖住伸出白框的末位（实测到白框右缘 +5），又不碰右边 NPC 卡（白框外 +8 起）。
+    Windows 上 RapidOCR + ddddocr 两票都读成掉末位的 12340，三票多数把错值交给了决策；Mac 离线读不出同样的错，只能查框。"""
+    from hiro.vision import digits, hif
+
+    f = FIX / "score-overhang-gkms4-196.jpg"
+    if not f.exists():
+        pytest.skip(f"需要实机截图 {f}")
+    boxes = []
+    monkeypatch.setattr(hif, "_ocr_int", lambda img, box: boxes.append(("ocr", box)))
+    def font(img, box):
+        boxes.append(("font", box))
+        return None, {}
+
+    monkeypatch.setattr(hif, "read_score", font)
+    monkeypatch.setattr(digits, "read_dddd", lambda img, box: boxes.append(("dddd", box)))
+    hif.read_finals_ranking(cv2.imread(str(f)))
+    mine = boxes[:3]  # 前三次是玩家分数（之后是 NPC 格）
+    right = hif.FINALS_ME_LEFTS[2] + hif.FINALS_ME_W  # 第 3 名白框右缘 483
+    assert {k for k, _ in mine} == {"ocr", "font", "dddd"}
+    for _, (x1, y1, x2, y2) in mine:
+        assert right + 5 <= x2 < right + 8

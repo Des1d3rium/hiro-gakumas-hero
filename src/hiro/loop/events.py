@@ -101,6 +101,12 @@ def _apply_deck(s: GameState, e: Event) -> None:
         s.field_status["produce.deck"] = "pending"
 
 
+# 换卡阶段 1 选中的候选（换入卡）：阶段 2 的 ChangeCard 只带换出卡，换入卡要从阶段 1 接过来。
+# 以前 CARD_CHANGE 没有 card_id，记账只减不加，每换一次牌组少记一张（Windows 第六局换 4 次后记账 17、实际 20，
+# 选卡对话框拼接核对因此判「差太多」、只用第一屏）
+_CHANGE_IN: dict = {}
+
+
 def events_from_step(page: str | None, action: dict, ok: bool, page_fields: dict, produce: dict | None, *, seq: int) -> list[Event]:
     """已执行成功的决策 → action 事件（hiro.loop.ledger 的规则，改为产出事件）。"""
     if not ok or not action:
@@ -135,8 +141,19 @@ def events_from_step(page: str | None, action: dict, ok: bool, page_fields: dict
             item = shelf[i] if 0 <= i < len(shelf) else {}
             E("SHOP_BUY", kind="card" if item.get("card_id") else "drink", card_id=item.get("card_id"), drink_id=item.get("drink_id"),
               upgrade=item.get("upgrade"), price=item.get("price"))  # fmt: skip
-    elif page == "SKILL_CARD_CHANGE_2" and kind == "ChangeCard" and not args.get("cancel") and args.get("remove_card_id"):
-        E("CARD_CHANGE", remove_card_id=args["remove_card_id"], remove_upgrade=args.get("remove_upgrade"), card_id=args.get("card_id"))
+    elif page == "SKILL_CARD_CHANGE_1" and kind == "ChangeCard" and not args.get("cancel"):
+        cands = page_fields.get("candidates") or []
+        i = args.get("pick_index")
+        c = cands[i] if isinstance(i, int) and 0 <= i < len(cands) else {}
+        _CHANGE_IN["card"] = (c.get("card_id"), c.get("upgrade")) if c.get("card_id") else None
+    elif page == "SKILL_CARD_CHANGE_2" and kind == "ChangeCard":
+        pick = _CHANGE_IN.pop("card", None)  # 阶段 1 选中的换入卡（同 hiro.loop.ledger 的 pending_in）
+        if not args.get("cancel") and args.get("remove_card_id"):
+            card_id, upgrade = args.get("card_id"), args.get("upgrade")
+            if card_id is None and pick:
+                card_id, upgrade = pick
+            E("CARD_CHANGE", remove_card_id=args["remove_card_id"], remove_upgrade=args.get("remove_upgrade"), card_id=card_id,
+              upgrade=upgrade)  # fmt: skip
     elif page == "SKILL_CARD_REMOVAL" and args.get("card_id"):
         E("CARD_DELETE", card_id=args["card_id"], upgrade=args.get("upgrade"), source="event")
     elif page == "SKILL_CARD_ENHANCE" and args.get("card_id"):

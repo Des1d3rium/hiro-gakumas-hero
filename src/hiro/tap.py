@@ -13,6 +13,7 @@ import cv2
 import hiro  # noqa: F401
 from hiro.device import connect
 from kotonebot.backend.context import device, init_context, manual_context
+from hiro import imgio
 
 
 def main():
@@ -28,7 +29,7 @@ def main():
     if not args.shot_only:
         device.click(args.x, args.y)
         time.sleep(args.wait)
-    cv2.imwrite(args.out, device.screenshot())
+    imgio.imwrite(args.out, device.screenshot())
     print(args.out)
 
 

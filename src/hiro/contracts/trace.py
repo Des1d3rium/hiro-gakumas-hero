@@ -22,6 +22,7 @@ from hiro.contracts.execution import ExecutionResult
 from hiro.contracts.game_state import GameState
 from hiro.contracts.observation import Observation
 from hiro.contracts.preview import Preview
+from hiro import imgio
 
 TRACES = Path("traces")
 _SECRET = ("KEY", "TOKEN", "SECRET", "PASSWORD", "COOKIE")
@@ -96,7 +97,7 @@ class TraceWriter:
         import cv2
 
         rel = f"frames/{seq:05d}.jpg"
-        cv2.imwrite(str(self.dir / rel), image, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        imgio.imwrite(str(self.dir / rel), image, [cv2.IMWRITE_JPEG_QUALITY, 85])
         return rel
 
     def write(self, step: Step) -> None:

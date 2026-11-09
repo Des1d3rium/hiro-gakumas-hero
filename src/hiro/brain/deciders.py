@@ -123,8 +123,22 @@ class ProduceDeciders:
         return d
 
     def _prewarm(self, state: GameState) -> None:
-        """开源版没有模拟器：不需要预热。"""
-        return
+        """选拔：牌组变了就在后台把下一场考试提前编译（resource.prewarm，不阻塞），之后的饮料模拟不用等编译（协调 2026-11-03）。"""
+        from hiro.brain import drinks as dk
+
+        if not dk.SIM or not _sim_ready():
+            return
+        try:
+            from hiro.state.produce import FINALS
+
+            ps = self.produce_state(state)
+            if ps is None or ps.mode == FINALS or not ps.deck:
+                return
+            from hiro.sim import resource as rv
+
+            rv.prewarm("selection", deck=[(c.card_id, c.upgrade) for c in ps.deck], max_hp=ps.max_stamina or 33)
+        except Exception as e:  # noqa: BLE001  预热失败不影响决策
+            logger.debug("饮料模拟预热失败：%s", e)
 
     def _page_fallback(self, page: str, state: GameState, n_options: int | None, why: str, *, prior: Decision | None = None, **kw) -> Decision:
         """规则失败时的社区模板兜底（不选第 0 项）。认不出、没有模板的页面输出 Wait / 取消，由主循环记 recover。"""
@@ -293,9 +307,9 @@ class ProduceDeciders:
             if i in gain:
                 s += 3 * gain[i] / top
             elif r["option"] == "training":
-                s += 3 * (r["attr"] == main) + 1.5 * bool(r.get("sp"))
+                s += 3 * (r.get("attr") == main) + 1.5 * bool(r.get("sp"))
             elif r["option"] == "class":
-                s += 2 * (r["attr"] == weakest)
+                s += 2 * (r.get("attr") == weakest)
             elif r["option"] in ("shop", "special_guidance") and template in ("shop", "special_guidance"):
                 s += 8  # 模板的花钱日：相談 / 特別指導 互为替代（执行不了其中一个时用另一个）
             elif r["option"] == "rest" and _rest_blocked(ps, rows, i):
@@ -674,8 +688,19 @@ class ProduceDeciders:
         return held, max(capacity, len(held or [])), bool(full), warn
 
     def _drink_sim_context(self, ps, stage: str) -> dict | None:
-        """开源版不做饮料模拟比较。"""
-        return None
+        """饮料比较的模拟上下文：牌组（状态机记账；没有时 resource 用参考牌组）、体力（下一场考试开考时：选拔开考自动回复，按满体力算）、倍率。"""
+        if ps is None or not _sim_ready():
+            return None  # 开源版：模拟器主数据没构建时只按社区规则
+        deck = [(c.card_id, c.upgrade) for c in ps.deck] if ps.deck else None
+        permil = None
+        if stage != "selection":
+            from hiro.sim.interval import CONTEXT
+
+            deck = deck or [tuple(x) for x in CONTEXT.get("deck") or []] or None
+            permil = CONTEXT.get("permil")
+        max_hp = ps.max_stamina or 33
+        hp = max_hp if stage != "r2" else (ps.stamina or max_hp)
+        return {"exam": stage, "deck": deck, "hp": hp, "max_hp": max_hp, "permil": permil}
 
     def _drink_decision(self, res: dict, opts: list, stage: str, decider: str, warn: list) -> Decision:
         from hiro.brain import drinks as dk
@@ -1350,7 +1375,41 @@ class ProduceDeciders:
                         "留 P 损失（R2 分）": round(need_loss(o)), "社区默认": "是" if o is rule else ("可选" if o in allowed else "否")} for o in opts}  # fmt: skip
         pick, source, w, dev = rule, "rule", list(warn), None
         why = f"社区默认（もなみ先验 + 不挤占轮间需要量）：{rule.label}"
-        # 开源版只按社区默认（主仓库另有模拟估值、> 2 个标准误才偏离）
+        ctx = self._drink_sim_context(ps, "r1")
+        if dk.SIM and ctx is not None:
+            try:
+                from hiro.sim import interval as iv
+                from hiro.sim import resource as rv
+
+                c = dict(ctx)
+                c.pop("exam")
+                base, notes = rv.setup_for("r1", drinks=hold, **c)
+                ranked = sorted(opts[1:], key=lambda o: dk.holding_key(o.drinks, "r1", capacity))[: dk.MAX_SIM_OPTIONS]
+                sims = [opts[0]] + ranked
+                res = rv.adaptive_eval([base] + [iv._with(base, drinks=o.drinks) for o in ranked], threshold=dk.OVERRIDE_SE, workers=4)
+                val = {}
+                for o, r in zip(sims, res):
+                    v = 1.2 * r["gain"] - need_loss(o)
+                    val[o.key] = (v, 1.2 * r["gain_se"])
+                    rows[o.key].update({"R1 期望": r["mean"], "R1 比不买": f"{r['gain']:+,} ± {r['gain_se']:,}", "总价值（R2 分）": round(v)})
+                best = max(sims, key=lambda o: val[o.key][0])
+                if rule.key not in val:
+                    val[rule.key] = (0.0, 0.0)
+                d_v = val[best.key][0] - val[rule.key][0]
+                se = (val[best.key][1] ** 2 + val[rule.key][1] ** 2) ** 0.5
+                tail = f"（模拟 {rv.POLICY} 续打 R1 {res[0]['n']} 局配对（自适应），价值 = 1.2 × R1 增益 − 留 P 损失{'；' + '、'.join(notes) if notes else ''}）"
+                if best is not rule and d_v > dk.OVERRIDE_SE * max(se, 1):
+                    pick, source = best, "sim"
+                    dev = {"where": "CONSULT(本战)", "stage": "r1", "rule": rule.label, "pick": best.label, "gain": round(d_v), "gain_se": round(se),
+                           "cross_tier": True, "policy": rv.POLICY, "seeds": res[0]["n"], "notes": notes}  # fmt: skip
+                    dk.log_deviation(dev)
+                    w.append(f"community_deviation：{rule.label} → {best.label}（{d_v:+,.0f} ± {se:,.0f}）")
+                    why = f"偏离社区默认：{best.label} 比 {rule.label} 价值高 {d_v:+,.0f} ± {se:,.0f}（> {dk.OVERRIDE_SE:g} 个标准误）{tail}"
+                else:
+                    why += f"；模拟里最好的是 {best.label}（比默认 {d_v:+,.0f} ± {se:,.0f}），不到 {dk.OVERRIDE_SE:g} 个标准误，按默认{tail}"
+            except Exception as e:
+                logger.warning("本战相談饮料估值失败，按社区默认：%s", e)
+                why += f"；模拟失败（{e}），按社区默认"
         cands = [Candidate(Action(ActionKind.SHOP_BUY, {"index": o.extra["buy"][0]}) if o.extra["buy"] else Action(ActionKind.SHOP_END),
                            preview=rows[o.key], expected=rows[o.key].get("总价值（R2 分）"), note=o.label) for o in opts]  # fmt: skip
         reason = f"【本战相談·饮料按价值】{why}；之后持有：{dk.describe(pick.drinks, 'r1')}，剩 {p - pick.cost}P"
@@ -1598,6 +1657,11 @@ class ProduceDeciders:
         if not cands:
             return Decision(Action.ui(ActionKind.WAIT, why="换卡候选未识别"), "换卡候选未识别", "fallback", 0.1, decider="card_change")
         scored = sorted(((card_value(c.get("card_id"), c.get("upgrade") or 0), c) for c in cands), key=lambda x: (-x[0], x[1].get("index", 0)))
+        if CHANGE_PICK_BY_CULL:
+            from hiro.state.produce import FINALS
+
+            finals = (state.produce or {}).get("mode") == FINALS
+            scored.sort(key=lambda x: (cull_key(x[1].get("card_id"), x[1].get("upgrade") or 0, finals=finals), x[0]), reverse=True)
         value, best = scored[0]
         notes = [f"#{c.get('index')} {_card_label(c)} {v:g}" for v, c in scored]
         # 阶段 1 没有取消键（main8：取消后绕回换卡页死循环），所以总是选最好的那张
@@ -1711,8 +1775,10 @@ class ProduceDeciders:
     def interval(self, state: GameState) -> Decision:
         """轮间（R1 与 R2 之间），一次一个动作。page_fields["interval"] 格式见 docs/llm-context.md「商店字段」。
 
-        开源版按社区规则（_interval_rule）：先回体力到角色目标，再按 饮料 > 必拿 / S / A 卡 > 强化核心卡 花 P。
-        （主仓库另有用模拟器给各方案估 R2 期望分的版本，不在开源范围。）"""
+        按计算选（协调 4a 第八局分析 B3，用户确认）：R1 的牌组 / 剩余饮料 / 倍率已记下（hiro.state.finals_context.CONTEXT）、
+        模拟器主数据已构建时，进轮间算一次方案——回体力到几、买哪些饮料 / 卡，各组合用模拟器跑 R2 取期望分，选最高的；
+        之后每帧按「还差什么」出下一个动作，货架刷新也按模拟估期望。算不了时走社区规则（_interval_rule）：
+        先回体力到角色目标，再按 饮料 > 必拿 / S / A 卡 > 强化核心卡 花 P（货架没有复制 / 爆发时先刷新，HIRO_INTERVAL_REFRESH）。"""
         items = state.page_fields.get("interval")
         if not items:
             return self._interval_without_shelf(state)
@@ -1721,18 +1787,375 @@ class ProduceDeciders:
             return Decision(Action(ActionKind.INTERVAL_END), "本页页头的体力 / P 点没读到，不买", "fallback", 0.2,
                             warnings=["轮间页头 stamina / produce_point 未识别（ProduceState 里的是 R1 之前的旧值，不能用）"],
                             decider="interval")  # fmt: skip
+        if (d := self._interval_by_sim(state, ps, unknown, items)) is not None:
+            return d
         return self._interval_rule(state, ps, unknown, items)
 
+    INTERVAL_SIM = True  # 测试 / 兜底开关
 
+    def _interval_by_sim(self, state: GameState, ps: ProduceState, unknown: set, items: dict) -> Decision | None:
+        from hiro.sim import interval as iv
 
+        if not self.INTERVAL_SIM or not _sim_ready():
+            return None  # 开源版：模拟器主数据没构建（fetch_master.py）时走社区规则
+        p, hp, max_hp = ps.produce_point, ps.stamina, ps.max_stamina
+        ledger = self._interval_ledger_for(ps, p)
+        # 货架签名只算还认得出、没买过的格子（第十七局：买掉的饮料格读成 drink_id=None，签名变了 → 整套重算，计划里的 ホエイ 没买）
+        shelf_key = {(it.get("index"), it.get("card_id") or it.get("drink_id")) for k in ("cards", "drinks") for it in items.get(k) or []
+                     if (it.get("card_id") or it.get("drink_id")) and not it.get("purchased")}  # fmt: skip
+        cache = getattr(self, "_interval_plan", None)
+        if cache is not None and cache.get("visit") != ledger["key"]:
+            cache = self._interval_plan = None  # 换了一次轮间：重新规划
+        if cache is not None and cache.get("rerolling"):
+            cache["shelf"] = shelf_key  # 刷新过：新货架交给 _interval_reroll 处理（增益表已算好），不重算整套方案
+        # 一次轮间只规划一次：买掉的格子会从货架消失，不因此重算（第九局：每买一次就重算、再找「显著」选项，多次检验后买进了
+        # ありがとうの言葉）。货架出现新格子（刷新）才重算
+        if cache is None or not shelf_key <= cache["shelf"]:
+            from hiro.state.knowledge import interval_hp_target
 
+            target_hp = iv.value_hp_target(max_hp, interval_hp_target(self.profile.idol_id if self.profile else None, max_hp))  # HP_TARGET_VALUE（默认关）
+            try:
+                # 用户 2026-11-02：社区默认方案（补到 22 张 → R2 饮料 → 回体力到目标）为默认，B3 模拟方案好过 2 个标准误才偏离
+                # 中途重算（第十八局本战：强化失败 → 结束 → 轮间重进，方案被推翻又叠加一套）：以账本里已执行的部分为前提
+                res = iv.plan_tiered(items, hp=hp, max_hp=max_hp, p=p, star=None if "star" in unknown else ps.star, target_hp=target_hp,
+                                     drink_capacity=ps.drink_capacity, wappen_left=None if "wappen_left" in unknown else ps.wappen_left,
+                                     extra_drinks=ledger["drinks"], extra_cards=ledger["cards"], upgraded=ledger["upgraded"])  # fmt: skip
+            except Exception as e:  # 模拟器不支持本场牌组等：走兜底
+                logger.warning("轮间模拟失败，走兜底规则：%s", e)
+                res = None
+            if res is None:
+                self._interval_plan = None
+                return None
+            cache = self._interval_plan = {"shelf": shelf_key, "res": res, "tried": {}, "visit": ledger["key"],
+                                           "replanned": bool(ledger["drinks"] or ledger["cards"] or ledger["upgraded"])}  # fmt: skip
+            self._interval_prefetch_gains(state, ps, items, res)
+            iv.save_interval_cache({"plan": cache, "ledger": ledger})
+        res = cache["res"]
+        if not res.get("significant", True):
+            # 模拟里没有哪个选项明显好过「不买」（差在标准误以内）：按兜底规则执行，模拟表格写进记录
+            d = self._interval_rule(state, ps, unknown, items)
+            top = "；".join(f"{'、'.join(r['labels'])} {r['gain']:+,}±{r['gain_se']:,}" for r in res["rows"][:5])
+            d.reason += f"（模拟 R2 {len(res['seeds'])} 个种子配对：没有选项显著好过不买，按规则。前几名：{top}）"
+            d.candidates = d.candidates + [Candidate(Action(ActionKind.INTERVAL_END), preview={"组合": r["labels"], "P": r["cost"],
+                                           "R2 期望分": r["mean"], "比不买": f"{r['gain']:+,} ± {r['gain_se']:,}"}, expected=r["mean"])
+                                           for r in res["rows"][:12]]  # fmt: skip
+            return d
+        cands = [Candidate(Action(ActionKind.INTERVAL_END), preview={"组合": r["labels"], "P": r["cost"], "R2 期望分": r["mean"],
+                                                                      "比不买": f"{r['gain']:+,} ± {r['gain_se']:,}"}, expected=r["mean"])
+                 for r in res["rows"][:12]]  # fmt: skip
+        dev = res.get("deviation")
+        why = (f"{'偏离社区默认，用模拟方案' if dev else '社区默认方案'}：{'、'.join(res['labels']) or '不买'}，比不买 {res['gain']:+,} ± {res['gain_se']:,}"
+               f"（{res['cost']}P；模拟 R2 {res['policy']} {len(res['seeds'])} 个种子配对，{res['seconds']}s）。" + "；".join(res.get("rule_notes") or []))  # fmt: skip
+        if dev:
+            from hiro.brain.drinks import log_deviation
 
+            if not cache.get("logged"):
+                log_deviation({**dev, "kind_detail": "interval"})
+                cache["logged"] = True
 
+        def done(action: Action, step: str) -> Decision:
+            iv.save_interval_cache({"plan": cache, "ledger": ledger})  # 每发一个动作落盘一次（重启后接着执行，不重算）
+            hw = getattr(self, "_interval_held_warn", None)
+            w = ([hw] if hw else []) + ([f"community_deviation：{'、'.join(dev['rule']) or '不买'} → {'、'.join(dev['pick']) or '不买'}（{dev['gain']:+,} ± {dev['gain_se']:,}）"] if dev else [])
+            if dev and dev.get("has_hp"):
+                # 协调 2026-11-02：社区续打对体力估值偏高，偏离方案里含体力档的都单独记一条（续打第 2、3 步改好前）
+                w.append("community_deviation 含体力档：社区续打对体力的估值偏高（第十七局专家核对只是噪声），请复核")
+            return Decision(action, f"{step}；{why}", "sim" if dev else "rule", 0.8, cands, warnings=w, decider="interval")
 
+        recover = items.get("recover") or {}
+        per2 = recover.get("price_per_2hp") or 10
+        self.interval_target_hp = res["target_hp"]  # 执行侧离开前的体力检查用同一个目标（第十二局：决策 24、收尾 17 不一致）
+        if hp < res["target_hp"] and recover.get("available", True) and p >= per2:
+            return done(Action(ActionKind.INTERVAL_BUY, {"service": "recover"}), f"回体力 {hp} → 目标 {res['target_hp']}/{max_hp}")
+        shelf = {it["index"]: it for k in ("cards", "drinks") for it in items.get(k) or []}
+        # drink_step 能用（有增益表的开局信息、能刷新）时，方案里的饮料一律交给它（第二十八局：社区默认方案把 ミックススムージー（换手·2 档，
+        # 增益常为负）当抽牌类目标先买了）；用不了时弱饮料（3–4 档）仍不按方案买，其余照方案买
+        step_ready = (self.INTERVAL_DRINK_STEP and self.INTERVAL_REROLL and (items.get("refresh") or {}).get("available") is not False
+                      and self._gains_setup(ps, self._interval_held(state, ps), res) is not None)  # fmt: skip
+        for idx in ([] if cache.get("rerolling") else res["buy"]):  # 刷新过：方案里按格子编号记的东西已经换了，不再按编号买
+            it = shelf.get(idx)
+            if it is None or it.get("purchased"):
+                continue
+            if it.get("drink_id") and self.INTERVAL_DRINK_STEP and (step_ready or _drink_tier(it["drink_id"]) >= 3):
+                continue
+            tried = cache["tried"].get(idx)
+            if tried is not None and p < tried:
+                continue  # 点过、P 点已经减少：买到了（货架的 purchased 还没刷新）
+            if not _affordable(it, p):
+                continue
+            cache["tried"][idx] = p
+            ledger["pending"] = {"kind": "drink" if it.get("drink_id") else "card", "id": it.get("drink_id") or (it.get("card_id"), it.get("upgrade") or 0), "p": p}
+            return done(Action(ActionKind.INTERVAL_BUY, {"index": idx}), f"买 {it.get('name')}（{it.get('price')}P）")
+        d = self._interval_reroll(state, ps, items, cache, res, done)
+        if d is not None:
+            return d
+        up = res.get("upgrade")
+        upgrade = items.get("upgrade") or {}
+        if up and up not in ledger["upgraded"] and "upgrade" not in cache["tried"] and upgrade.get("available", True) \
+                and (upgrade.get("left") is None or upgrade["left"] > 0) and _affordable(upgrade, p):  # fmt: skip
+            cache["tried"]["upgrade"] = p
+            ledger["pending"] = {"kind": "upgrade", "id": up, "p": p}
+            return done(Action(ActionKind.INTERVAL_UPGRADE_CARD, {"card_id": up}), f"强化 {_card_label({'card_id': up})}（{upgrade.get('price')}P）")
+        # 不清空方案 / 账本：执行侧可能误判已离开（第十八局本战 22:33「IntervalEnd 时已不在轮间」其实还在），重进时接着用；下一次轮间按 key 重置
+        cache["ended"] = True
+        rr = f"；{cache['reroll_note']}" if cache.get("reroll_note") else ""
+        return done(Action(ActionKind.INTERVAL_END), f"方案执行完（剩 {p}P，体力 {hp}/{max_hp}）{rr}")
 
+    @staticmethod
+    def _keep_last_slot(gains: dict, it: dict, spare: int, price: int) -> bool:
+        """饮料栏只剩最后一格时的最优停止（总控 2026-11-03，第二十局轮间：用最后一格买了第 2 瓶 おしゃれハーブティー（R2 +0.8 万），
+        随后刷出 ホエイ / 厳選ブレンド 已经买不了，剩 225P）：「再刷一次、新货架上最好那瓶的期望净值 − 刷新的机会成本」高于
+        现在买这瓶的净值（增益 − 每 P 机会成本 × 价格）时，留着这格先刷新。"""
+        from hiro.sim import interval as iv
 
+        g = gains[it["drink_id"]][0] - iv.SPARE_P_VALUE * (it.get("price") or 0)
+        ev = iv.reroll_ev(gains, 1, spare, price, 0.0)["ev"] - iv.SPARE_P_VALUE * price
+        return ev > g
 
+    def _interval_held(self, state: GameState, ps: ProduceState) -> list:
+        """轮间开始时手里的饮料（不含本次轮间账本里买的）。依据（协调 2026-11-04）：
+        1. 轮间画面这一帧读到的饮料栏（field_status = observed / verified）：权威；减掉本次轮间已买的（账本另算）；
+        2. 否则用 R1 结束时考试里的实际剩余（interval.CONTEXT["drinks"]，note_exam 在 R1 结束时记下、随 finals_context 落盘）；
+        3. 都没有时才用 produce.drinks。绝不用 R1 开局的持有。
+        画面 / R1 结束记录 / produce.drinks 不一致时取前者并报警（self._interval_held_warn）。
+        第二十五局：produce.drinks 读成空、R1 实剩 ホエイ；第二十九局：produce.drinks 停在 R1 开局的 4 瓶（seq 115，pending），
+        R1 实际喝光 → 判成「饮料栏满」，一瓶没买、去强化。"""
+        from hiro.sim import interval as iv
 
+        page = None if "drinks" in self.unknown_fields(state, ps) else [d for d in ps.drinks if d]
+        src = (state.sources or {}).get("produce.drinks")
+        src_seq = src.get("seq") if isinstance(src, dict) else getattr(src, "seq", None)
+        # 「本帧读到」：状态 observed / verified 且来源就是这一帧（执行 cdce573 离开考试时把 exam.drinks 写回 produce.drinks、记 observed，
+        # 那是 R1 结束时的值，不含本次轮间买的；不能当本帧画面去减账本）
+        fresh = (state.field_status or {}).get("produce.drinks") in ("observed", "verified") and src_seq is not None and src_seq == state.seq
+        ctx = iv.CONTEXT.get("drinks")
+        ctx = None if ctx is None else [d for d in ctx if d]
+        self._interval_held_warn = None
+        if fresh and page is not None:
+            held = list(page)
+            for d in (getattr(self, "_interval_ledger", None) or {}).get("drinks") or []:
+                if d in held:
+                    held.remove(d)  # 画面上已经包括本次轮间买的，账本那边另算
+            if ctx is not None and sorted(held) != sorted(ctx):
+                self._interval_held_warn = f"轮间持有：画面 {held} 和 R1 结束剩余 {ctx} 不一致，按画面"
+            return held
+        if ctx is not None:
+            if page and sorted(page) != sorted(ctx):
+                self._interval_held_warn = f"轮间持有：produce.drinks {page}（未在本帧读到）和 R1 结束剩余 {ctx} 不一致，按 R1 结束剩余"
+            return ctx
+        return page or []
+
+    @staticmethod
+    def _gains_setup(ps: ProduceState, holding: list, res: dict):
+        """轮间刷新估值的增益表开局：R1 牌组 + 持有 + 本战倍率（hiro.sim.interval.CONTEXT）。CONTEXT 不全时 None。"""
+        from hiro.sim import interval as iv
+
+        deck = [tuple(x) for x in iv.CONTEXT.get("deck") or []]
+        permil = {a: v for a, v in (iv.CONTEXT.get("permil") or {}).items() if v}
+        if not deck or not permil:
+            return None
+        for a in ("Vo", "Da", "Vi"):
+            permil.setdefault(a, min(permil.values()))
+        return iv.R2Setup(deck=deck, drinks=list(holding), hp=max(ps.stamina, res.get("target_hp") or ps.stamina), max_hp=ps.max_stamina, permil=permil)
+
+    def _interval_prefetch_gains(self, state: GameState, ps: ProduceState, items: dict, res: dict) -> None:
+        """方案一算出来，就按「现在持有 + 方案里要买的饮料」在后台算刷新估值要用的增益表（执行回体力 / 买东西的这段时间里算）。"""
+        from hiro.sim import interval as iv
+
+        try:
+            held = self._interval_held(state, ps)
+            shelf = {it["index"]: it for it in items.get("drinks") or []}
+            planned = [shelf[i]["drink_id"] for i in res.get("buy") or [] if i in shelf and shelf[i].get("drink_id")]
+            setup = self._gains_setup(ps, held + list(self._interval_ledger["drinks"]) + planned, res)
+            if setup is not None and ps.drink_capacity > len(setup.drinks) and (items.get("refresh") or {}).get("available") is not False:
+                iv.start_gains(setup)
+        except Exception as e:  # noqa: BLE001  预取失败不影响决策
+            logger.debug("增益表预取失败：%s", e)
+
+    def _interval_ledger_for(self, ps: ProduceState, p: int) -> dict:
+        """本次轮间账本：成交的饮料 / 卡 / 强化、刷新次数。发出动作时记 pending，下一次看到 P 减少才算成交（失败的不记）。
+        按 (mode, step) 认同一次轮间；重进（执行侧误判已离开）时接着用。"""
+        key = (ps.mode, ps.step)
+        led = getattr(self, "_interval_ledger", None)
+        if led is None:
+            # 进程重启（第二十二局通信エラー 后 -r2 整套重算 71s + 78s）：读回落盘的账本和方案（同一次轮间才用）
+            from hiro.sim import interval as iv
+
+            saved = iv.load_interval_cache()
+            if saved and (saved.get("ledger") or {}).get("key") == key:
+                led = self._interval_ledger = saved["ledger"]
+                if (saved.get("plan") or {}).get("visit") == key:
+                    self._interval_plan = saved["plan"]
+                logger.info("轮间：读回落盘的账本 / 方案（%s）", key)
+        if led is None or led["key"] != key:
+            led = self._interval_ledger = {"key": key, "drinks": [], "cards": [], "upgraded": [], "rerolls": 0, "pending": None}
+        pend = led.pop("pending", None)
+        led["pending"] = None
+        if pend is not None and p < pend["p"]:
+            {"drink": led["drinks"], "card": led["cards"], "upgrade": led["upgraded"]}[pend["kind"]].append(pend["id"])
+        return led
+
+    INTERVAL_REROLL = True  # 测试 / 兜底开关
+
+    def _interval_reroll(self, state: GameState, ps: ProduceState, items: dict, cache: dict, res: dict, done) -> Decision | None:
+        """轮间刷新货架（用户 2026-11-02：第十六局 R2 只有 漢方、第十七局只有 ハーブティー，剩 435P）。计划里的回体力 / 买卡 / 买饮料做完之后、强化之前：
+        1. 刷新过的新货架：先买值得买的饮料（R2 增益 > 1.5 个标准误，空位 / 可花 P 内增益和最大），牌组不满 22 张时按补卡顺序买卡；
+        2. 再估一次刷新：价值 = 新货架期望最优买法 − 当前货架最优买法（hiro.sim.interval.reroll_ev，商品池按实机观测等概率），
+           > 0 就刷（不为强化预留 P，用户 2026-11-03）；否则交回（强化用剩下的钱 → 结束）。
+        社区默认（playbook：R2 两瓶爆发 + 两瓶抽牌；刷新止损——先给体力和可见替代饮料留钱，不为单瓶目标无限刷新）作先验：
+        持有没达到 R2 目标才刷；估值和默认不一致时写进记录（community_deviation）。动作：Reroll {"scope": "interval"}（和执行 23e6965 对齐中）。"""
+        from hiro.brain import drinks as dk
+        from hiro.sim import interval as iv
+
+        refresh = items.get("refresh") or {}
+        if not self.INTERVAL_REROLL or refresh.get("available") is False or refresh.get("price") is None or cache.get("reroll_failed"):
+            return None
+        p = ps.produce_point
+        price = int(refresh["price"])
+        # 不为强化预留 P（用户 2026-11-03：「100P 拿去强化 せのび 没必要啊，强化的收益不如买饮料」）：饮料在强化前面，强化只用剩下的钱
+        need = 0
+        spare = p - need
+        held = self._interval_held(state, ps)
+        ledger = self._interval_ledger
+        # 持有 = R1 剩下的（读得到时）+ 本次轮间账本里成交的（第十八局本战：按货架 id 反推，买掉的格读成 None → 「持有 空」，拿垃圾饮料填空位）
+        holding = held + list(ledger["drinks"])
+        free = ps.drink_capacity - len(holding)
+        if any(not it.get("drink_id") and not it.get("purchased") for it in items.get("drinks") or []) and cache.get("rerolling"):
+            # 刷新后的新货架还没认出来：等识别，不拿空货架去估（第十八局：两次刷新估值一模一样）
+            cache["unread_waits"] = cache.get("unread_waits", 0) + 1
+            if cache["unread_waits"] <= 3:
+                return Decision(Action.ui(ActionKind.WAIT, why="刷新后货架未识别"), "刷新后的货架还没认出：重新观测", "rule", 0.6, decider="interval")
+        cache["unread_waits"] = 0
+        if "gains" not in cache:
+            setup = self._gains_setup(ps, holding, res)
+            if setup is None:
+                return None
+            try:
+                # 方案算完时已按「持有 + 方案里的饮料」在后台开算（_interval_prefetch_gains）；持有一致就直接用 / 等它算完
+                cache["gains"] = iv.take_gains(setup) or iv.drink_gains(setup)
+                iv.save_interval_cache({"plan": cache, "ledger": self._interval_ledger})
+            except Exception as e:
+                logger.warning("轮间刷新估值失败，不刷：%s", e)
+                cache["reroll_failed"] = True
+                return None
+        gains = cache["gains"]
+        shelf = [(it["index"], it["drink_id"], it.get("price") or iv.drink_price(it["drink_id"])) for it in items.get("drinks") or []
+                 if it.get("drink_id") and not it.get("purchased")]  # fmt: skip
+        last = cache.pop("reroll_pending", None)
+        if last is not None and p >= last["p"] and sorted(shelf) == last["shelf"]:
+            # 刷新没成（P 没扣、货架没变；执行侧遇到ジュエル确认框 / 失败会取消）：这次轮间不再刷
+            cache["reroll_failed"] = True
+            cache["reroll_note"] = "刷新没做成（P 和货架都没变），本次轮间不再刷"
+            return None
+        nrr = cache.get("rerolls", 0)
+        if self.INTERVAL_DRINK_STEP:
+            return self._interval_drink_step(ps, items, cache, res, done, gains, shelf, holding, free, spare, price, nrr)
+        if cache.get("rerolling"):
+            # 1. 新货架：值得买的饮料
+            v0, picks = iv.shelf_value(shelf, gains, free, spare)
+            for idx in picks:
+                # 键带上刷新次数：刷新后同一格编号是另一瓶（第二十五局：第 1 次刷新后在 6 号格买了 ブレンド，第 2 次刷新后 6 号格的 ホエイ 被当成已买）
+                if cache["tried"].get(("rr", nrr, idx)) is not None and p < cache["tried"][("rr", nrr, idx)]:
+                    continue
+                it = next(x for x in items["drinks"] if x.get("index") == idx)
+                if free == 1 and self._keep_last_slot(gains, it, spare, price):
+                    # 最后一格不买弱饮料：再刷一次期望更高，交给下面的刷新估值（第二十局：第 2 瓶 ハーブティー 占满栏位，随后刷出 ホエイ / ブレンド 买不了）
+                    cache["kept_slot"] = it.get("name")
+                    break
+                cache["tried"][("rr", nrr, idx)] = p
+                ledger["pending"] = {"kind": "drink", "id": it["drink_id"], "p": p}
+                g, se = gains[it["drink_id"]]
+                return done(Action(ActionKind.INTERVAL_BUY, {"index": idx}),
+                            f"刷新后的货架：买 {it.get('name')}（{it.get('price')}P，R2 增益 {g:+,} ± {se:,}，> 价格 × 每 P {iv.SPARE_P_VALUE} 分）")  # fmt: skip
+            # 牌组不满 22 张：按补卡顺序买卡（cards 也随刷新换了）
+            deck_n = len(iv.CONTEXT.get("deck") or []) + len(ledger["cards"])
+            if deck_n < iv.OUENBOU_SIZE:
+                from hiro.brain.deciders import unwanted as _unwanted
+
+                owned = {c[0] for c in iv.CONTEXT.get("deck") or []}
+                cards = [it for it in items.get("cards") or [] if it.get("card_id") and not it.get("purchased") and not _unwanted(it["card_id"])
+                         and _is_core_card(it["card_id"]) and wants_copy(it["card_id"], sum(1 for c in iv.CONTEXT.get("deck") or [] if c[0] == it["card_id"]))  # 瘦牌组：只买核心卡
+                         and (it.get("price") or 0) <= spare and cache["tried"].get(("rc", nrr, it["index"])) is None]  # fmt: skip
+                if cards:
+                    it = max(cards, key=lambda x: iv._card_rule_key(x["card_id"], owned))
+                    cache["tried"][("rc", nrr, it["index"])] = p
+                    ledger["pending"] = {"kind": "card", "id": (it["card_id"], it.get("upgrade") or 0), "p": p}
+                    return done(Action(ActionKind.INTERVAL_BUY, {"index": it["index"]}), f"刷新后的货架：买核心卡 {it.get('name')}（{it.get('price')}P）")
+        cur_v, _ = iv.shelf_value(shelf, gains, free, spare)
+        r = iv.reroll_ev(gains, free, spare, price, cur_v)
+        r["ev"] -= iv.SPARE_P_VALUE * price  # 刷新价格（实际价格：10 → 20 → 30…）按余 P 的机会成本计
+        target_met = not [x for x in ("复制", "爆发", "抽牌") if x in _r2_missing(holding)]
+        default = (not target_met) and spare >= price  # 社区默认：没达到 R2 目标、P 够才刷
+        want = r["ev"] > 0
+        n = cache.get("rerolls", 0)
+        note = (f"刷新估值：新货架期望最优买法比现在 {r['ev']:+,.0f}（± {r['se']:,.0f}，至少一瓶值得买的概率 {r['p_good']:.0%}），"
+                f"刷新 {price}P，可花 {spare}P（不为强化预留），已刷 {n} 次；持有 {dk.describe(holding, 'r2')}")  # fmt: skip
+        if cache.pop("kept_slot", None):
+            note += "；最后一格留着：刷新的期望比买货架上这瓶弱饮料高"
+        cache["reroll_note"] = note
+        if not want:
+            if default:
+                cache["reroll_note"] += "；社区默认会继续刷（R2 目标没达到），估值说不划算：不刷"
+            return None
+        cache["rerolling"] = True
+        cache["rerolls"] = n + 1
+        cache["reroll_pending"] = {"p": p, "shelf": sorted(shelf)}
+        ledger["rerolls"] = ledger.get("rerolls", 0) + 1
+        d = done(Action(ActionKind.REROLL, {"scope": "interval"}), f"刷新货架（第 {n + 1} 次）：{note}" + ("" if default else "；R2 目标已达到，按估值仍刷（偏离社区默认）"))
+        if not default:
+            d.warnings = d.warnings + [f"community_deviation：轮间刷新（R2 目标已达到仍刷，期望 {r['ev']:+,.0f}）"]
+        return d
+
+    INTERVAL_DRINK_STEP = True  # 买饮料 / 刷新按栏位机会成本 + 社区先验（第二十五局，用户 2026-11-04「瞎买饮料」；False 回到原来的「值得买就买 + 刷新估值」）
+
+    def _interval_drink_step(self, ps, items, cache, res, done, gains, shelf, holding, free, spare, price, nrr) -> Decision | None:
+        """当前货架（刷新前后都算）上下一步：买 / 刷新 / 停（hiro.sim.interval.drink_step）。停了才轮到强化（用户 2026-11-03：强化的收益不如买饮料；
+        第二十五局：饮料栏空 2 格、P 215 时去强化了 ワクワク）。方案里按格子编号买的（res["buy"]）已经在前面执行过。"""
+        from hiro.brain import drinks as dk
+        from hiro.sim import interval as iv
+
+        p = ps.produce_point
+        ledger = self._interval_ledger
+
+        def bought(idx) -> bool:  # 点过买、P 已经减少（货架的 purchased 还没刷新）；方案里按编号买的只在没刷新过时算
+            keys = [("rr", nrr, idx)] + ([idx] if not cache.get("rerolling") else [])
+            return any(cache["tried"].get(k) is not None and p < cache["tried"][k] for k in keys)
+
+        avail = [x for x in shelf if not bought(x[0])]
+        st = iv.drink_step(avail, gains, holding, free, spare, price, rerolls=nrr)
+        warn = [f"community_deviation：轮间饮料 {st['deviation']}"] if st.get("deviation") else []
+        tail = f"；持有 {dk.describe(holding, 'r2')}" + (f"；不买：{'、'.join(st['skipped'])}" if st.get("skipped") else "")
+        if st["kind"] == "buy":
+            idx = st["index"]
+            it = next(x for x in items["drinks"] if x.get("index") == idx)
+            cache["tried"][("rr", nrr, idx)] = p
+            ledger["pending"] = {"kind": "drink", "id": it["drink_id"], "p": p}
+            d = done(Action(ActionKind.INTERVAL_BUY, {"index": idx}), f"{it.get('name')}（{it.get('price')}P）：{st['why']}{tail}")
+            d.warnings = d.warnings + warn
+            return d
+        if cache.get("rerolling"):
+            # 牌组不满 22 张：按补卡顺序买核心卡（cards 也随刷新换了）
+            deck_n = len(iv.CONTEXT.get("deck") or []) + len(ledger["cards"])
+            if deck_n < iv.OUENBOU_SIZE:
+                owned = {c[0] for c in iv.CONTEXT.get("deck") or []}
+                cards = [it for it in items.get("cards") or [] if it.get("card_id") and not it.get("purchased") and not unwanted(it["card_id"])
+                         and _is_core_card(it["card_id"]) and wants_copy(it["card_id"], sum(1 for c in iv.CONTEXT.get("deck") or [] if c[0] == it["card_id"]))
+                         and (it.get("price") or 0) <= spare and cache["tried"].get(("rc", nrr, it["index"])) is None]  # fmt: skip
+                if cards:
+                    it = max(cards, key=lambda x: iv._card_rule_key(x["card_id"], owned))
+                    cache["tried"][("rc", nrr, it["index"])] = p
+                    ledger["pending"] = {"kind": "card", "id": (it["card_id"], it.get("upgrade") or 0), "p": p}
+                    return done(Action(ActionKind.INTERVAL_BUY, {"index": it["index"]}), f"刷新后的货架：买核心卡 {it.get('name')}（{it.get('price')}P）")
+        cache["reroll_note"] = f"饮料：{st['why']}{tail}"
+        if st["kind"] == "stop":
+            return None
+        cache["rerolling"] = True
+        cache["rerolls"] = nrr + 1
+        cache["reroll_pending"] = {"p": p, "shelf": sorted(shelf)}
+        ledger["rerolls"] = ledger.get("rerolls", 0) + 1
+        d = done(Action(ActionKind.REROLL, {"scope": "interval"}), f"刷新货架（第 {nrr + 1} 次）：{st['why']}{tail}")
+        d.warnings = d.warnings + warn
+        return d
 
     def _interval_rule(self, state: GameState, ps: ProduceState, unknown: set, items: dict) -> Decision:
         """兜底（模拟器算不了时）。用户 2026-11-01：体力不回满——広 有回血，エウレカ 要 HP ≤ 50% 才触发，回到角色的体力目标
@@ -1771,6 +2194,8 @@ class ProduceDeciders:
             better = [(dk.holding_key(held + [it["drink_id"]], "r2", ps.drink_capacity), it) for it in _items(shelf, "drink")
                       if it.get("drink_id") and _affordable(it, budget)]  # fmt: skip
             better = [x for x in better if x[0] < cur]
+            if INTERVAL_REFRESH and (why := self._interval_refresh_why(items, shelf, budget)):
+                return done(Action(ActionKind.REROLL, {"scope": "interval"}), why)
             if better:
                 it = min(better, key=lambda x: x[0])[1]
                 return done(Action(ActionKind.INTERVAL_BUY, {"index": it["index"]}),
@@ -1789,12 +2214,40 @@ class ProduceDeciders:
             if know and know.get("must") and deck_known and it["card_id"] not in owned and _affordable(it, budget):
                 return done(Action(ActionKind.INTERVAL_BUY, {"index": it["index"]}), f"买缺的核心卡 {know['name']}（{it['price']}P）")
         if ps.deck and "deck" not in unknown and upgrade.get("available", True) and _affordable(upgrade, budget):
-            target = _upgrade_target(ps)
-            if target is not None:
-                return done(Action(ActionKind.INTERVAL_UPGRADE_CARD, {"card_index": target[0]}), f"强化核心卡 {target[1]}（{upgrade['price']}P）")
+            up = _upgrade_target(ps)  # 别复用 target：后面的「回体力到目标」要用体力目标（原来写成 target 被覆盖成 None）
+            if up is not None:
+                return done(Action(ActionKind.INTERVAL_UPGRADE_CARD, {"card_index": up[0]}), f"强化核心卡 {up[1]}（{upgrade['price']}P）")
         if recover_ok:
             return done(Action(ActionKind.INTERVAL_BUY, {"service": "recover"}), f"回体力到目标 {target}（{hp}/{max_hp}）")
         return done(Action(ActionKind.INTERVAL_END), f"没有要买的（剩 {p}P，体力 {hp}/{max_hp}，目标 {target}）")
+
+    def _interval_refresh_why(self, items: dict, shelf: list, budget: int) -> str | None:
+        """轮间货架没有 R2 优先档饮料（复制 / 爆发）时先刷新再买（开关 HIRO_INTERVAL_REFRESH）。
+        Windows 第七局：货架只有 ホエイ + 青汁，买完剩 380P 没花；A5b 买到了复制饮料 特製ハツボシエキス。
+        只在还没买饮料时刷（买过以后持有数未知，再买可能溢出）；两格饮料都认出才判断；刷完货架没变（没刷成）、
+        刷满 INTERVAL_REFRESH_MAX 次、或刷完不够买两瓶 100P 饮料就不刷。返回刷新理由，不刷返回 None。"""
+        from hiro.brain import drinks as dk
+
+        drinks = _items(shelf, "drink")
+        refresh = items.get("refresh") or {}
+        price = refresh.get("price")
+        if not drinks or any(it.get("purchased") for it in (items.get("drinks") or [])) or any(not it.get("drink_id") for it in drinks):
+            return None
+        if refresh.get("available") is False or price is None or budget - price < INTERVAL_DRINK_RESERVE:
+            return None
+        if any(dk.tag([it["drink_id"]], "r2")[0][0] == 0 for it in drinks):
+            return None  # 已有复制 / 爆发
+        sig = tuple(sorted((it.get("index"), it.get("card_id") or it.get("drink_id")) for it in shelf))
+        tried = getattr(self, "_interval_rerolls", None)
+        if tried is None or tried["budget_hint"] < budget:  # P 变多 = 新的一次轮间（每局只有一次，防跨局残留）
+            tried = self._interval_rerolls = {"sigs": [], "budget_hint": budget}
+        tried["budget_hint"] = budget
+        if (tried["sigs"] and tried["sigs"][-1] == sig) or len(tried["sigs"]) >= INTERVAL_REFRESH_MAX:
+            return None
+        tried["sigs"].append(sig)
+        names = "、".join(it.get("name") or it["drink_id"] for it in drinks)
+        return (f"【刷新】轮间货架饮料（{names}）没有复制 / 爆发（R2 优先档），刷新找一次（{price}P，第 {len(tried['sigs'])} 次，"
+                f"最多 {INTERVAL_REFRESH_MAX} 次；刷完还剩 {budget - price}P）")
 
     def _interval_state(self, state: GameState) -> tuple[ProduceState | None, set[str]]:
         """轮间用的 ProduceState：体力 / 最大体力 / P 点取本页页头读数（识别-06 / ef5d764 三读投票），其余字段由 ProduceState 补。
@@ -1891,6 +2344,29 @@ SLEEP_ID = "p_card-00-acc-0_002"  # 眠気
 # 按瘦牌组规则（能刷新先刷新，否则拿最不污染的：一次性 > 不生成眠気 > 不冲突），不取游戏推荐。行为变化，默认关
 SELECT_NONE_LEAN = True  # 开源版默认开（主仓库 D40）
 SELECTION_LEAN_PICK = False  # 选拔里必拿已齐、候选无核心卡时按瘦牌组规则选（不调 LLM；协调 2026-11-03 提速）。行为变化，默认关，等用户答复（总控 2026-11-03）
+# 换卡阶段 1 按删卡顺序挑换入卡（协调 2026-11-07）：原来只按 card_value 挑，换出却按 cull_key（删卡顺序）排，
+# 结果换进来的往往正是下次最先换掉的那类（Win2：换进「止められない想い」价值 2，下一次换卡就把它换掉，牌组里 3 张元気な挨拶 没动）。
+# 开：换入挑 cull_key 最大的（最晚才会被删），同档再比价值。行为变化，默认关；HIRO_CHANGE_PICK_BY_CULL=1 打开
+def _sim_ready() -> bool:
+    """模拟器可用：引擎能导入、主数据（catalog.sqlite）已构建。HIRO_SIM=0 强制不用（只按社区规则）。"""
+    import os
+
+    if os.environ.get("HIRO_SIM") == "0":
+        return False
+    try:
+        import hiro.sim
+
+        return hiro.sim.master_ready()
+    except Exception:  # noqa: BLE001  引擎缺失 / 导入失败
+        return False
+
+
+CHANGE_PICK_BY_CULL = __import__("os").environ.get("HIRO_CHANGE_PICK_BY_CULL") == "1"
+# 轮间货架没有复制 / 爆发饮料时先刷新（协调 2026-11-08，Windows 第七 / 九 / 十 / 十二局剩 400P 以上）。
+# 用户 2026-11-08 定为默认开（主仓库 11-02 已有同样的刷新，靠模拟器估值；这里是社区默认的规则版）；HIRO_INTERVAL_REFRESH=0 关
+INTERVAL_REFRESH = __import__("os").environ.get("HIRO_INTERVAL_REFRESH", "1") != "0"
+INTERVAL_REFRESH_MAX = 3
+INTERVAL_DRINK_RESERVE = 200  # 刷完至少还够买两瓶 100P 饮料
 CHANGE_JUNK_VALUE = 1.0  # card_value ≤ 它算「废牌」（冲突 0、基础卡 0.5、好印象系 1）：授業セレクトチェンジ 只在有废牌时才选
 # 授業是セレクトチェンジ 的日子 [wiki]：选拔第 10、17 天，本战第 1、4 天（step = 日程位置）
 CHANGE_STUDY_DAYS = {("produce-007", 10), ("produce-007", 17), ("produce-008", 1), ("produce-008", 4)}

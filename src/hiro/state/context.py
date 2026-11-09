@@ -317,6 +317,25 @@ def _apply_params(state: ProduceState, gains: dict) -> tuple[dict, dict]:
     return after, real
 
 
+# 没有倍率换算数据（开源版：exam_requirements 不可用）时，R1 倍率增量用「R1 各属性回合数 × 属性增量」近似（协调 2026-11-07）。
+# 依据：考前说明页 属性 → 倍率 基本线性（同属性斜率近乎恒定，Vo≈1.41 / Da≈1.20 %/点），属性间斜率差约 20%，比回合数 4:3:2 的差小；
+# 只用于同一步各选项之间比大小。Win2 选课两次选了主属性 Da，R1（Vo 4 回合）倍率比 A5b 低 15%。行为变化，默认关；HIRO_R1_TURN_PROXY=1 打开
+R1_TURN_PROXY = __import__("os").environ.get("HIRO_R1_TURN_PROXY") == "1"
+
+
+def r1_turn_weighted_gain(state: ProduceState, delta: dict) -> int | None:
+    """本战：Σ R1 该属性回合数 × 属性增量（到上限为止）。不是本战、属性读数不全、偶像没有流行顺序数据时 None。"""
+    gains = {a: delta[a] for a in ATTRS if delta.get(a)}
+    if state.mode != FINALS or not gains or not params_complete(state.params):
+        return None
+    try:
+        kind, order = idol_trend(state.idol_card_id)
+    except (KeyError, IndexError, AttributeError, TypeError):
+        return None
+    turns = dict(zip(order, TURN_SPLIT[kind]["r1"]))
+    return sum(turns[a] * (min(state.param_cap, state.params[a] + g) - state.params[a]) for a, g in gains.items())
+
+
 def r1_bonus_gain(state: ProduceState, delta: dict) -> int | None:
     """本战：加上 delta（属性增量）后，R1「每回合属性倍率 × 该属性回合数」总和的增量（hif_preview 的 parameter_bonus_permil，
     回合数按偶像流行顺序 × TURN_SPLIT；只算属性，不含星星）。本战课程 / 授業选属性用（协调 2026-11-04：和数据确认审计共用）。
@@ -526,6 +545,9 @@ def preview_action_select(state: ProduceState, available: list[dict] | None = No
     for row in out:
         if row.get("option") in ("training", "class") and (g := r1_bonus_gain(state, row.get("delta") or {})) is not None:
             row["R1倍率增量"] = g  # Σ 每回合倍率(‰) × 回合数 的增量，越大越好（本战课程 / 授業补哪项看它）
+        elif R1_TURN_PROXY and row.get("option") in ("training", "class") and (g := r1_turn_weighted_gain(state, row.get("delta") or {})) is not None:
+            row["R1倍率增量"] = g
+            row["R1倍率增量说明"] = "近似：R1 各属性回合数 × 属性增量（缺倍率换算数据；只用于和同一步其他选项比大小）"
     for i, row in enumerate(out):
         row["index"] = i
     return out

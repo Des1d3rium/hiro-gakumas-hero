@@ -9,6 +9,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from hiro.produce import hif_buttons as BTN
+from hiro import imgio
 
 CLOSE_TEXTS = ("閉じる",)
 CLOSE_TAP = BTN.BOTTOM_HIGH  # 一览底部「閉じる」（识屏：KAA OwnedSkillCardsDialog.ButtonClose）
@@ -44,7 +45,7 @@ def _save(imgs) -> None:
         SAVE_DIR.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
         for i, im in enumerate(imgs):
-            cv2.imwrite(str(SAVE_DIR / f"{stamp}-{i:02d}.jpg"), im)
+            imgio.imwrite(str(SAVE_DIR / f"{stamp}-{i:02d}.jpg"), im)
     except Exception:
         pass
 

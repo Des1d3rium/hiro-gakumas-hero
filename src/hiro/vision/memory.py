@@ -47,7 +47,8 @@ def _cy(b) -> int:
 def detail_page(boxes) -> int | None:
     """详情框当前是第几页（1 / 2）；页码读不到时按内容判断。"""
     for t, b in boxes:
-        if PAGER_Y[0] <= _cy(b) <= PAGER_Y[1] and (m := re.fullmatch(r"([12])/2", _norm(t))):
+        # 斜杠 RapidOCR 常读成 1（「1/2」→「112」）：三位且中间是 1 / l / I / | 也按斜杠算
+        if PAGER_Y[0] <= _cy(b) <= PAGER_Y[1] and (m := re.fullmatch(r"([12])[/1lI|]2", _norm(t))):
             return int(m.group(1))
     if any("獲得可能スキルカード" in t for t, _ in boxes):
         return 1

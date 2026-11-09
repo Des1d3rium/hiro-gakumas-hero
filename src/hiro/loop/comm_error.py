@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+from hiro.vision.textnorm import contains
+
 import time
 from collections.abc import Callable
 
@@ -45,7 +47,7 @@ def comm_error(boxes) -> dict | None:
     texts = [(_norm(t), b) for t, _, b in boxes]
     if not any(any(h in t for h in TITLE_HINTS) or ("通信" in t and ("エラー" in t or "工ラー" in t)) for t, _ in texts):
         return None
-    retry = next((_center(b) for t, b in texts if RETRY in t and TO_TITLE_BUTTON not in t), None)
+    retry = next((_center(b) for t, b in texts if RETRY in t and not contains(t, TO_TITLE_BUTTON)), None)
     close = next((_center(b) for t, b in texts if t.endswith(CLOSE)), None)
     kind = "retry" if retry else "to_title" if close else "unknown"
     return {"kind": kind, "retry": retry, "close": close}

@@ -61,6 +61,14 @@ def summarize(steps: list[Step], run_meta: dict | None = None) -> dict:
             e["turns"] = max(e["turns"], s.state.exam_session.turn)
             if s.state.exam and s.state.exam.get("score") is not None:
                 e["score"] = s.state.exam["score"]
+    # 考试画面最后一帧是打出最后一张牌之前的分数（GKMS 第五 / 六局：458,946 实为 629,767）：有本战结果页就用结果页的本轮得分。
+    # 再挑戦时结果页出现多次，取最后一次（最终采用的那次挑战）
+    for s in steps:
+        f = s.observation.fields if s.observation is not None else {}
+        if s.observation is not None and s.observation.page.name == "HIF_FINALS_RANKING" and f.get("round_score") is not None:
+            rnd = f.get("finals_round") or f.get("round_result")
+            if rnd in (1, 2):
+                exams.setdefault(f"r{rnd}", {"decisions": 0, "turns": 0, "score": None})["score"] = f["round_score"]
     execs = [s.execution for s in steps if s.execution is not None]
     return {
         "run": run_meta or {},

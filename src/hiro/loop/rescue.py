@@ -20,6 +20,8 @@
 
 from __future__ import annotations
 
+from hiro.vision.textnorm import contains, contains_any
+
 import json
 import os
 import time
@@ -28,6 +30,7 @@ from pathlib import Path
 
 from hiro.log import logging
 from hiro.produce import hif_buttons as BTN
+from hiro import imgio
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +70,7 @@ def check(reply: dict | None, boxes) -> tuple[dict, str | None]:
     if not isinstance(reply, dict) or reply.get("action") not in ACTIONS:
         return {"action": "stop"}, f"回复不合规：{reply!r}"[:200]
     texts = [_norm(t) for t, _, _ in boxes]
-    danger = [w for w in SCREEN_DANGER if any(w in t for t in texts)]
+    danger = [w for w in SCREEN_DANGER if any(contains(t, w) for t in texts)]
     act = reply["action"]
     from hiro.loop.advance import EXAM_MARKS
 
@@ -80,7 +83,7 @@ def check(reply: dict | None, boxes) -> tuple[dict, str | None]:
         if not isinstance(k, int) or not 0 <= k < len(boxes):
             return {"action": "stop"}, f"框编号 {k!r} 不在列表里"
         text = texts[k]
-        if any(w in text for w in TARGET_DANGER):
+        if contains_any(text, TARGET_DANGER):
             return {"action": "stop"}, f"目标框「{text}」含危险词"
         if any(h in t for t in texts for h in CHOICE_HINTS):
             return {"action": "stop"}, f"选择页（{next(t for t in texts if any(h in t for h in CHOICE_HINTS))}）交给决策层，不点「{text}」"
@@ -305,7 +308,7 @@ class Rescuer:
 
                 d = self.out_dir / f"{time.strftime('%Y%m%d-%H%M%S')}-{len(self.log)}"
                 d.mkdir(parents=True, exist_ok=True)
-                cv2.imwrite(str(d / "screen.jpg"), img)
+                imgio.imwrite(str(d / "screen.jpg"), img)
                 rec["dir"] = str(d)
                 (d / "record.json").write_text(json.dumps(rec, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
             except Exception:
