@@ -99,3 +99,34 @@ def test_tap_probe_refuses_when_a_card_is_lifted(monkeypatch):
     frame = NS(cards=[NS(rect=NS(center=NS(x=x, y=1010))) for x in (145, 365, 575)])
     assert V.tap_probe(frame, NS(slot=1, name="b")) is None
     assert clicks == [X.DESELECT_TAP]
+
+
+def test_exam_handoff_after_last_turn():
+    """HIRO_EXAM_HANDOFF：最后一回合（剩余 1）之后离开出牌页 1.5s 就交接给 watch；中途回合离开出牌页、或时间不够都不交接。"""
+    pytest.importorskip("kaa")
+    from hiro.produce.veil_exam import handoff_due
+
+    last = {"remaining": None, "off_since": None}
+    assert not handoff_due(last, True, 3, 0.0)
+    assert not handoff_due(last, False, None, 1.0)  # 剩 3 回合时的转场：不交
+    assert not handoff_due(last, True, 1, 2.0)
+    assert not handoff_due(last, True, None, 2.5)  # 读不出沿用 1
+    assert not handoff_due(last, False, None, 3.0)
+    assert not handoff_due(last, True, None, 3.5)  # 回到出牌页：重新计
+    assert not handoff_due(last, False, None, 4.0)
+    assert handoff_due(last, False, None, 5.6)
+
+
+def test_watch_notes_round_result():
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    pytest.importorskip("kaa")
+    import batch_hif as B
+
+    active = {"driver": {"results": [{"round": 1, "round_score": None, "rank": None}]}}
+    page = ("HIF_FINALS_RANKING", {"kind": "round_result", "finals_round": 1, "round_score": 862920, "rank": 1})
+    assert B.note_round_result(active, "img", classify=lambda img: page) == {"round": 1, "round_score": 862920, "rank": 1}
+    assert active["driver"]["results"][0]["round_score"] == 862920
+    assert B.note_round_result(active, "img", classify=lambda img: page) is None  # 已有分数不覆盖

@@ -14,6 +14,51 @@
 - [ ] **牌搜索还不支持的字段**：cardSearchTag（22 个道具用到）、stamina 上下限；遇到时返回「不知道」。
 - [ ] **账本客制化核对**：回放查出 veil-senbatsu 批次（1-d、3-b、3-c）账本给 インフルエンサー+ 记了「強気追加」，画面计数显示没有；1-e 账本漏了 veil-deck2 的「強気追加」。用 `memory-save --scan` 重读 veil-senbatsu。1-d R1、1-f R1 两份还没对上，待查。
 
+## 拆成两块：固定路线 / 固定打牌策略（使用者 2026-11-09）
+
+现在的「VEIL 批量」一套拆成两块，各自独立、各自可换。
+
+框架其余部分是通用骨架，两块都不往里写偶像 ID 或牌名。通用骨架包括设备、识别、主循环、执行器、安全拦截、契约和三个插件。
+
+**注意**：策略档案、注册表、按钮注册表（下面「重构指南」的 S1–S5、S8）在分支 `claude/strategy-profiles`，还没合进 `claude/verify-run`。动手前先合并，免得两边各改一遍。
+
+### A. 固定路线（预先设定好的路线）
+
+考试以外每局照着走的流程，不需要逐步决策。
+
+- 现在在哪：
+  - `tools/batch_prep.py`：前六周。行动页选差し入れ，最后一天进相談；差し入れ 选饮料 / 技能卡；授業换卡两阶段；考前说明页。
+  - `tools/batch_shop.py`：相談 shop-auto。
+  - `tools/batch_customize.py`：轮间客制化。
+  - `tools/batch_change.py`、`tools/batch_memory.py`（结算回忆优先级）、`tools/batch_regen.py`。
+  - 规则数据：`conf/batch-rules.json`，缺省值在 `tools/batch_rules.py`。
+- 问题：
+  - 路线和 VEIL 牌组缠在一起。`batch_prep.fp_rank` 只认 VEIL；`== VEIL_IDOL` 散在 `batch_hif` / `batch_prep`。
+  - 路线全在 `tools/`。`run_hif` 的 `HiroHifStrategy` 走另一套逐步决策（`brain/deciders.py` 等），两边没有共用接口。
+- [ ] 路线 = 数据 + 一个执行器。数据是回忆档案（重构指南 S1/S2）；执行器读档案按步走，认不出、挑不到就停下交代理。
+- [ ] 和 VEIL 解耦：`fp_rank` 这类跟牌组有关的挑选，改成档案里声明的打分项。路线执行器里不出现偶像 ID。
+- [ ] 定一个路线接口（档案 schema + 执行器），`run_hif` 和 `batch_hif` 都能用。没有路线档案时退回逐步决策。
+
+### B. 固定打牌策略（我们实现的 VEIL 策略）
+
+考试里的出牌。
+
+- 现在在哪：
+  - `src/hiro/brain/veil.py`：cycle 引擎 + VEIL 常量 + `VEIL_*` 开关。
+  - `src/hiro/brain/piles.py`：牌堆记账。
+  - `src/hiro/produce/veil_exam.py`：`VeilBrain`、夜空 / 全力値 / 一番星账本、单轮执行。
+  - `src/hiro/exec/exam.py` 里还有专为 VEIL 的落地核对分支。
+- 问题：
+  - 不走 `exam_advisor` / `exam_state_source` 插件。`veil_exam` 直接新建 `ScreenExamStateSource`，再调 VEIL 逻辑，等于第二条写死的考试路线。
+  - 默认 advisor 和它互不相通。
+- [ ] 包成插件：
+  - VEIL = 一个 `ExamAdvisor` 实现（cycle 引擎 + VEIL 档案）。
+  - `piles.py` 记账和夜空 / 全力値 / 一番星账本并进一个 `ExamStateSource` 实现。
+  - `veil_exam` 改成经 `plugins.get` 取这两个。
+- [ ] 引擎 / 档案拆分：见重构指南 2.2 和 4.1「S3 没做完的」。
+- [ ] `exec/exam.py` 里的 VEIL 专用分支改成按能力位走（如 `needs_ledger`）。
+- [ ] 验收：用 `tools/audit/veil_replay.py` 回放，前后每一步的决策和理由都相同。
+
 ## 验证局 codex-20261109-1（使用者 2026-11-09）
 
 R1 959,830 第 1，R2 388,281 第 1（合计 1,348,111 優勝；1-h R2 是 1,443,573）。夜空计数 R1 55 帧、R2 45 帧全部和画面一致。
@@ -574,7 +619,7 @@ R1 1,031,860 / R2 1,460,059 都第 1。连续零错误 = 0。
 连续零错误 = 0。
 
 ## codex-20261109-1-r（第二版第 3 局）：R2 912,219 第 1（R1 分数没记上：日付変更挡住结果页）。用时 36.0 分钟（R1 9.8、轮间 4.6、R2 13.2）。算错误，连续零错误 = 0。
-1. R1 末回合后「日付変更」：exam 不认弹窗空等 183s 被看门狗停；回首页后「プロデュース再開」框自带リタイア被危险词拦；手点再開する + auto-resolve。已修（23aa8eb）：批量考试挂日期切换看守、再開框放过リタイア。待做：打完最后一回合 exam 就交给 watch（使用者规则，见记忆 exam-handoff-last-turn）。
+1. R1 末回合后「日付変更」：exam 不认弹窗空等 183s 被看门狗停；回首页后「プロデュース再開」框自带リタイア被危险词拦；手点再開する + auto-resolve。已修（23aa8eb）：批量考试挂日期切换看守、再開框放过リタイア。已做：打完最后一回合 exam 就交给 watch（HIRO_EXAM_HANDOFF=1，默认关，未实测）。
 2. R2 T3 读临时强化档位点按 トレーニングの成果+ 把它打了出去（帧 00013→00014：手里消失、分数 3929→9497、多抽 アイドルになります+）：它当时多半已在选中态（上一张 全身全霊+ 第二下点歪），SELECT 没 OCR 出来。一次性牌进了除外，账本记进弃牌堆。修：HIRO_LANDING_ART 下点按前按卡名首字母框高度核对没有牌被抬起（正常手牌 490 帧高度差 0–2px，阈值 12），有就只点空白取消选中。
 3. 同一回合的点按前后比对（_probe）喝完ソーダ 元気还在变就判「点按打出了牌」→ 开一览（这次碰巧纠正了第 2 条的账）。修：HIRO_LANDING_ART 下按卡图比整手牌。
 4. 一览把临时强化的「アンダンテ+」按画面写进账（账本是 アンダンテ）→ T4 抽到「アンダンテ」对不上，白开第二次一览（约 50s），trust 2 坏步。修：apply_view 按账本名对齐（只差「+」的用账本名）。

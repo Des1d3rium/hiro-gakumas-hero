@@ -2172,6 +2172,22 @@ def save_failure(trace_dir, shoot, why: str) -> Path | None:
         return None
 
 
+HANDOFF_OFF_S = 1.5  # 最后一回合离开出牌页持续这么久才交接（回合中途的转场 / 触发演出一般不到 1s）
+
+
+def handoff_due(last: dict, on_exam: bool, remaining, now: float, off_s: float = HANDOFF_OFF_S) -> bool:
+    """末回合交接判定：在出牌页时记下剩余回合（读不出沿用上次）；最后一回合（剩余 1）之后连续离开出牌页 off_s 秒 = 打完了。"""
+    if on_exam:
+        if remaining is not None:
+            last["remaining"] = remaining
+        last["off_since"] = None
+        return False
+    if last.get("remaining") != 1:
+        return False
+    last["off_since"] = last.get("off_since") or now
+    return now - last["off_since"] >= off_s
+
+
 def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retry_drinks=None):
     from kaa.config.const import HifScenario
     from kotonebot import device
@@ -2228,11 +2244,29 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
         elif read_round is None:
             print(f"实机轮次读不出，按考试记忆接管 R{round_no}（{directory}）", file=sys.stderr)
         result = None
+        # 末回合交接（HIRO_EXAM_HANDOFF=1，默认关；使用者 2026-11-09：「日期更新和数据更新只会在考试的最后一回合结束时触发。
+        # 打完最后一张牌，exam就需要交接给watch」）：最后一回合结束、离开出牌页就返回，释放批量锁；结果页 /「次へ」/
+        # 再挑戦確認 / 日付変更・データ更新 都交给 watch（分数名次由 watch 在结果页读，见 batch_hif.note_round_result）
+        handoff = os.environ.get("HIRO_EXAM_HANDOFF", "0") not in ("", "0")
+        last = {"remaining": None, "off_since": None}
 
         def ended():
             nonlocal result
             frame = device.screenshot()
-            if frame is None or frame.shape[:2] != (1280, 720) or is_hif_exam(frame):
+            if frame is None or frame.shape[:2] != (1280, 720):
+                return False
+            on_exam = is_hif_exam(frame)
+            if handoff:
+                rem = None
+                if on_exam:
+                    from hiro.vision.hif import read_hif_hud
+
+                    rem = read_hif_hud(frame).get("remaining_turns")
+                if handoff_due(last, on_exam, rem, time.monotonic()):
+                    result = {"kind": "handoff", "finals_round": round_no, "round_score": None, "rank": None}
+                    session.record(session.observe(scene="EXAM_HANDOFF", img=frame, fields=result, save_frame=True))
+                    return True
+            if on_exam:
                 return False
             page = classify_page(frame)
             if not page or page[0] != "HIF_FINALS_RANKING":
@@ -2270,7 +2304,9 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
             raise
         except DateChanged as e:
             save_failure(trace.dir, device.screenshot, "日付変更")
-            raise ResumeBlocked("日付変更：考试中断，交给 watch 回标题恢复后续跑") from e
+            if not (handoff and last["remaining"] == 1):
+                raise ResumeBlocked("日付変更：考试中断，交给 watch 回标题恢复后续跑") from e
+            result = {"kind": "handoff", "finals_round": round_no, "round_score": None, "rank": None, "why": "日付変更"}
         finally:
             callbacks.remove(dguard)
             callbacks.remove(guard)
@@ -2280,6 +2316,7 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
             raise ResumeBlocked("VEIL 考试结束页未确认，请查看实机与 trace")
         return {"ok": True, "exam": exam, "trace": str(trace.dir), "retry": retry,
                 "round_score": result.get("round_score"), "rank": result.get("rank"),
+                "handoff": result.get("kind") == "handoff",
                 "drinks": (source.data or {}).get("veil_drinks"),
                 "abilities": (source.data or {}).get("veil_abilities"),
                 "abilities_source": (source.data or {}).get("veil_abilities_source"),

@@ -333,6 +333,30 @@ def reward_close(boxes):
     return None if hit is None else ((hit[0] + hit[2]) // 2, (hit[1] + hit[3]) // 2)
 
 
+RESULT_IMG: dict = {"img": None}
+
+
+def note_round_result(active, img, classify=None) -> dict | None:
+    """结果页（ラウンドN結果）读分数和名次，补进 driver.results 里这一轮还没有分数的那条（HIRO_EXAM_HANDOFF：exam 打完
+    最后一回合就交接，不再读结果页）。读不出或这一轮已有分数返回 None。"""
+    try:
+        if classify is None:
+            from hiro.vision.pages import classify_page as classify
+        page = classify(img)
+    except Exception:  # noqa: BLE001  识别失败不挡推进
+        return None
+    if not page or page[0] != "HIF_FINALS_RANKING" or page[1].get("kind") not in ("round_result", "final"):
+        return None
+    f = page[1]
+    rnd = f.get("finals_round") or (2 if f.get("kind") == "final" else None)
+    results = (active.get("driver") or {}).get("results") or []
+    row = next((r for r in reversed(results) if r.get("round_score") is None and (rnd is None or r.get("round") == rnd)), None)
+    if row is None or f.get("round_score") is None:
+        return None
+    row.update(round_score=f.get("round_score"), rank=f.get("rank"), score_from="watch")
+    return {"round": row.get("round"), "round_score": row["round_score"], "rank": row["rank"]}
+
+
 def result_next(boxes, dialog: bool):
     """考试结果页（ラウンドN結果 / 現在順位 + 底部「次へ」）：先点一次「次へ」。顺利晋级就没有弹窗，直接往下走；
     敗退会弹「再挑戦確認」（有弹窗标题条 → 这里不点，照旧停下交给代理）。使用者 2026-11-07：「如果下一步之后会有这个弹窗，才唤起你」。"""
@@ -1270,6 +1294,8 @@ def device_action(action, *, watch_tick=None, auto_route=False):
                 elif result[1] is None:
                     return result if result[0] != "live" else None  # LIVE 演出中：不点，watch 只打印一次 waiting
                 if result is not None:
+                    if result[0] == "result_next":
+                        RESULT_IMG["img"] = img  # 结果页：tick 里读分数名次补进本轮记录（末回合交接后 exam 不再读）
                     (live_click if result[0].startswith("live_") else click)(*result[1])
                 return result
             if img is None or img.shape[:2] != (1280, 720):
@@ -2221,6 +2247,10 @@ def watch(path, run, *, auto=False):
                     used[rnd] = used.get(rnd, 0) + 1
                     save(path, state)
                     extra = {"round": int(rnd), "used": used[rnd], "plan": state["debug_retries"].get(rnd)}
+                if kind == "result_next" and RESULT_IMG.get("img") is not None:
+                    if noted := note_round_result(active, RESULT_IMG.pop("img")):
+                        save(path, state)
+                        extra = {**extra, "noted": noted}
                 print(json.dumps({"t": round(time.time(), 2), "run": active.get("run"), "action": kind, "tap": tap, **extra},
                                  ensure_ascii=False), flush=True)
             elif not last_idle:
