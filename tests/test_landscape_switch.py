@@ -282,3 +282,32 @@ def test_rotate_on_never_falls_back_to_fullscreen(monkeypatch):
     win.fullscreen = False
     before = win.frame
     assert L.switch_fullscreen(True, pid=1, shoot=lambda: BLACK) == "failed" and win.frame == before
+
+
+def test_rotate_guard_turns_after_short_black_and_retries_once(monkeypatch):
+    """使用者 2026-11-08「缩短」：旋转模式黑屏 ROTATE_BLACK_S（5s）就转；第一次转了还黑（可能是加载黑屏）不报失败，
+    重新计时再转一次，第二次还黑才是 failed（停下交给使用者）。切全屏模式照旧等 BLACK_S。"""
+    clock = [1000.0]
+    monkeypatch.setattr(L.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(L, "_game_pid", lambda: 7)
+    monkeypatch.setattr(L, "_front_app", lambda: None)
+    calls = []
+    monkeypatch.setattr(L, "switch_fullscreen", lambda want, pid, shoot, rotate=None: calls.append(rotate) or "failed")
+    g = L.LandscapeGuard(rotate=True)
+    assert not g.tick(BLACK) and not calls
+    clock[0] += g.ROTATE_BLACK_S - 1
+    g.tick(BLACK)
+    assert not calls  # 还没到 5s
+    clock[0] += 1
+    g.tick(BLACK)
+    assert calls == [True] and g.last_result is None and g.rotate_retried  # 第一次失败：静默重试
+    clock[0] += g.ROTATE_BLACK_S
+    g.tick(BLACK)
+    assert calls == [True, True] and g.last_result == "failed"
+    # 切全屏模式：5s 不动
+    calls.clear()
+    f = L.LandscapeGuard(rotate=False)
+    f.tick(BLACK)
+    clock[0] += g.ROTATE_BLACK_S + 1
+    f.tick(BLACK)
+    assert not calls and f.BLACK_S > g.ROTATE_BLACK_S

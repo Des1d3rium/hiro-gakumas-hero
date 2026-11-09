@@ -13,10 +13,12 @@
 每一步之后核对（默认读 AXFullScreen 属性；调用方给了截图函数就看画面中间是否不再全黑），没生效才换下一步；
 屏幕锁住 / 显示器休眠时任何方式都拿不到焦点，直接返回 "locked"，交给使用者。
 
-旋转窗口（HIRO_LIVE_ROTATE=1，默认关）：游戏是 PlayCover「可调窗口」模式（resolution=6），PlayTools 把 UIScreen.bounds
+旋转窗口（HIRO_LIVE_ROTATE=1；batch_hif watch 默认开，run_hif 默认关）：游戏是 PlayCover「可调窗口」模式（resolution=6），PlayTools 把 UIScreen.bounds
 接到窗口当前尺寸（PlayScreen.boundsResizable），全屏能救黑屏就是因为窗口变横了。所以不切全屏，直接用辅助功能把窗口
 内容区宽高对调成横向（不需要前台、不抢焦点），LIVE 结束再还原成进入前的位置和尺寸。开着时进入只用它，不再退回全屏
 （使用者 2026-11-08），没救回画面就停下交给使用者；退出时窗口在全屏里才走全屏方式，否则只用它还原（fn+shift+F 这时会反过来进全屏）。
+旋转很便宜（不抢前台、不动动画），所以黑屏 ROTATE_BLACK_S（5s）就转，不像切全屏要等 BLACK_S（20s）；
+短暂的加载黑屏可能被误转：第一次转了还黑就还原窗口、重新计时再试一次，第二次还黑才停下。
 """
 
 import logging
@@ -308,7 +310,8 @@ def switch_fullscreen(want: bool, *, pid: int | None = None, shoot=None, methods
             time.sleep(VERIFY_POLL)
         logger.warning("%s全屏：「%s」执行了但核对没通过，换下一种", "进入" if want else "退出", name)
         if method is _rotate_window and want and pid in _saved_frames:
-            # 旋转没救回画面：先把窗口还原再试全屏，否则之后退出全屏会回到这个横向窗口
+            # 旋转没救回画面：把窗口还原成竖向（旋转模式只有这一种方式，接着返回 failed；
+            # 手动传 methods 时下一种若是切全屏，也不会在横向窗口上进全屏）
             _ax_set_frame(pid, _saved_frames.pop(pid))
     return "failed"
 
@@ -345,9 +348,11 @@ end tell"""
 
 
 class LandscapeGuard:
-    """controller 每轮喂一帧：黑屏持续 BLACK_S 秒 → 进全屏；全屏中 LIVE 计时消失或又黑屏持续 → 退全屏并还原前台应用。"""
+    """controller 每轮喂一帧：黑屏持续一段时间 → 进入横向（旋转模式：旋转窗口；否则切全屏）；
+    横向中又黑屏持续 / 竖屏有画面持续 → 退出（还原窗口或退全屏）并还原前台应用。fullscreen 字段泛指「已进入横向」，两种模式共用。"""
 
-    BLACK_S = 20.0
+    BLACK_S = 20.0  # 切全屏模式：黑屏这么久才切（切全屏要抢前台，代价大）
+    ROTATE_BLACK_S = 5.0  # 旋转模式：黑屏这么久就转（使用者 2026-11-08：缩短）
     EXIT_BLACK_S = 8.0
     EXIT_PORTRAIT_S = 10.0  # 全屏中竖屏且有画面持续这么久：不是 LIVE（误进全屏），退出
 
@@ -361,6 +366,10 @@ class LandscapeGuard:
         self.prev_front: NSRunningApplication | None = None
         self.entered_at = 0.0
         self.portrait_since: float | None = None
+        self.rotate_retried = False  # 旋转模式：第一次转了还黑，已经静默重试过一次
+
+    def rotating(self) -> bool:
+        return rotate_enabled() if self.rotate is None else self.rotate
 
     def in_live(self, img) -> bool:
         """LIVE 演出中（横向画面、全屏中或黑屏）：画面本来就认不出，调用方不要按「持续未识别」停下。"""
@@ -381,13 +390,13 @@ class LandscapeGuard:
             # 横向且有画面：已经在全屏 LIVE 里（例如人工点了「进入全屏幕」），之后照常负责退出
             self.fullscreen, self.entered_at = True, now
         if not self.fullscreen:
-            if black and now - self.black_since >= self.BLACK_S:
+            if black and now - self.black_since >= (self.ROTATE_BLACK_S if self.rotating() else self.BLACK_S):
                 return self._enter()
             return False
-        # 全屏中：LIVE 结束后游戏回竖屏 → 横向全屏窗口又是黑的
+        # 横向中：LIVE 结束后游戏回竖屏 → 横向窗口又是黑的
         if black and now - self.black_since >= self.EXIT_BLACK_S and now - self.entered_at > 30:
             return self._exit()
-        # 全屏中却是竖屏且有画面：不是 LIVE（比如长时间加载黑屏被当成 LIVE），过一会儿退出，免得一直当成 LIVE 不点
+        # 横向中却是竖屏且有画面：不是 LIVE（比如长时间加载黑屏被当成 LIVE），过一会儿退出，免得一直当成 LIVE 不点
         portrait = img is not None and img.shape[0] > img.shape[1] and not black
         if not portrait:
             self.portrait_since = None
@@ -406,13 +415,19 @@ class LandscapeGuard:
         self.last_op = "enter"
         self.last_result = switch_fullscreen(True, pid=pid, shoot=self.shoot, rotate=self.rotate)
         ok = self.last_result not in SWITCH_FAILURES
-        logger.warning("横屏 LIVE 黑屏 %.0fs：进入全屏让窗口重新布局（%s）", self.BLACK_S, self.last_result)
+        rotating = self.rotating()
+        logger.warning("横屏 LIVE 黑屏：%s让窗口重新布局（%s）", "旋转窗口" if rotating else "进入全屏", self.last_result)
         if ok:
             self.fullscreen, self.entered_at, self.black_since = True, time.monotonic(), None
+            self.rotate_retried = False
+        elif rotating and self.last_result == "failed" and not self.rotate_retried:
+            # 可能只是加载黑屏（窗口已由 switch_fullscreen 还原）：不报失败，重新计时再转一次，第二次还黑才停下
+            self.rotate_retried = True
+            self.last_result, self.black_since = None, time.monotonic()
         return ok
 
     def exit_now(self) -> bool:
-        """调用方确认 LIVE 已结束（例如点了「ライブ終了確認」的「終了する」）：不等黑屏计时，马上退出全屏回竖屏。"""
+        """调用方确认 LIVE 已结束（例如点了「ライブ終了確認」的「終了する」）：不等黑屏计时，马上回竖屏（还原窗口 / 退全屏）。"""
         return self._exit()
 
     def failure_cleared(self, img, every: float = 3.0) -> bool:
@@ -462,7 +477,7 @@ class LandscapeGuard:
         self.last_op = "exit"
         self.last_result = switch_fullscreen(False, pid=pid, shoot=self.shoot, rotate=self.rotate) if pid is not None else "nogame"
         ok = self.last_result not in SWITCH_FAILURES
-        logger.warning("LIVE 结束：退出全屏（%s）", self.last_result)
+        logger.warning("LIVE 结束：%s（%s）", "还原窗口" if self.rotating() else "退出全屏", self.last_result)
         self.fullscreen, self.black_since = False, None
         if self.prev_front is not None and int(self.prev_front.processIdentifier()) != pid:
             self.prev_front.activateWithOptions_(0)

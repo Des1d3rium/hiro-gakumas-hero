@@ -372,6 +372,8 @@ def test_acquired_drink_logged_once_and_not_after_choice(monkeypatch):
 def test_live_exit_failure_message():
     assert "退出全屏失败" in B.live_fail_reason("exit", "failed") and "fn+shift+F" in B.live_fail_reason("exit", "failed")
     assert "进入全屏失败" in B.live_fail_reason("enter", "failed")
+    assert "restore" in B.live_fail_reason("exit", "failed", rotate=True) and "全屏" not in B.live_fail_reason("exit", "failed", rotate=True)
+    assert "旋转窗口" in B.live_fail_reason("enter", "failed", rotate=True)
 
 
 def test_ocr_gate_never_blind_taps_over_acquire_bar():

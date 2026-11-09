@@ -82,7 +82,7 @@ LIVE_SKIP_AFTER = 2.0  # LIVE 开始后等这么久再跳（等曲目页退场�
 LIVE_SKIP_EVERY = 4.0  # 没见到确认框时隔这么久重试一次
 LIVE_SKIP_MAX = 4
 LIVE_END_DANGER = ("ジュエル", "購入", "有償", "破棄", "リタイア")
-LIVE_EXIT_AFTER = 1.5  # 点「終了する」后等这么久，按 fn+shift+F 直接回竖屏（使用者 2026-11-07）
+LIVE_EXIT_AFTER = 1.5  # 「ライブ終了確認」框消失后等这么久就回竖屏（LandscapeGuard.exit_now：还原旋转前的窗口；全屏里才退全屏）
 
 
 LIVE_CONTROLS = re.compile(r"\d{1,2}:\d{2}/\d{1,2}:\d{2}|歌詞")  # 控制条露出来时左上的播放时间「00:20/01:32」/ 左下「歌詞OFF」
@@ -136,10 +136,15 @@ def live_skip_step(img, boxes, live, click):
     return "live_skip", (int(w * LIVE_SKIP_FIXED[0]), int(h * LIVE_SKIP_FIXED[1]))
 
 
-def live_fail_reason(op, result) -> str:
-    """LIVE 切全屏失败的停点提示：进入 / 退出给不同处置（N9：退出失败时原来也写「手动点全屏按钮」）。"""
+def live_fail_reason(op, result, rotate: bool = False) -> str:
+    """LIVE 横向切换失败的停点提示：进入 / 退出、旋转 / 全屏给不同处置（N9：退出失败时原来也写「手动点全屏按钮」）。"""
     if result == "locked":
         return f"LIVE：屏幕锁住 / 显示器休眠（{result}），解锁后 watch 会接着切"
+    if rotate:
+        tool = "PYTHONPATH=src .venv/bin/python -m hiro.loop.landscape"
+        if op == "exit":
+            return f"LIVE 结束后还原窗口失败（{result}）：手动 `{tool} restore`，回到竖屏有画面后 watch 自动接着推进"
+        return f"LIVE 黑屏：旋转窗口两次都没救回画面（{result}，窗口已还原），看游戏是否卡住；手动 `{tool} rotate` 试，LIVE 结束后 `{tool} restore`"
     if op == "exit":
         return (f"LIVE 结束后退出全屏失败（{result}）：手动按 fn+shift+F 或点窗口左上角绿色按钮退出全屏，"
                 "回到竖屏后 watch 自动接着推进")
@@ -984,7 +989,7 @@ def device_action(action, *, watch_tick=None, auto_route=False):
         raw = {"m": None}
 
         def live_click(x, y):
-            """LIVE 横屏全屏的点击：不走竖屏缩放器（逻辑 720x1280 和横屏物理分辨率对不上，点不到该点的地方），按屏幕像素直接给
+            """LIVE 横屏（旋转窗口 / 全屏）的点击：不走竖屏缩放器（逻辑 720x1280 和横屏物理分辨率对不上，点不到该点的地方），按屏幕像素直接给
             MaaTools（MaaToolsImpl.click 自己再除 Catalyst 0.77）。(x, y) 是 1280x720 的屏幕坐标（不含帧顶白条）。
             实测（验证局 1-e，2026-11-07）：⏭ (1200,72) → 原始 (2700,180) 确认框弹出；「終了する」同法点中。"""
             if pause_flag.ENABLED and pause_flag.reason() is not None:
@@ -1113,8 +1118,9 @@ def device_action(action, *, watch_tick=None, auto_route=False):
         live = {"guard": None, "ocr_at": -1e9}
 
         def live_step(img):
-            """横屏 LIVE（PlayCover 横屏黑屏）：黑屏持续就切全屏（hiro.loop.landscape：全屏按钮 → AXFullScreen → 菜单，逐个核对），
-            LIVE 结束回竖屏后退出全屏；横屏有画面时每 2s OCR 一次，认到 TAP TO START 就点。
+            """横屏 LIVE（PlayCover 横屏黑屏）：黑屏持续就进入横向（hiro.loop.landscape.LandscapeGuard：默认旋转窗口，黑屏 5s；
+            HIRO_LIVE_ROTATE=0 时切全屏，黑屏 20s），「ライブ終了確認」框消失后回竖屏；横屏有画面时每 2s OCR 一次，
+            认到 TAP TO START 就点，之后点 ⏭ / 「終了する」（live_skip_step）。
             返回 None = 不是 LIVE，交给 auto_decide；否则返回 (kind, tap 或 None)。切换失败 / 屏幕锁住时停下交给使用者。"""
             from hiro.loop.controller import live_start_tap
             from hiro.loop.landscape import LandscapeGuard
@@ -1125,22 +1131,22 @@ def device_action(action, *, watch_tick=None, auto_route=False):
                                                                 rotate=os.environ.get("HIRO_LIVE_ROTATE", "1") != "0")
             if g.last_result in LIVE_FAIL:
                 if not g.failure_cleared(img):
-                    raise HoldPage(live_fail_reason(g.last_op, g.last_result))
+                    raise HoldPage(live_fail_reason(g.last_op, g.last_result, g.rotating()))
                 if g.last_op == "exit":
                     live["exited"] = True
             if img is None:
                 return None
             switched = g.tick(img)
             if g.last_result in LIVE_FAIL:
-                raise HoldPage(live_fail_reason(g.last_op, g.last_result))
+                raise HoldPage(live_fail_reason(g.last_op, g.last_result, g.rotating()))
             if switched:
                 return "live_fullscreen", None
             if live.get("ended") and not live.get("exited") and time.monotonic() - live["ended"] >= LIVE_EXIT_AFTER:
-                # 跳过 LIVE 后直接回竖屏：fn+shift+F（landscape.METHODS 退出时先试它），失败下一帧按 LIVE_FAIL 停下交给使用者
+                # 跳过 LIVE 后直接回竖屏：旋转模式还原窗口（全屏里才按 fn+shift+F 等全屏方式），失败按 LIVE_FAIL 停下交给使用者
                 live["exited"] = True
                 g.exit_now()
                 if g.last_result in LIVE_FAIL:
-                    raise HoldPage(live_fail_reason(g.last_op, g.last_result))
+                    raise HoldPage(live_fail_reason(g.last_op, g.last_result, g.rotating()))
                 return "live_portrait", None
             if not g.in_live(img):
                 return None
