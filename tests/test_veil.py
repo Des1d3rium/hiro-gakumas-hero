@@ -1663,4 +1663,8 @@ def test_cycle_fifth_in_hand_but_unplayable_ends_turn():
     from hiro.brain.veil import ORDERS
 
     mem.this_turn = [f"打 {n}" for n in ORDERS[1]]
+    mem.strategy_data["veil_fp"] = 1
     assert choose(state, mem) == "skip"
+    mem.strategy_data["veil_fp"] = 3  # 全力値够还发灰：原因不明，照旧停机
+    with pytest.raises(ResumeBlocked, match="第五张尚未打出"):
+        choose(state, mem)
