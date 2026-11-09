@@ -30,7 +30,9 @@ DEFAULTS: dict = {
         #                         「プロデュース開始」；true = 每局都自动；false = 每局都由代理核对
     },
     "prep": {  # 前六周（R1 之前）固定流程
-        "auto_drink_replace": False,
+        # 选饮料页栏满、候选里有高价值：丢持有里最差的一瓶再收（实读饮料栏和账本一致才做，做完实读核对）。
+        # 使用者 2026-11-08：「把这个打开」
+        "auto_drink_replace": True,
         "enabled": True,
         "action": "差し入れ",  # 行动页选这个
         "last_day": "相談",  # 只剩这个时（最后一天）选它
