@@ -15,6 +15,7 @@ from pathlib import Path
 
 from hiro.brain.battle import BattleBrain
 from hiro.defaults.exam_state import ScreenExamStateSource
+from hiro.loop.date_change import DateChanged
 from hiro.loop.errors import ResumeBlocked
 from hiro.brain.veil import (
     CORE, DRIVE, IDOL, REBOUND, SODA, STANCES, STRATEGY_FLAGS, TEACH, WARM, VeilAdvisor, _flag,
@@ -2223,8 +2224,15 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
         session = Session(trace)
         watch = pause_flag.Watcher(kvars.flow, session=session).start()
         guard = watchdog(session)
+        # 日期切换看守（同 run_hif）：考试中弹「日付変更」时立刻打断，交回 watch 走回标题恢复（batch_title）。
+        # 原来批量考试没挂，codex-20261109-1-r R1 末回合弹窗后原地空等 183s 才被看门狗停下
+        from hiro.loop.date_change import loop_callback as date_guard
+        from hiro.produce.ops import ocr_boxes as _ocr_boxes
+
+        dguard = date_guard(_ocr_boxes)
         callbacks = conf().loop.loop_callbacks
         callbacks.append(guard)
+        callbacks.append(dguard)
         rec = Recorder(trace.dir / "battle")
         if retry and retry_drinks is not None:
             drinks = retry_drinks  # 再挑戦：游戏把饮料栏恢复到这一轮开考前，账本也用开考前的快照
@@ -2235,7 +2243,11 @@ def run_round(round_no, deck_path, trace_name, drinks=None, abilities=None, retr
         except ResumeBlocked as e:
             save_failure(trace.dir, device.screenshot, str(e))
             raise
+        except DateChanged as e:
+            save_failure(trace.dir, device.screenshot, "日付変更")
+            raise ResumeBlocked("日付変更：考试中断，交给 watch 回标题恢复后续跑") from e
         finally:
+            callbacks.remove(dguard)
             callbacks.remove(guard)
             watch.stop()
             trace.close()

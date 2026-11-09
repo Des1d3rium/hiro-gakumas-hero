@@ -112,3 +112,15 @@ def test_watch_holds_on_comm_error():
 def test_watch_rule_off_keeps_old_behaviour(monkeypatch):
     monkeypatch.setenv("HIRO_WATCH_TITLE", "0")
     assert _decide(UPDATE) != ("title_update", (353, 1162))
+
+
+def test_resume_dialog_with_retire_button_is_resumed():
+    """codex-20261109-1-r：日期变更回首页后的「プロデュース再開」框自带右上角「リタイア」按钮（实读），原来按危险字样停下。
+    只在这个框里放过「リタイア」：点「再開する」，不碰リタイア；框里有破棄 / 别的设备仍停。"""
+    boxes = [box("プロデュース再開", 185, 440), box("リタイア", 582, 439), box("［VEIL］秦谷美鈴", 361, 816),
+             box("✕キャンセル", 212, 1162), box("再開する", 521, 1162)]
+    T.step(DATE, resume=True, now=0)
+    assert T.step(boxes, resume=True, now=30) == ("title_resume", (521, 1162))
+    T.step(DATE, resume=True, now=100)
+    with pytest.raises(T.TitleHold):
+        T.step(boxes + [box("別の端末で", 360, 600)], resume=True, now=130)

@@ -95,9 +95,13 @@ def step(boxes, *, resume: bool, now: float | None = None):
             return None  # 按钮没读全：下一帧再判
         _start(now)
         return ("title_update" if has(*UPDATE_TITLES) else "title_date"), tap
-    if has(*STOP_WORDS):
+    # 「プロデュース再開」框自带右上角「リタイア」按钮（codex-20261109-1-r 日期变更回首页后，这个框被当危险页停下）：
+    # 只在这个框里放过「リタイア」这一个词，破棄 / 别的设备等仍停
+    resume_box = has("プロデュース再開") and has("再開する")
+    stops = [w for w in STOP_WORDS if w in flat and not (resume_box and w == "リタイア")]
+    if stops:
         if recovering(now):
-            raise TitleHold(f"回标题途中出现要使用者处理的画面：{[w for w in STOP_WORDS if w in flat]}")
+            raise TitleHold(f"回标题途中出现要使用者处理的画面：{stops}")
         return None
     upper = flat.upper()
     if "TOSTART" in upper and any(w in upper for w in TITLE_MARKS) and not has(*PAY_WORDS):
