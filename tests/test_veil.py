@@ -1462,3 +1462,27 @@ def test_star_count_synced_from_status_bar(monkeypatch):
     state.statuses = [{"name": "のんびり"}, {"name": "星々を見下ろす一番星", "value": 1}]  # 之后读到的已是触发后的数字
     assert read_position(state, mem, Counter(), lambda: 1) is None
     assert mem.strategy_data["veil_star"] == 1
+
+
+def test_play_condition_from_master_text():
+    """codex-20261108-1-b R1 T2：タフネス+（温存になった回数が2回以上の場合、使用可）画面没灰，点了两次都没打出。
+    按主数据条件 + 账本计数判定，肯定打不了的当作发灰。"""
+    from hiro.produce.veil_exam import count_stance_change, play_condition_blocked
+
+    tough = card(0, "タフネス+", "温存になった回数が2回以上の場合、使用可温存に変更スキルカード使用数追加+1")
+    gata = card(1, "ガタゴトすやすや+", "温存の場合、使用可")
+    late = card(2, "ストレッチ談議", "3ターン目以降の場合、使用可")
+    state, mem = case(tough, gata, late, status="強気")
+    data = mem.strategy_data
+    count_stance_change(data, "指針解除", "強気")
+    count_stance_change(data, "強気", "温存")
+    blocked = play_condition_blocked(state, mem, data)
+    assert set(blocked) == {0, 1, 2} and "账本 1 次" in blocked[0]
+    count_stance_change(data, "温存", "強気")
+    count_stance_change(data, "強気", "のんびり")  # のんびり 往多里算进温存
+    state.statuses = [{"name": "のんびり"}]
+    mem.turn = 3
+    assert play_condition_blocked(state, mem, data) == {}
+    state.statuses = []  # 姿态不明：不按姿态拦
+    gata_only = play_condition_blocked(state, mem, data)
+    assert 1 not in gata_only

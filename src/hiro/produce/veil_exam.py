@@ -502,6 +502,7 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
                       and isinstance(s.get("value"), int)), None)
     if seen_star is not None and seen_star != data.get("veil_star"):
         data["veil_star"] = seen_star
+    count_stance_change(data, position.get("stance"), current)
     data["veil_position"] = {"turn": memory.turn, "stance": current, "stance_level": level,
                              "flower": flower, "next_stance": delayed, "next_stance_level": delayed_level}
     data.pop("veil_pending_play", None)
@@ -1356,6 +1357,14 @@ class VeilScreen(ScreenExamStateSource):
             data.setdefault("veil_fp_log", []).append({"turn": memory.turn, "op": "按账本解灰", "cards": [norm(c.name) for c in stale],
                                                        "fp": fp})
         self.fp_retries = 0
+        if blocked := play_condition_blocked(state, memory, data):
+            # 主数据「…の場合、使用可」按账本判定不满足：当作发灰，不点（画面没灰也不点）。
+            # codex-20261108-1-b R1 T2：タフネス+（温存になった回数が2回以上）画面没灰，点了两次都没打出，撤回后账本位置不明
+            state.hand = [replace(c, available=False) if c.slot in blocked else c for c in state.hand]
+            log = data.setdefault("veil_condition_log", [])
+            entry = {"turn": memory.turn, "blocked": {norm(c.name): blocked[c.slot] for c in state.hand if c.slot in blocked}}
+            if not log or log[-1] != entry:
+                log.append(entry)
         outside = deck - hand
         if data.get("veil_uncertain") or hand - deck:
             if CORE <= names.keys() or data.get("veil_cycle"):
@@ -1384,6 +1393,61 @@ class VeilScreen(ScreenExamStateSource):
             once_view = sorted({name_of(k) for k in known_once})
         state.piles = {**piles, "next_draw": next_draw, "once": once_view}
         return state, why
+
+
+def count_stance_change(data, before, after):
+    """使用条件要的计数（这场考试内）：指針を変更した回数、温存になった回数、全力になった回数。往多里算（宁多勿少）：
+    のんびり 也算进温存、上一帧姿态不明时也算一次，只用来判「肯定不满足」（play_condition_blocked）。"""
+    if after is None or after == before:
+        return
+    counts = data.setdefault("veil_stance_counts", {"changes": 0, "warm": 0, "full": 0})
+    if before is not None:
+        counts["changes"] += 1
+    if after in WARM:
+        counts["warm"] += 1
+    if after == "全力":
+        counts["full"] += 1
+
+
+_CONDITIONS = (
+    (re.compile(r"温存になった回数が(\d+)回以上の場合、使用可"), "warm"),
+    (re.compile(r"指針を変更した回数が(\d+)回以上の場合、使用可"), "changes"),
+    (re.compile(r"全力になった回数が(\d+)回以上の場合、使用可"), "full"),
+)
+
+
+def play_condition_blocked(state, memory, data) -> dict:
+    """手牌里按主数据使用条件肯定打不了的牌 {槽位: 原因}。只判账本 / 画面确定的（计数往多里算、姿态不明不判），
+    宁可漏判（照旧按画面）也不误拦。"""
+    counts = data.get("veil_stance_counts") or {}
+    current = stance(state)
+    out = {}
+    for card in state.hand:
+        text = norm(card.text or "")
+        if not card.available or "使用可" not in text:
+            continue
+        why = None
+        for pattern, key in _CONDITIONS:
+            if (m := pattern.search(text)) and counts.get(key, 0) < int(m.group(1)):
+                why = f"{m.group(0)}（账本 {counts.get(key, 0)} 次）"
+        if m := re.search(r"(\d+)ターン目以降の場合、使用可", text):
+            if memory.turn < int(m.group(1)):
+                why = f"{m.group(0)}（第 {memory.turn} 回合）"
+        if current is not None:
+            if "温存の場合、使用可" in text and current not in WARM:
+                why = f"温存の場合、使用可（现在 {current}）"
+            elif (m := re.search(r"強気(\d)段階目の場合、使用可", text)) and (
+                    current != "強気" or stance_level(state, current) not in (None, int(m.group(1)))):
+                why = f"{m.group(0)}（现在 {current}）"
+            elif "強気の場合、使用可" in text and current != "強気":
+                why = f"強気の場合、使用可（现在 {current}）"
+            elif "全力の場合、使用可" in text and current != "全力":
+                why = f"全力の場合、使用可（现在 {current}）"
+            elif "いずれかの指針の場合、使用可" in text and current == NEUTRAL:
+                why = "いずれかの指針の場合、使用可（指針解除）"
+        if why:
+            out[card.slot] = why
+    return out
 
 
 class VeilBrain(BattleBrain):
