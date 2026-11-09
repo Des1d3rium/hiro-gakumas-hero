@@ -118,6 +118,7 @@ PYTHONPATH=src python -m hiro.run_hif resume --mode qualify|main   # 续跑进�
 | `HIRO_STRATEGY` | 换培育策略类（KAA `HifGrindStrategy` 子类），默认 `hiro.produce.hif:HiroHifStrategy` |
 | `HIRO_PAUSE_FLAG` | 外部暂停旗标文件路径：文件存在就暂停对局 |
 | `HIRO_CONSULT_DRINK_SWAP=0` | 关掉相談栏满换饮料（默认开：货架上的饮料比持有里最差的一瓶好就先丢后买） |
+| `HIRO_LIVE_ROTATE=1` | LIVE 横屏黑屏时先把游戏窗口内容区宽高对调成横向（辅助功能改窗口尺寸，不切全屏、不抢前台），LIVE 结束还原原来的位置和尺寸；开着时不再切全屏，没救回画面就停下交给使用者（窗口已在全屏里时退出照旧走全屏方式）。`batch_hif watch` 默认开（设 `0` 关，退回原来的切全屏），`run_hif` 默认关。要求 PlayCover「宽高比」设为「自由」。手动实测：`PYTHONPATH=src .venv/bin/python -m hiro.loop.landscape rotate\|restore\|show` |
 | `HIRO_RESCUE_LLM=0` | 关掉认不出画面时的 LLM 看图兜底（默认开） |
 | `HIRO_DEBUG_RECOG=1` | 把全部识别互验写进 trace，页面变化都存帧 |
 | `HIRO_DRINK_INSITU=0` | 关掉考试饮料栏的统一模板补认（默认开：原画模板没把握的格，用统一模板——全部饮料按原画渲染成饮料栏外观，采到过的用 `tools/assets/capture_drinks.py` 生成的实机中位图——再认一次；已认出的格和空格不改） |

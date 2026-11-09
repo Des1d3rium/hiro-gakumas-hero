@@ -72,8 +72,11 @@ LIVE_REVEAL = (0.50, 0.50)  # 画面中间：唤出控制条（快门在右侧 x
 # 右上角「⏭」：验证局 codex-20261107-1-b 实机帧（MaaTools 1280x720）上控制条在 y 35–150，⏭ 中心 (1201,105)（帧坐标；
 # 点击时减去顶部白条高度 top_bar，见 live_skip_step）。
 # 原来按使用者窗口截图换算成 (1203,40)，落在控制条上方，点了 4 次都没出确认框
-LIVE_SKIP = (0.938, 0.146)  # 帧坐标（含顶部白条），只作参考
-LIVE_SKIP_FIXED = (0.9375, 0.10)  # 点击用：屏幕坐标（使用者 2026-11-07 实机截图 2000x1250 上 ⏭ 在 (1875,125)）
+LIVE_SKIP = (0.938, 0.146)  # 帧坐标（含顶部白条，全屏时代），只作参考
+# 点击用：屏幕坐标。2026-11-08 旋转窗口后实测（使用者：「读取目前窗口中的跳过键详细位置，记录并覆盖以前全屏时跳过的位置」）：
+# MaaTools 原始帧 1522x858（窗口 761x457 点，帧顶没有白条），⏭ 白色像素中心 (1427.6, 94.7)、范围 x 1416–1439 / y 76–114
+# → (0.938, 0.110)。原来按全屏截图 2000x1250 记的 (0.9375, 0.10) 高了约 1% 帧高
+LIVE_SKIP_FIXED = (0.938, 0.110)
 LIVE_END_OK = (0.61, 0.89)  # 「ライブ終了確認」橙色「終了する」(1220,1062) → (781,640)；OCR 认到文字时按文字点
 LIVE_SKIP_AFTER = 2.0  # LIVE 开始后等这么久再跳（等曲目页退场）
 LIVE_SKIP_EVERY = 4.0  # 没见到确认框时隔这么久重试一次
@@ -128,7 +131,7 @@ def live_skip_step(img, boxes, live, click):
     if live.get("ended") or now - started < LIVE_SKIP_AFTER:
         return None
     # 使用者 2026-11-07：进 LIVE 后所有点击都点 ⏭ 的固定位置，直到退出 LIVE（第一下唤出控制条，之后点中 ⏭ 出确认框）。
-    # 不再按控制条 / 中间唤出分支，也不限次数。坐标按屏幕（不含帧顶白条）：使用者实机截图 ⏭ 在 (0.9375, 0.10)
+    # 不再按控制条 / 中间唤出分支，也不限次数。坐标按屏幕（不含帧顶白条）：旋转窗口实测 ⏭ 在 (0.938, 0.110)
     live["skips"] = live.get("skips", 0) + 1
     return "live_skip", (int(w * LIVE_SKIP_FIXED[0]), int(h * LIVE_SKIP_FIXED[1]))
 
@@ -1116,7 +1119,10 @@ def device_action(action, *, watch_tick=None, auto_route=False):
             from hiro.loop.controller import live_start_tap
             from hiro.loop.landscape import LandscapeGuard
 
-            g = live["guard"] = live["guard"] or LandscapeGuard(shoot=device.screenshot)
+            # 旋转窗口（使用者 2026-11-08）：watch 默认只把窗口宽高对调成横向，不再切全屏（没救回画面就停下）；
+            # HIRO_LIVE_ROTATE=0 关（退回原来的切全屏）
+            g = live["guard"] = live["guard"] or LandscapeGuard(shoot=device.screenshot,
+                                                                rotate=os.environ.get("HIRO_LIVE_ROTATE", "1") != "0")
             if g.last_result in LIVE_FAIL:
                 if not g.failure_cleared(img):
                     raise HoldPage(live_fail_reason(g.last_op, g.last_result))

@@ -12,9 +12,15 @@
 3. 原来的菜单方式，但先激活 + AXRaise，并确认前台应用确实是游戏，不是游戏就不点。
 每一步之后核对（默认读 AXFullScreen 属性；调用方给了截图函数就看画面中间是否不再全黑），没生效才换下一步；
 屏幕锁住 / 显示器休眠时任何方式都拿不到焦点，直接返回 "locked"，交给使用者。
+
+旋转窗口（HIRO_LIVE_ROTATE=1，默认关）：游戏是 PlayCover「可调窗口」模式（resolution=6），PlayTools 把 UIScreen.bounds
+接到窗口当前尺寸（PlayScreen.boundsResizable），全屏能救黑屏就是因为窗口变横了。所以不切全屏，直接用辅助功能把窗口
+内容区宽高对调成横向（不需要前台、不抢焦点），LIVE 结束再还原成进入前的位置和尺寸。开着时进入只用它，不再退回全屏
+（使用者 2026-11-08），没救回画面就停下交给使用者；退出时窗口在全屏里才走全屏方式，否则只用它还原（fn+shift+F 这时会反过来进全屏）。
 """
 
 import logging
+import os
 import subprocess
 import time
 
@@ -166,8 +172,106 @@ def _key_front(pid: int, want: bool) -> bool:
 METHODS = (("fn+shift+F", _key_to_pid), ("fn+shift+F（前台）", _key_front),
            ("全屏按钮", _ax_button), ("AXFullScreen 属性", _ax_attribute), ("菜单", _menu))
 
+ROTATE_ENV = "HIRO_LIVE_ROTATE"
+ROTATE_NAME = "旋转窗口"
+TITLE_BAR = 28  # 标准标题栏高度（PlayCover 设置 hideTitleBar 关着）；宽高按内容区对调，标题栏不算进去
+_saved_frames: dict[int, tuple[int, int, int, int]] = {}  # pid → 旋转前的窗口 (x, y, w, h)，退出时原样还原
 
-def switch_fullscreen(want: bool, *, pid: int | None = None, shoot=None, methods=None) -> str:
+
+def rotate_enabled() -> bool:
+    return os.environ.get(ROTATE_ENV, "0") == "1"
+
+
+def ax_window_frame(pid: int) -> tuple[int, int, int, int] | None:
+    """主窗口的 (x, y, w, h)，辅助功能坐标（左上原点，单位点）。读不到返回 None。"""
+    out = _osa(_ax_window(pid) + """
+  set {xx, yy} to position of best
+  set {ww, hh} to size of best
+  return (xx as text) & "," & (yy as text) & "," & (ww as text) & "," & (hh as text)
+end tell""")
+    try:
+        x, y, w, h = (int(float(v)) for v in out.split(","))
+    except ValueError:
+        return None
+    return x, y, w, h
+
+
+def _ax_set_frame(pid: int, frame: tuple[int, int, int, int]) -> bool:
+    x, y, w, h = frame
+    out = _osa(_ax_window(pid) + f"""
+  set position of best to {{{x}, {y}}}
+  set size of best to {{{w}, {h}}}
+  return "ok"
+end tell""")
+    return out == "ok"
+
+
+def _visible_area() -> tuple[int, int, int, int] | None:
+    """主显示器可用区域（去掉菜单栏 / 程序坞），换成辅助功能坐标 (x, y, w, h)。"""
+    try:
+        from AppKit import NSScreen
+
+        screens = NSScreen.screens()
+        full, vis = screens[0].frame(), screens[0].visibleFrame()
+    except Exception:  # noqa: BLE001
+        return None
+    top = full.size.height - (vis.origin.y + vis.size.height)
+    return int(vis.origin.x), int(top), int(vis.size.width), int(vis.size.height)
+
+
+def rotated_frame(frame, area=None, title_bar: int = TITLE_BAR) -> tuple[int, int, int, int]:
+    """窗口内容区宽高对调后的窗口 frame：左上角不动，放不下就往回挪，比可用区域还大就等比缩小。"""
+    x, y, w, h = frame
+    cw, ch = w, h - title_bar
+    nw, nh = ch, cw + title_bar
+    if area is not None:
+        ax, ay, aw, ah = area
+        scale = min(1.0, aw / nw, ah / nh)
+        if scale < 1.0:
+            nw, nh = int(ch * scale), int(cw * scale) + title_bar
+        x = max(ax, min(x, ax + aw - nw))
+        y = max(ay, min(y, ay + ah - nh))
+    return x, y, nw, nh
+
+
+def window_landscape(pid: int) -> bool | None:
+    frame = ax_window_frame(pid)
+    return None if frame is None else frame[2] > frame[3]
+
+
+def _rotate_window(pid: int, want: bool) -> bool:
+    """进入（want=True）：窗口变横；退出：还原成进入前的 frame（没记录就再对调一次）。全屏中不动，交给全屏方式。"""
+    if ax_is_fullscreen(pid):
+        return False
+    frame = ax_window_frame(pid)
+    if frame is None:
+        return False
+    if (frame[2] > frame[3]) == want:
+        return True  # 已经是目标方向
+    if want:
+        _saved_frames[pid] = frame
+        target = rotated_frame(frame, _visible_area())
+    else:
+        target = _saved_frames.pop(pid, None) or rotated_frame(frame, _visible_area())
+    logger.warning("旋转窗口：%s → %s", frame, target)
+    return _ax_set_frame(pid, target)
+
+
+def methods_for(want: bool, pid: int, rotate: bool | None = None) -> tuple:
+    """这次切换按什么顺序试。开关关着：原来的 METHODS（切全屏）。开着：进入只旋转窗口，不再退回切全屏
+    （使用者 2026-11-08：「现在没有必要再去全屏了」）——没救回画面就返回 failed，停下交给使用者；
+    退出时窗口在全屏里（以前进的 / 手动进的）才走全屏方式退出，否则只还原窗口，不按 fn+shift+F（会反过来进全屏）。"""
+    if not (rotate_enabled() if rotate is None else rotate):
+        return METHODS
+    rotate = ((ROTATE_NAME, _rotate_window),)
+    if want:
+        return rotate
+    if ax_is_fullscreen(pid):
+        return METHODS
+    return rotate
+
+
+def switch_fullscreen(want: bool, *, pid: int | None = None, shoot=None, methods=None, rotate: bool | None = None) -> str:
     """进入（want=True）/ 退出全屏，按 METHODS 顺序试，每步之后核对。返回成功的方式名，或 "locked" / "nogame" / "failed"。
     shoot：截图函数。给了就按画面核对（进入：中间不再全黑；退出：竖屏且不全黑），否则读 AXFullScreen 属性。"""
     pid = pid if pid is not None else _game_pid()
@@ -177,16 +281,18 @@ def switch_fullscreen(want: bool, *, pid: int | None = None, shoot=None, methods
         logger.warning("屏幕锁住 / 显示器休眠：切不了全屏，交给使用者")
         return "locked"
 
-    def done():
+    def done(method):
         if shoot is not None:
             img = shoot()
             if img is not None:
                 if want:
                     return not is_black(img)
                 return img.shape[0] > img.shape[1] and not is_black(img)
+        if method is _rotate_window:
+            return window_landscape(pid) is want
         return ax_is_fullscreen(pid) is want
 
-    for name, method in methods or METHODS:
+    for name, method in methods or methods_for(want, pid, rotate):
         try:
             ok = method(pid, want)
         except Exception as exc:  # noqa: BLE001  一种方式出错就换下一种
@@ -196,11 +302,14 @@ def switch_fullscreen(want: bool, *, pid: int | None = None, shoot=None, methods
             continue
         deadline = time.monotonic() + VERIFY_S
         while time.monotonic() < deadline:
-            if done():
+            if done(method):
                 logger.warning("%s全屏：用「%s」成功", "进入" if want else "退出", name)
                 return name
             time.sleep(VERIFY_POLL)
         logger.warning("%s全屏：「%s」执行了但核对没通过，换下一种", "进入" if want else "退出", name)
+        if method is _rotate_window and want and pid in _saved_frames:
+            # 旋转没救回画面：先把窗口还原再试全屏，否则之后退出全屏会回到这个横向窗口
+            _ax_set_frame(pid, _saved_frames.pop(pid))
     return "failed"
 
 
@@ -242,8 +351,9 @@ class LandscapeGuard:
     EXIT_BLACK_S = 8.0
     EXIT_PORTRAIT_S = 10.0  # 全屏中竖屏且有画面持续这么久：不是 LIVE（误进全屏），退出
 
-    def __init__(self, shoot=None):
+    def __init__(self, shoot=None, rotate: bool | None = None):
         self.shoot = shoot  # 截图函数（给了就按画面核对切换结果）
+        self.rotate = rotate  # True：先旋转窗口再试全屏（watch 默认）；None：看 HIRO_LIVE_ROTATE
         self.last_result: str | None = None  # 最近一次切换的结果（方式名 / locked / nogame / failed）
         self.last_op: str | None = None  # 最近一次切换是进入（enter）还是退出（exit）全屏：停点提示按它给处置
         self.black_since: float | None = None
@@ -294,7 +404,7 @@ class LandscapeGuard:
             return False
         self.prev_front = _front_app()
         self.last_op = "enter"
-        self.last_result = switch_fullscreen(True, pid=pid, shoot=self.shoot)
+        self.last_result = switch_fullscreen(True, pid=pid, shoot=self.shoot, rotate=self.rotate)
         ok = self.last_result not in SWITCH_FAILURES
         logger.warning("横屏 LIVE 黑屏 %.0fs：进入全屏让窗口重新布局（%s）", self.BLACK_S, self.last_result)
         if ok:
@@ -350,7 +460,7 @@ class LandscapeGuard:
     def _exit(self) -> bool:
         pid = _game_pid()
         self.last_op = "exit"
-        self.last_result = switch_fullscreen(False, pid=pid, shoot=self.shoot) if pid is not None else "nogame"
+        self.last_result = switch_fullscreen(False, pid=pid, shoot=self.shoot, rotate=self.rotate) if pid is not None else "nogame"
         ok = self.last_result not in SWITCH_FAILURES
         logger.warning("LIVE 结束：退出全屏（%s）", self.last_result)
         self.fullscreen, self.black_since = False, None
@@ -358,3 +468,34 @@ class LandscapeGuard:
             self.prev_front.activateWithOptions_(0)
         self.prev_front = None
         return ok
+
+
+def main(argv=None) -> int:
+    """手动实测：python -m hiro.loop.landscape rotate|restore|show（只动窗口尺寸，不点游戏）。"""
+    import argparse
+
+    p = argparse.ArgumentParser(description="旋转 / 还原游戏窗口（HIRO_LIVE_ROTATE 的实测入口）")
+    p.add_argument("action", choices=("rotate", "restore", "show"))
+    a = p.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    pid = _game_pid()
+    if pid is None:
+        print("游戏没在运行")
+        return 1
+    print("窗口", ax_window_frame(pid), "全屏" if ax_is_fullscreen(pid) else "非全屏")
+    if a.action == "show":
+        return 0
+    want = a.action == "rotate"
+    ok = _rotate_window(pid, want)  # 新进程没有旋转前的记录：restore 按内容区再对调一次还原
+    time.sleep(1.0)
+    print("结果", ok, "现在", ax_window_frame(pid))
+    if want and window_landscape(pid) is False and pid in _saved_frames:
+        # 被窗口比例锁（PlayCover「宽高比」自定义 9:16）压回竖窗：马上还原
+        _ax_set_frame(pid, _saved_frames.pop(pid))
+        print("没转成横向（窗口比例被锁住？），已还原", ax_window_frame(pid))
+        return 2
+    return 0 if ok and window_landscape(pid) is want else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

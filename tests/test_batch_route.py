@@ -244,7 +244,7 @@ def test_auto_start_only_on_repeat_runs(tmp_path, monkeypatch):
 
 
 def test_live_skip_always_taps_fixed_skip_then_confirms(monkeypatch):
-    # 使用者 2026-11-07：进 LIVE 后所有点击都点 ⏭ 固定位置（屏幕 (0.9375, 0.10) → 1280x720 (1200,72)），直到确认框 → 「終了する」
+    # 使用者 2026-11-07：进 LIVE 后所有点击都点 ⏭ 固定位置（屏幕 (0.938, 0.110)（2026-11-08 旋转窗口实测）→ 1280x720 (1200,79)），直到确认框 → 「終了する」
     import batch_hif as B
 
     img = np.zeros((720, 1280, 3), np.uint8)
@@ -254,9 +254,9 @@ def test_live_skip_always_taps_fixed_skip_then_confirms(monkeypatch):
     noop = lambda x, y: None  # noqa: E731
     assert B.live_skip_step(img, [], live, noop) is None  # 刚开始，等曲目页退场
     now[0] = 103.0
-    assert B.live_skip_step(img, [], live, noop) == ("live_skip", (1200, 72))  # 没控制条也点 ⏭ 位置（第一下唤出）
+    assert B.live_skip_step(img, [], live, noop) == ("live_skip", (1200, 79))  # 没控制条也点 ⏭ 位置（第一下唤出）
     controls = [("00:20/01:32", 1.0, (36, 92, 186, 118))]
-    assert B.live_skip_step(img, controls, live, noop) == ("live_skip", (1200, 72))
+    assert B.live_skip_step(img, controls, live, noop) == ("live_skip", (1200, 79))
     for _ in range(6):
         assert B.live_skip_step(img, [], live, noop)[0] == "live_skip"  # 不限次数，直到退出
     dialog = [("ライブ終了確認", 1.0, (520, 430, 900, 460)), ("Pライブを終了しますか？", 1.0, (340, 520, 620, 550)),
@@ -407,7 +407,7 @@ def test_live_end_tap_subtracts_top_white_bar(monkeypatch):
     img[:35] = 255
     assert B.top_bar(img) == 35 and B.top_bar(np.zeros((720, 1280, 3), np.uint8)) == 0
     monkeypatch.setattr(B.time, "monotonic", lambda: 200.0)
-    assert B.live_skip_step(img, [], {"started": 100.0}, None) == ("live_skip", (1200, 72))
+    assert B.live_skip_step(img, [], {"started": 100.0}, None) == ("live_skip", (1200, 79))
     dialog = [("ライブ終了確認", 1.0, (520, 430, 900, 460)), ("終了する", 1.0, (740, 660, 860, 700))]
     assert B.live_skip_step(img, dialog, {"started": 100.0}, None) == ("live_end", (800, 645))
 

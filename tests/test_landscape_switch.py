@@ -81,7 +81,7 @@ def test_guard_exits_fullscreen_on_lasting_portrait_picture(monkeypatch):
 def test_guard_enter_records_result(monkeypatch):
     monkeypatch.setattr(L, "_game_pid", lambda: 7)
     monkeypatch.setattr(L, "_front_app", lambda: None)
-    monkeypatch.setattr(L, "switch_fullscreen", lambda want, pid, shoot: "failed")
+    monkeypatch.setattr(L, "switch_fullscreen", lambda want, pid, shoot, rotate=None: "failed")
     g = L.LandscapeGuard()
     assert g._enter() is False and g.last_result == "failed" and not g.fullscreen
 
@@ -183,3 +183,102 @@ def test_locked_hold_clears_after_unlock_and_retries_once(monkeypatch, operation
         clock[0] += 60
         assert held(g, BLACK)
     assert env.switches == [operation == "enter"] * 2
+
+
+# ---- 旋转窗口（HIRO_LIVE_ROTATE=1）：不切全屏，窗口内容区宽高对调 ----
+
+def test_rotated_frame_swaps_content_and_round_trips():
+    portrait = (1011, 25, 429, 790)  # 实机窗口（2026-11-08）
+    land = L.rotated_frame(portrait)
+    assert land == (1011, 25, 762, 457)  # 内容区 429x762 → 762x429，标题栏 28 另加
+    assert L.rotated_frame(land) == portrait
+
+
+def test_rotated_frame_stays_on_screen_and_shrinks():
+    area = (0, 25, 1440, 875)
+    x, y, w, h = L.rotated_frame((1011, 25, 429, 790), area)
+    assert (w, h) == (762, 457) and x + w <= 1440 and x == 1440 - 762
+    x, y, w, h = L.rotated_frame((0, 25, 600, 1200), (0, 25, 1000, 600))  # 内容 1172 宽放不下 → 等比缩小
+    assert w <= 1000 and h <= 600 and abs(w / (h - L.TITLE_BAR) - 1172 / 600) < 0.01
+
+
+class Win:
+    """模拟游戏窗口：AX frame / 全屏状态；记下设过的 frame。"""
+
+    def __init__(self, monkeypatch, frame=(1011, 25, 429, 790), fullscreen=False):
+        self.frame, self.fullscreen, self.sets = frame, fullscreen, []
+        L._saved_frames.clear()
+        monkeypatch.setenv(L.ROTATE_ENV, "1")
+        monkeypatch.setattr(L, "ax_window_frame", lambda pid: self.frame)
+        monkeypatch.setattr(L, "ax_is_fullscreen", lambda pid: self.fullscreen)
+        monkeypatch.setattr(L, "_visible_area", lambda: (0, 25, 1440, 875))
+        monkeypatch.setattr(L, "_ax_set_frame", self.set)
+
+    def set(self, pid, frame):
+        self.sets.append(frame)
+        self.frame = frame
+        return True
+
+
+def test_rotate_off_by_default(monkeypatch):
+    monkeypatch.delenv(L.ROTATE_ENV, raising=False)
+    assert L.methods_for(True, 1) is L.METHODS and L.methods_for(False, 1) is L.METHODS
+
+
+def test_rotate_enter_then_exit_restores_exact_frame(monkeypatch):
+    win = Win(monkeypatch)
+    before = win.frame
+    assert L.methods_for(True, 1)[0][1] is L._rotate_window
+    assert L.switch_fullscreen(True, pid=1) == L.ROTATE_NAME  # 没截图：按窗口方向核对
+    assert win.frame[2] > win.frame[3]
+    # 退出：窗口横、又不在全屏 → 只用旋转还原，不按 fn+shift+F（会反过来进全屏）
+    assert [n for n, _ in L.methods_for(False, 1)] == [L.ROTATE_NAME]
+    assert L.switch_fullscreen(False, pid=1) == L.ROTATE_NAME
+    assert win.frame == before
+
+
+def test_rotate_not_rescuing_picture_restores_window_before_fullscreen(monkeypatch):
+    win = Win(monkeypatch)
+    before = win.frame
+    tried = []
+
+    def fullscreen(pid, want):
+        tried.append(win.frame)
+        return False
+
+    got = L.switch_fullscreen(True, pid=1, shoot=lambda: BLACK,
+                              methods=((L.ROTATE_NAME, L._rotate_window), ("全屏按钮", fullscreen)))
+    assert got == "failed" and tried == [before] and win.frame == before
+
+
+def test_rotate_leaves_fullscreen_window_alone(monkeypatch):
+    win = Win(monkeypatch, fullscreen=True)
+    assert L._rotate_window(1, True) is False and not win.sets
+    assert L.methods_for(False, 1) is L.METHODS  # 全屏中退出：照旧走全屏方式
+
+
+def test_guard_rotate_flag_overrides_env(monkeypatch):
+    """watch 传 rotate=True：不看 HIRO_LIVE_ROTATE 也先旋转窗口。"""
+    monkeypatch.delenv(L.ROTATE_ENV, raising=False)
+    assert L.methods_for(True, 1, rotate=True)[0][0] == L.ROTATE_NAME
+    assert L.methods_for(True, 1, rotate=False) is L.METHODS
+    seen = []
+    monkeypatch.setattr(L, "_game_pid", lambda: 7)
+    monkeypatch.setattr(L, "_front_app", lambda: None)
+    monkeypatch.setattr(L, "switch_fullscreen", lambda want, pid, shoot, rotate=None: seen.append(rotate) or L.ROTATE_NAME)
+    g = L.LandscapeGuard(rotate=True)
+    assert g._enter() and seen == [True]
+
+
+
+def test_rotate_on_never_falls_back_to_fullscreen(monkeypatch):
+    """使用者 2026-11-08：「现在没有必要再去全屏了」。旋转开着：进入只旋转；退出时窗口在全屏里才走全屏方式。"""
+    win = Win(monkeypatch)
+    assert [n for n, _ in L.methods_for(True, 1)] == [L.ROTATE_NAME]
+    assert [n for n, _ in L.methods_for(False, 1)] == [L.ROTATE_NAME]  # 竖窗 / 横窗都只动窗口
+    win.fullscreen = True
+    assert L.methods_for(False, 1) is L.METHODS
+    # 旋转没救回画面：失败、窗口还原，不去切全屏
+    win.fullscreen = False
+    before = win.frame
+    assert L.switch_fullscreen(True, pid=1, shoot=lambda: BLACK) == "failed" and win.frame == before
