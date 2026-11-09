@@ -1308,6 +1308,10 @@ EXAM_DECK_BUTTON = (557, 1205)
 PILE_VIEW_LAST: dict = {}  # 上次 read_pile_view 的情况（打开没有、问题），写进 trace
 
 
+class _Decided(Exception):
+    """_probe 内部：卡图比对已经给出结论，跳过签名比对。"""
+
+
 def read_pile_view() -> dict | None:
     """考试页右下角牌库按钮 → 一览切列表显示 → 按「保留 / 手札 / 山札 / 捨札 / 除外」分组读卡名 → 关闭。
     读全（每组张数和标题对上、总张数对上）才返回 {组: [卡名]}；读不全返回 None；一览没关掉就停机（不能在一览上出牌）。"""
@@ -1346,8 +1350,19 @@ def tap_probe(frame, card) -> str | None:
 
     cards = getattr(frame, "cards", None) or []
     rect = getattr(cards[card.slot], "rect", None) if 0 <= card.slot < len(cards) else None
-    if rect is None or X._selects(device.screenshot()):
+    shot = device.screenshot()
+    if rect is None or X._selects(shot):
         return None
+    from hiro.exec import landing
+
+    if landing.enabled():
+        # 点之前按卡名首字母框的高度核对没有牌停在选中态（被抬起）、布局稳定。codex-20261109-1-r R2 T3：
+        # トレーニングの成果+ 已在选中态但 SELECT 没 OCR 出来，读档位这一下成了「确认」，把它打了出去（一次性牌，进除外没记账）
+        h = landing.read_ids(shot)
+        if h is None or h.layout != "ok" or (h.ys and max(h.ys) - min(h.ys) >= landing.LIFT_PX):
+            device.click(*X.DESELECT_TAP)
+            time.sleep(X.DESELECT_WAIT)
+            return None
     x, y = int(rect.center.x), int(rect.center.y)
     device.click(x, y)
     deadline = time.monotonic() + X.PLAY_CONFIRM_TIMEOUT
@@ -1483,10 +1498,20 @@ class VeilScreen(ScreenExamStateSource):
         text = self.probe(frame, card)
         try:
             after = device.screenshot()
+            from hiro.exec import landing
+
+            h0, h1 = (landing.read_ids(before), landing.read_ids(after)) if landing.enabled() else (None, None)
+            if h0 is not None and h1 is not None and None not in h0.ids and None not in h1.ids:
+                # HIRO_LANDING_ART：按卡图认牌比整手牌。体力 / 元気在动（刚喝完饮料的结算）不算变（codex-20261109-1-r R2 T3
+                # 喝ソーダ 后点按读档位，签名里元気变了 → 误判点按打出了牌，白开一次牌库一览）
+                changed = None if h0.ids == h1.ids else f"手牌变了（卡图 {h0.ids} → {h1.ids}）"
+                raise _Decided
             a, b = X._lite_sig(before), X._lite_sig(after)
             changed = None if a is None or b is None else (
                 "手牌 / 体力变了" if a != b else
                 (f"槽 {m} 卡面变了" if (m := X._art_changed(before, after, a[1])) is not None else None))
+        except _Decided:
+            pass
         except Exception:  # noqa: BLE001
             changed = None
         if changed:

@@ -77,3 +77,25 @@ def test_play_not_landed_uses_art_verdict(monkeypatch):
     assert "没打出" in ex._play_not_landed(NS(img=img), 485)
     monkeypatch.setattr(L, "settle", lambda shoot, h0, slot, **k: ("played", "目标牌少了一张", img))
     assert ex._play_not_landed(NS(img=img), 485) is None
+
+
+def test_tap_probe_refuses_when_a_card_is_lifted(monkeypatch):
+    """codex-20261109-1-r R2 T3：目标牌已被抬起（选中）但 SELECT 没认出，点按读档位等于确认打出。开关打开时先看首字母框高度：
+    有牌被抬起就只点空白取消选中，不点牌。"""
+    import sys
+    import types
+
+    pytest.importorskip("kaa")
+    import hiro.exec.exam as X
+    from hiro.produce import veil_exam as V
+
+    clicks = []
+    dev = types.SimpleNamespace(screenshot=lambda: "img", click=lambda x, y: clicks.append((x, y)))
+    monkeypatch.setitem(sys.modules, "kotonebot", types.SimpleNamespace(device=dev))
+    monkeypatch.setenv("HIRO_LANDING_ART", "1")
+    monkeypatch.setattr(X, "_selects", lambda img: [])
+    monkeypatch.setattr(V.time, "sleep", lambda s: None)
+    monkeypatch.setattr(L, "read_ids", lambda img: L.HandIds(["a", "b", "c"], [145, 365, 575], [1000, 970, 1000], "ok"))
+    frame = NS(cards=[NS(rect=NS(center=NS(x=x, y=1010))) for x in (145, 365, 575)])
+    assert V.tap_probe(frame, NS(slot=1, name="b")) is None
+    assert clicks == [X.DESELECT_TAP]

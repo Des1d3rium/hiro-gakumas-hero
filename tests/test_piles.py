@@ -123,3 +123,46 @@ def test_probe_that_changes_hand_requests_pile_view(monkeypatch):
     assert screen._probe(None, C, M) == "卡名:トレーニングの成果+"
     assert M.strategy_data["veil_piles"]["need_view"] and "veil_pile_viewed" not in M.strategy_data
     assert logs == ["veil_probe_changed"]
+
+
+def test_apply_view_maps_temporary_upgrade_to_ledger_name():
+    """codex-20261109-1-r R2 T3：一览里是「アンダンテ+」（支援卡临时强化），账本是「アンダンテ」→ 按账本名记，不改强化；
+    原来记成 アンダンテ+，T4 抽到「アンダンテ」对不上又白开一次一览、trust 2 坏步。账本里真有「+」版的照旧。"""
+    assert P._to_book("アンダンテ+", {"アンダンテ": 1}) == "アンダンテ"
+    assert P._to_book("巻き返し++", {"巻き返し+": 1, "巻き返し": 1}) == "巻き返し+"
+    assert P._to_book("教えてあげる+", {"教えてあげる+": 1}) == "教えてあげる+"
+    assert P._to_book("新卡", {"アンダンテ": 1}) == "新卡"
+    data = _start("ABCDT", "AB")
+    data["veil_deck"] = {"A": 1, "B": 1, "C": 1, "D": 1, "T": 1}
+    _play(data, "A")
+    P.apply_view(data, {"手札": ["B"], "山札": ["C+", "D"], "捨札": ["A"], "除外": ["T"]})
+    assert Counter(P._view(data["veil_piles"])["deck"]) == Counter("CD")
+
+
+def test_probe_with_art_ids_ignores_hp_change(monkeypatch):
+    """codex-20261109-1-r R2 T3：喝完ソーダ 元気还在变时点按读档位，签名变了被当成打出了牌。开 HIRO_LANDING_ART 时按卡图比整手牌。"""
+    import sys
+    import types
+
+    from hiro.exec import exam as X
+    from hiro.exec import landing as LD
+    from hiro.produce.veil_exam import VeilScreen
+
+    shots = iter(["before", "after"])
+    monkeypatch.setitem(sys.modules, "kotonebot", types.SimpleNamespace(device=types.SimpleNamespace(screenshot=lambda: next(shots))))
+    monkeypatch.setenv("HIRO_LANDING_ART", "1")
+    monkeypatch.setattr(LD, "read_ids", lambda img: LD.HandIds(["a", "b"], [255, 465], [1000, 1000], "ok"))
+    monkeypatch.setattr(X, "_lite_sig", lambda img: ((8, 42, 30) if img == "before" else (8, 42, 45), ((1, 2), (3, 4))))
+    screen = VeilScreen({}, set(), probe=lambda frame, card: "卡名:a")
+    logs = []
+    screen._log = lambda kind, **kw: logs.append(kind)
+
+    class M:
+        turn = 3
+        strategy_data = {"veil_piles": {"need_view": False}}
+
+    class C:
+        name, slot = "a", 0
+
+    screen._probe(None, C, M)
+    assert logs == [] and not M.strategy_data["veil_piles"]["need_view"]

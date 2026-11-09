@@ -196,16 +196,27 @@ def _view(piles: dict) -> dict:
             "unlocated": list(_counter(piles["unlocated"]).elements()), "doubt": list(_counter(piles.get("doubt")).elements())}
 
 
+def _to_book(name: str, book) -> str:
+    """一览里的卡名 → 账本卡名。考试中一览带支援卡临时强化（「アンダンテ+」「++」），账本卡名最多一个「+」、考试页不改强化
+    （codex-20261109-1-r R2 T3：一览把账本的 アンダンテ 记成 アンダンテ+，T4 抽到「アンダンテ」对不上，又白开一次一览，trust 2 坏步）。
+    账本里有这个名字就用它；否则同一基名里取「+」不多于画面的最高一档。"""
+    if not book or name in book:
+        return name
+    base, plus = name.rstrip("+"), len(name) - len(name.rstrip("+"))
+    same = sorted((k for k in book if k.rstrip("+") == base and len(k) - len(base) <= plus), key=len)
+    return same[-1] if same else name
+
+
 def apply_view(data: dict, groups: dict) -> dict | None:
     """右下角牌库一览读到的分组（山札 / 捨札 / 除外 / 手札）→ 牌堆账以画面为准。山札、捨札都读到才用；返回差异。"""
     piles = data.get("veil_piles")
     if piles is None or "山札" not in groups and "捨札" not in groups:
         return None
-    deck = Counter(groups.get("山札") or [])
-    grave = Counter(groups.get("捨札") or [])
+    book = data.get("veil_deck")
+    deck = Counter(_to_book(n, book) for n in groups.get("山札") or [])
+    grave = Counter(_to_book(n, book) for n in groups.get("捨札") or [])
     before = {"deck": dict(_counter(piles["deck"])), "grave": dict(_counter(piles["grave"])),
               "unlocated": dict(_counter(piles["unlocated"])), "doubt": dict(_counter(piles.get("doubt")))}
-    book = data.get("veil_deck")
     if book is not None:
         hand = Counter(c for c in piles["hand"] if c)
         gone = (Counter({k: v for k, v in book.items() if v > 0}) - hand) - deck - grave
