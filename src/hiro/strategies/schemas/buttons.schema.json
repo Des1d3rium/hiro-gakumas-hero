@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "buttons/1",
+  "title": "按钮注册表：固定点击坐标",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "buttons"],
+  "properties": {
+    "schema": {"type": "string", "enum": ["buttons/1"]},
+    "note": {"type": "string"},
+    "buttons": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "properties": {
+          "page": {"type": "string"},
+          "kind": {"type": "string", "enum": ["point", "x", "y", "xs", "ys", "points", "dy", "ratio"]},
+          "value": {"type": ["array", "integer", "object"]},
+          "alias": {"type": "string"},
+          "space": {"type": "string", "enum": ["portrait", "landscape"]},
+          "note": {"type": "string"},
+          "danger": {"type": "string", "description": "花钱 / 不可撤销：调用方点之前必须核对的内容"},
+          "blind_ok": {"type": "string", "description": "直接点坐标也无害的理由（没有文字、没有稳定图标的空白处）"},
+          "overridden": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

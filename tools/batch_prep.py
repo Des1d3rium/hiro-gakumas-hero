@@ -23,14 +23,15 @@ import unicodedata
 from argparse import Namespace
 
 import batch_rules  # 流程开关（conf/batch-rules.json 的 prep 段）
+from hiro.ui import buttons as UIB  # 点击点：按钮注册表（hiro/ui/buttons.json）
 from hiro.strategies import profiles as S  # 挑选规则（饮料 / 换卡 / 差し入れ技能卡）：回忆档案，见 docs/strategies.md
 
-RECEIVE = (353, 1097)  # 差し入れ「受け取る」/ 确认页「受け取らない」
-DRINK_X, DRINK_Y = (222, 360, 498), 870
+RECEIVE = UIB.get("prep.RECEIVE")  # 差し入れ「受け取る」/ 确认页「受け取らない」
+DRINK_X, DRINK_Y = UIB.get("prep.DRINK_X"), UIB.get("prep.DRINK_Y")
 DRINK_NAME_BAND = (480, 560)  # 点开后详情名字所在 y 段
-SHOP_END = (640, 1085)
-BRIEFING_TAP = (360, 300)
-DECLINE = (359, 1006)  # 饮料选择页「受け取らない」（栏满时才有）  # 考前说明页「優勝条件」：点上方空白进入考试
+SHOP_END = UIB.get("SHOP_END")
+BRIEFING_TAP = UIB.get("BRIEFING_TAP")
+DECLINE = UIB.get("prep.DECLINE")  # 饮料选择页「受け取らない」（栏满时才有）  # 考前说明页「優勝条件」：点上方空白进入考试
 CHANGE_PICK = 2  # 换卡阶段 1：第三列优先（是一次性卡时）
 
 

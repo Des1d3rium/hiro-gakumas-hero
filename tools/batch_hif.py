@@ -13,6 +13,7 @@ import time
 import unicodedata
 from pathlib import Path
 from hiro.produce import hif_buttons as BTN
+from hiro.ui import buttons as UIB  # 按钮注册表（hiro/ui/buttons.json，使用者覆盖 conf/ui/buttons.json）
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / "reports" / "batches"
@@ -68,16 +69,16 @@ LIVE_FAIL = ("locked", "nogame", "failed")
 LIVE_OCR_EVERY = 2.0  # 横屏帧多久 OCR 一次找「TAP TO START」
 # LIVE 跳过（使用者 2026-11-07：「live 开启后，点击一次屏幕唤起跳过按钮，然后点击一次右上角的跳过，再点击橙色按钮」）。
 # 横屏帧 1280x720 上的相对位置，按使用者截图（2000x1250，16:9 铺满宽、上下各约 62px 黑边）换算
-LIVE_REVEAL = (0.50, 0.50)  # 画面中间：唤出控制条（快门在右侧 x≈0.91，不碰）
+LIVE_REVEAL = UIB.get("live.REVEAL")  # 画面中间：唤出控制条（快门在右侧 x≈0.91，不碰）
 # 右上角「⏭」：验证局 codex-20261107-1-b 实机帧（MaaTools 1280x720）上控制条在 y 35–150，⏭ 中心 (1201,105)（帧坐标；
 # 点击时减去顶部白条高度 top_bar，见 live_skip_step）。
 # 原来按使用者窗口截图换算成 (1203,40)，落在控制条上方，点了 4 次都没出确认框
-LIVE_SKIP = (0.938, 0.146)  # 帧坐标（含顶部白条，全屏时代），只作参考
+LIVE_SKIP = UIB.get("live.SKIP")  # 帧坐标（含顶部白条，全屏时代），只作参考
 # 点击用：屏幕坐标。2026-11-08 旋转窗口后实测（使用者：「读取目前窗口中的跳过键详细位置，记录并覆盖以前全屏时跳过的位置」）：
 # MaaTools 原始帧 1522x858（窗口 761x457 点，帧顶没有白条），⏭ 白色像素中心 (1427.6, 94.7)、范围 x 1416–1439 / y 76–114
 # → (0.938, 0.110)。原来按全屏截图 2000x1250 记的 (0.9375, 0.10) 高了约 1% 帧高
-LIVE_SKIP_FIXED = (0.938, 0.110)
-LIVE_END_OK = (0.61, 0.89)  # 「ライブ終了確認」橙色「終了する」(1220,1062) → (781,640)；OCR 认到文字时按文字点
+LIVE_SKIP_FIXED = UIB.get("live.SKIP_FIXED")
+LIVE_END_OK = UIB.get("live.END_OK")  # 「ライブ終了確認」橙色「終了する」(1220,1062) → (781,640)；OCR 认到文字时按文字点
 LIVE_SKIP_AFTER = 2.0  # LIVE 开始后等这么久再跳（等曲目页退场）
 LIVE_SKIP_EVERY = 4.0  # 没见到确认框时隔这么久重试一次
 LIVE_SKIP_MAX = 4
@@ -209,8 +210,8 @@ def watch_gap(default: float) -> float:
     return min(1.0, max(0.1, v))
 SETTLE_STUCK = 4  # 连点这么多次画面都没变：整帧读一次（可能是认不出的按钮页）
 SETTLE_FAST_MAX = 200  # 只点不读最多这么多下（约 1 分钟多），之后全部回到逐步读
-SETTLE_POPUP_TAP = (360, 1170)  # 结算后活动弹窗底部按钮（1-e 代理手点这里回到首页）
-INTERVAL_GO = (513, 1160)  # 「インターバル終了確認」右「本戦へ」（hiro.produce.interval 实测）
+SETTLE_POPUP_TAP = UIB.get("batch.SETTLE_POPUP_TAP")  # 结算后活动弹窗底部按钮（1-e 代理手点这里回到首页）
+INTERVAL_GO = UIB.get("batch.INTERVAL_GO")  # 「インターバル終了確認」右「本戦へ」（hiro.produce.interval 实测）
 
 
 def interval_end(device, timeout: float = 15.0, *, guarded: bool = False) -> dict:
@@ -535,7 +536,7 @@ def save_retry_frame(img) -> None:
 
 RANK_WAIT_S = 5.0
 RANK_SEEN = {"at": None, "last": 0.0}
-BRIEFING_TAP = (360, 300)  # 考前说明页：点上方空白进入考试（同 batch_prep.BRIEFING_TAP）
+BRIEFING_TAP = UIB.get("BRIEFING_TAP")  # 考前说明页：点上方空白进入考试（同 batch_prep.BRIEFING_TAP）
 
 
 def briefing_step(boxes, dialog: bool):
