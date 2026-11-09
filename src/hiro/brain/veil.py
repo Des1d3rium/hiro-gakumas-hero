@@ -55,11 +55,12 @@ def hp_guard():
     return _flag("HP_GUARD")
 
 
-MINOR_LOSS = 2  # 強気下掉血不超过这么多、打完仍在保底线上的牌不留到温存（ひと呼吸+ 強気 1 点）
+MINOR_LOSS = 7  # 強気下实际掉血 < 8、打完仍在保底线上的牌不留到温存（使用者 2026-11-08：「当前会消耗小于8的都可以打」）
 
 
 def minor_hp():
-    """VEIL_MINOR_HP=1（默认开）：体力闸「強気下不改姿态的掉血牌留到温存」只拦掉血超过 MINOR_LOSS 的牌。
+    """VEIL_MINOR_HP=1（默认开）：体力闸「強気下不改姿态的掉血牌留到温存」只拦实际掉血 ≥ 8（> MINOR_LOSS）的牌；
+    实际掉血按 hp_loss 算（強気 ×2 / 2 段階直接扣、温存减半、消費体力減少 / 増加 / 削減 / 追加、一心不乱等コスト加成、先扣元気）。
     验证局 1-c R1 剩 3：強気、体力 44，ひと呼吸+ 只掉 1 点也被拦，候选只剩 エンターテイナー+ / 巻き返し+，
     打了 巻き返し+ 花掉全力値，下回合 アイドルになります+ 打不出（使用者 2026-11-08：应先清一次性牌）。"""
     return _flag("MINOR_HP")
@@ -225,12 +226,17 @@ def _master_text(name):
     return description_text(row[0]) if row else None
 
 
+def _status_value(status) -> int:
+    v = (status or {}).get("value")
+    return int(v) if isinstance(v, (int, float)) and v > 0 else 0
+
+
 def hp_loss(state, card, current, mods=None, *, spent=False):
     """打出这张牌实际掉的体力（估计，宁高勿低）。
 
     主数据（2026-11-07 核对）：コスト值先加一心不乱（強気効果的牌 +7）、盛り上げ上手（アクティブ +1）；
     姿态倍率 強気 ×2（2 段階另外每张直接扣 1）、温存 1 段階 ×0.5、2 段階 ×0.25、のんびり ×0；先扣元気。
-    未在主数据文本核实、按保守处理：消費体力増加 / 減少按 ±50%；体力消費（直接扣）也乘姿态倍率、不被元気挡。
+    未在主数据文本核实、按保守处理：消費体力増加 ×2、減少 ×0.5，消費体力追加 / 削減 按状态数值；体力消費（直接扣）也乘姿态倍率、不被元気挡。
     spent=True：算花掉的元気 + 体力（不先扣元気），给 usable_net 用。"""
     import math
 
@@ -259,10 +265,14 @@ def hp_loss(state, card, current, mods=None, *, spent=False):
     elif current in WARM:
         mult = 0.25 if stance_level(state, current) == 2 else 0.5
     if "消費体力増加" in names:
-        mult *= 1.5
+        mult *= 2.0  # 原按 1.5；游戏里应是翻倍（未在主数据核实），按高估
     if "消費体力減少" in names:
         mult *= 0.5
-    scaled = math.ceil(cost * mult)
+    # 固定值：消費体力追加 N 在倍率前加（高估），消費体力削減 N 在倍率后减（少减，高估）。
+    # 体力消費軽減 / 消費体力変化 效果未核实、状态栏也读不到数值：不减（宁高勿低）
+    add_fix = _status_value(names.get("消費体力追加"))
+    cut_fix = _status_value(names.get("消費体力削減"))
+    scaled = max(0, math.ceil((cost + add_fix) * mult) - cut_fix)
     paid = max(0, scaled - (state.genki or 0))
     direct = math.ceil((card.hp_cost or 0) * max(mult, 1.0))  # 体力消費：只往高估，温存 / のんびり 不减
     if spent:

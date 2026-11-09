@@ -1585,3 +1585,24 @@ def test_strong_minor_hp_once_card_before_rebound(monkeypatch):
     for n in ("FP_RESERVE", "CLEAR_FIRST", "MINOR_HP"):
         monkeypatch.setenv(f"VEIL_{n}", "0")
     assert choose(state, mem) == "play:2"  # 旧默认：巻き返し+
+
+
+def test_hp_loss_status_modifiers_and_minor_threshold():
+    """使用者 2026-11-08：強気下实际掉血 < 8 的牌可以打；算上 消費体力減少 / 増加 / 削減 / 追加、強気。"""
+    from hiro.brain.cards import CardView, parse_tags
+    from hiro.brain.veil import MINOR_LOSS, hp_loss
+
+    c = CardView(0, "モチベ+", "x", 1, True, "mental", 4, 0, None, "", parse_tags("モチベ+", "", once=True))
+    state, _ = case(c, status="強気")
+    state.genki = 0
+    state.statuses = [{"name": "強気", "value": 1}]  # 1 段階：×2
+    base = hp_loss(state, c, "強気")
+    assert base == 8 and base > MINOR_LOSS  # 8 点：照拦
+    state.statuses.append({"name": "消費体力減少", "value": 2})
+    assert hp_loss(state, c, "強気") == 4 <= MINOR_LOSS  # 减半：放行
+    state.statuses = [{"name": "強気", "value": 1}, {"name": "消費体力削減", "value": 1}]
+    assert hp_loss(state, c, "強気") == 7 <= MINOR_LOSS
+    state.statuses = [{"name": "強気", "value": 1}, {"name": "消費体力増加", "value": 2}]
+    assert hp_loss(state, c, "強気") == 16
+    state.statuses = [{"name": "強気", "value": 1}, {"name": "消費体力追加", "value": 1}]
+    assert hp_loss(state, c, "強気") == 10
