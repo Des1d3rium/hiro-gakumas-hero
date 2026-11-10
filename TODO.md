@@ -6,10 +6,13 @@
 夜空计数换成加载器（`VEIL_PITEM_FLOWER`，默认开，=0 退回手写规则）；回放 `tools/audit/pitem_replay.py`：54 份 trace 52 份每帧和画面「N回」一致；
 夜空触发后的效果、一番星的回合开始切换也走加载器（`VEIL_ENCHANT_ENGINE`，默认开，=0 退回手写规则）。
 
-通用引擎 `src/hiro/brain/pitem_engine.py`（`VEIL_PITEM_ENGINE`，默认关，2026-11-09）：按持有的 P 道具装全部附魔、在账本推演里执行。
+**统一成一套（2026-11-09）**：附魔只有一个引擎 `hiro.brain.play.enchants`（流派资源登记在 `play/anomaly.py`），推演（`sim.TurnState`）和账本共用；
+`src/hiro/brain/pitem_engine.py` 只是账本侧的驱动：持有哪些 P 道具（画面道具列 + 偶像专属道具）、打出的牌装上的「以降…」附魔（一番星除外），
+在出牌 / 回合结束 / 回合开始时发事件给引擎，把姿态、段階、下回合姿态、追加出牌次数落到账本。开关合成一个 `VEIL_ENCHANT_RUNTIME`（默认关），
+原来的 `VEIL_PITEM_ENGINE` 去掉了。夜空道具推演和账本都按偶像找（`pitem_engine.ring_item`），不再写死。
 实机 VEIL 牌组画面读到的另外两件：H.I.F応援棒（青）（考试开始补牌，由 `HIRO_VEIL_HIF_FILL` 单独处理，引擎只记发动）、
 ゼミパーカー（实机核对是「センスのスキルカード使用後、パラメータ上昇量増加10%」那版，不改姿态，见下），
-所以开引擎不改变现在 VEIL 的行为（回放见下），价值在换偶像 / 换道具时。
+所以开引擎不改变现在 VEIL 的姿态账本（回放见下），价值在换偶像 / 换道具时。
 
 - [x] **回忆能力换成加载器**（使用者 2026-11-09）：`hiro.brain.memory_ability.table()` 走 `pitems.enchant()`——触发卡按 enc01 牌搜索的卡 id，分类按效果类型（ExamPlayableValueAdd / +ExamCardDraw / ExamCardMove 眠気），次数按 enc02 附魔效果 count；115 项和说明文字逐项一致（`test_loader_table_matches_master_texts`），加载器给不出时退回文字分类。
 - [x] **按持有的 P 道具装附魔**（`pitem_engine.observe`，`VeilScreen.read` 每帧调）：画面道具列图标 → ProduceItem（同图标几个 id 结构都一样才装；不一样按偶像档案 `pitem_assets`，没写就不装、记 `veil_pitems.unsure`）；
@@ -19,24 +22,24 @@
   - [ ] 夜空未强化版（`pitem_03-3-303-0`，レッスン内5回）：`ring_item` 取强化版，和原来写死的一样；换成没强化的偶像卡时要按持有的那版。
 - [x] **核对 Common 牌算不算「某计划的牌」**（2026-11-09 实机 trace）：**不算**。81 份带 ゼミパーカー 的 trace，按道具角标（图标右上「5→4」，框 (684,302,712,330)）看：
   通用牌单张打出 138 次（仕切り直し+ 49、みずたまりスキップ+ 48、眠気 22、ティーパーティ+ 13、ハイテンション 4、テレビ出演 2）角标一次都没减；Plan1 牌（ひと呼吸+ 8、演出計画+ 2）10 次每次减 1。
-  引擎按这个判（`pitem_engine.COMMON_PLAN_MATCHES = False`；设 None 回到「只因 Common 才匹配 → 不知道」）。`pitems.CardSearch.matches` 本身没改（平行重构在改那个文件），
+  引擎按这个判（`enchants.COMMON_PLAN_MATCHES = False`，`enchants.search_matches`；设 None 回到「只因 Common 才匹配 → 不知道」）。`pitems.CardSearch.matches` 本身没改，
   - [ ] 合并后把 `CardSearch.matches` 的 Common 规则也改成不匹配（回忆能力表 `memory_ability` 也走它，改前跑 `test_loader_table_matches_master_texts`）。
   同时查清 ゼミパーカー 是哪一版：这个图标对应 10 个道具、7 种效果。角标开局 5、只在 Plan1 牌后减、ひと呼吸+ 打出角标减 1 后画面姿态仍是強気（3-c-2-exam1 seq9→10、trace-1-exam1 36→37、3-c-1-exam2 20→21、1-1-exam1 27→28）
   → 「センスのスキルカード使用後、パラメータ上昇量増加10%（レッスン内5回）」（research-event-008..010），不是「温存に変更」那版（pitem_00-3-258-0）。已写进偶像档案 `pitem_assets`。
-  `tools/audit/pitem_engine_replay.py`：118 份 trace、2712 手、4435 帧，按实机版装姿态账本和画面不一致 449 帧（和不开相同）；假如按「温存」版装会改 7 手、不一致升到 453。
+  `tools/audit/pitem_engine_replay.py`：118 份 trace、2712 手、4435 帧，按实机版装姿态账本和画面不一致 449 帧（和不开相同）；假如按「温存」版装会改 7 手、不一致升到 453。统一后（账本也装打出的牌的附魔：第一印象+、頂点へ+、演出計画+ 等）数字不变。
 - [x] **其他触发时机**（P 道具，引擎里）：考试开始（第 1 回合，续跑中途装上不补发）、回合开始 / 回合开始后（StartPlay）、回合结束、每 N 回合（ExamTurnInterval 按回合开始、ExamEndTurnInterval 按回合结束，回合数整除 N）、
   出牌时（ExamCardPlay / ExamPlayCountInterval，牌的效果之前；牌自己切姿态的以牌为准）、出牌后（ExamCardPlayAfter / ExamPlayCountIntervalAfter）、回合内每 N 张（ExamPlayTurnCountInterval，换回合归零）、
   变成強気 / 全力 / 温存、离开全力（只结算一层）。接线：出牌 = `_commit_ledger`，回合结束 / 开始 = `read_position` 新回合分支（同一回合重读不重复发动）。
-  - [ ] 不支持、装的时候记进 `veil_pitems.unsupported`、推演里当不知道：状态变化（ExamStatusChange）、体力减少、跳过回合、计时器（ExamTurnTimer）、强化消耗、除外、好印象 / やる気 每 N、指针变更每 N 次（StanceChangeCountInterval）。
+  - [ ] 不支持、装的时候记进 `veil_pitems.unsupported`、永远不触发：状态变化（ExamStatusChange）、体力减少、跳过回合、强化消耗、除外、好印象 / やる気 每 N、指针变更每 N 次（StanceChangeCountInterval）。
   - [ ] 「每 N 回合」「回合内每 N 张算出牌后」是按说明文字推的时点，没有实机核对（VEIL 道具用不到）。
   - [ ] 「のんびり 算不算变成温存」没核对：碰上返回不知道。
-- [x] **触发条件**（`pitem_engine.cond_holds`）：没有指针、温存 / 強気（含「N段階目」）/ 全力、剩余回合（≤N）、元気（≥N / 为 0）、体力（最大体力的 N‰ 以上 / 以下）、全力値（≥N），Not 取反。
+- [x] **触发条件**（`enchants.condition`，姿态 / 全力値在 `anomaly`）：没有指针、温存 / 強気（含「N段階目」）/ 全力、剩余回合（≤N）、元気（≥N / 为 0）、体力（最大体力的 N‰ 以上 / 以下）、全力値（≥N），Not 取反。
   出牌时用出牌前的画面读数；出牌后、回合结束不知道元気 / 体力 / 全力値，返回 None；课程类型限定（【ボーカルレッスン…のみ】）、effectTypes、移动位置也返回 None。
   - [ ] 还不支持：集中 / 好调 / 好印象 / やる気 等数值（VEIL 账本没有）、累计全力値、强気 / 温存 / 全力 / 指针变更回合数（`veil_stance_counts` 是往多里算的，不能拿来判）、fieldStatusProduceCardSearchIds（「某处有 N 张某类牌」）。
-- [x] **效果执行器**（`pitem_engine.run_effects`，包 `apply_effects`）：另认「次のターン、…に変更」（ExamEffectTimer，value1 = 1）→ 下回合姿态；其余分成只影响分数（记日志）和会动账本却没建模（生成 / 移动牌、全力値增量、额外回合…，记日志 `ledger`）。
+- [x] **效果执行器**（`enchants.apply`，效果按类型登记）：另认「次のターン、…に変更」（ExamEffectTimer，value1 = 1）→ 下回合姿态；其余分成只影响分数（记日志）和会动账本却没建模（生成 / 移动牌、全力値增量、额外回合…，记日志 `ledger`）。
   落到账本的：姿态、段階、下回合姿态（引擎自己记、下回合开头切）、追加出牌次数（出牌时 / 出牌后加到 `memory.actions_left`）。同一时点几个道具要切的姿态不同 → 姿态不明。
   - [ ] 元気 / 全力値 / 抽牌还没落账（全力値账本有满 10 进全力的规则，牌堆账本按画面对账），先看实机有没有这类道具。
-- [x] **发动次数**（P 道具）：附魔次数 = ProduceItemEffect.effectCount（「レッスン内5回」，pitems 原来没读这个字段）、道具 fireLimit / fireInterval、附魔有效回合 effectTurn；记在 `veil_pitems.fired` / `item_fired`，随记忆快照撤回。
+- [x] **发动次数**（P 道具）：附魔次数 = ProduceItemEffect.effectCount（「レッスン内5回」，pitems 原来没读这个字段）、道具 fireLimit / fireInterval、附魔有效回合 effectTurn；记在附魔实例（`enchants.Inst.left / fired / last`，账本里存 `veil_pitems.insts`），随记忆快照撤回。
   主数据里带 fireLimit / fireInterval 的道具都没有考试附魔（考试外效果），这两项按字面做、没有实例核对。一番星的「以降3回まで」仍由账本 `veil_star` 计数。
 - [x] **一番星（星々を見下ろす一番星）**：「回合开始非温存就切のんびり」的条件和效果按加载器判（`veil.start_turn`，`VEIL_ENCHANT_ENGINE`），主数据不可用时退回手写规则。
 - [ ] **牌搜索还不支持的字段**：cardSearchTag（22 个道具用到）、stamina 上下限；遇到时返回「不知道」（引擎照此处理）。

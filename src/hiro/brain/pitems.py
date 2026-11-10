@@ -19,8 +19,9 @@
   · 夜空计数到了的效果、一番星「回合开始非温存就切のんびり」（flower_trigger_outcome / card_start_turn_enchant +
     start_turn_fire，VEIL_ENCHANT_ENGINE）。目前只用 Outcome 里的姿态，元気 / 熱意 等不进账本。
   · 回忆能力表（hiro.brain.memory_ability）也由这里编译。
-通用引擎在 hiro.brain.pitem_engine（VEIL_PITEM_ENGINE，默认关）：按持有的 P 道具（画面道具列 + 偶像专属道具）装全部附魔，
-  补了其余触发时机、条件、发动次数；开着时夜空道具按偶像找，不用这里写死的 FLOWER_ITEM。还差的见 TODO.md「通用 P 道具引擎」。
+通用附魔引擎在 hiro.brain.play.enchants（推演和账本共用，VEIL_ENCHANT_RUNTIME，默认关）；账本侧持有哪些道具、
+  什么时点结算在 hiro.brain.pitem_engine。开着时夜空道具按偶像找（pitem_engine.ring_item），不用这里写死的 FLOWER_ITEM。
+  这里的 apply_effects / start_turn_fire / flower_trigger_outcome 只给默认开的 VEIL_ENCHANT_ENGINE 路径用。
 """
 
 from __future__ import annotations

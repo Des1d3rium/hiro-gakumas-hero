@@ -1,5 +1,5 @@
-"""通用 P 道具引擎（hiro.brain.pitem_engine，开关 VEIL_PITEM_ENGINE）：装道具、各触发时机、条件判不了返回 None、
-发动次数、Common 牌规则、开关关着时账本逐位不变。没有主数据时跳过。"""
+"""账本侧的附魔驱动（hiro.brain.pitem_engine，结算交给 hiro.brain.play.enchants；开关 VEIL_ENCHANT_RUNTIME）：
+装道具、各触发时机、条件判不了返回 None、发动次数、Common 牌规则、开关关着时账本逐位不变。没有主数据时跳过。"""
 
 import json
 from collections import Counter
@@ -45,6 +45,17 @@ def _engine(*items):
     return {E.KEY: st}, st
 
 
+def _fired(st):
+    return {k: v["fired"] for k, v in st["insts"].items() if v.get("fired")}
+
+
+def _eng():
+    from hiro.brain.play import anomaly  # noqa: F401
+    from hiro.brain.play import enchants
+
+    return enchants
+
+
 def _state(remaining=8, genki=0, hp=30, max_hp=40):
     s = BattleState("r1", 1, remaining, hp, max_hp, 0, [], statuses=[], pitem_charges=None)
     s.genki = genki
@@ -87,10 +98,18 @@ def test_flower_in_column_is_left_to_ring_and_late_items_marked():
 
 
 def test_ring_matches_hardcoded_flower():
-    drive = _view("オーバードライブ+")
-    for stance in ("強気", "温存", "のんびり", "指針なし", "指針解除", "全力"):
-        assert E.ring_counts(VEIL, drive, stance) == P.flower_counts(drive, stance)
-        assert E.ring_outcome(VEIL, stance) == P.flower_trigger_outcome(stance)
+    """夜空按偶像找到的道具就是原来写死的那个；按通用引擎判「算不算这一手」和 pitems 原规则一致。"""
+    from hiro.brain.play import sim
+
+    assert E.ring_item(VEIL) == P.FLOWER_ITEM and sim._counter_spec().key == P.FLOWER_ITEM
+    eng = _eng()
+    trig = sim._counter_spec().trigger
+    for name in ("オーバードライブ+", "ひと呼吸+", "仕切り直し+"):
+        card = _view(name)
+        for stance in ("強気", "温存", "のんびり", "指針なし", "指針解除", "全力"):
+            ok = eng.conditions(trig, eng.Event(eng.CARD_PLAY_AFTER, stance=stance, current=stance))
+            got = eng.search_matches(trig.search, P.view_profile(card)) if ok else ok
+            assert got == P.flower_counts(card, stance), (name, stance)
 
 
 def test_unsupported_phase_recorded():
@@ -101,17 +120,17 @@ def test_unsupported_phase_recorded():
 # ---------------------------------------------------------------- Common 牌 / 出牌后
 
 
-def test_common_card_does_not_trigger_plan_search(monkeypatch):
+def test_common_card_does_not_trigger_plan_search(monkeypatch):  # noqa: D103
     """ゼミパーカー（搜索 Plan1）：实机通用牌 138 次不发动、Plan1 牌 10 次都发动（2026-11-09 trace 核对）。"""
     data, st = _engine(PARKA_WARM)
     mem = ExamMemory("r1", turn=2)
     common = _view("仕切り直し+")
     assert P.card_search("p_card_search-plan1-target").matches(P.view_profile(common)) is True  # pitems 原规则：Common 算
     assert E.after_play(data, mem, _state(), common, "強気", "強気", 1) == ("強気", 1)
-    assert st["fired"] == {}
-    monkeypatch.setattr(E, "COMMON_PLAN_MATCHES", None)  # 未核对模式：只因 Common 才匹配 → 不知道，不改账本
+    assert _fired(st) == {}
+    monkeypatch.setattr(_eng(), "COMMON_PLAN_MATCHES", None)  # 未核对模式：只因 Common 才匹配 → 不知道，不改账本
     assert E.after_play(data, mem, _state(), common, "強気", "強気", 1) == ("強気", 1)
-    assert st["fired"] == {} and st["log"][-1]["what"] == "条件判断不了"
+    assert _fired(st) == {} and st["log"][-1]["what"] == "判断不了"
 
 
 def test_plan1_card_triggers_warm_parka_with_limit():
@@ -121,19 +140,19 @@ def test_plan1_card_triggers_warm_parka_with_limit():
     assert E.after_play(data, mem, _state(), sense, "強気", "強気", 2) == ("温存", 1)
     assert E.after_play(data, mem, _state(), sense, "のんびり", "のんびり", None) == ("のんびり", None)  # のんびり 覆盖温存
     assert E.after_play(data, mem, _state(), sense, "全力", "全力", None) == ("全力", None)  # 全力 下切不了
-    assert st["fired"][f"{PARKA_WARM}#0"] == 3
+    assert _fired(st)[PARKA_WARM] == 3
     for _ in range(2):
         E.after_play(data, mem, _state(), sense, "強気", "強気", 1)
-    assert st["fired"][f"{PARKA_WARM}#0"] == 5
+    assert _fired(st)[PARKA_WARM] == 5
     assert E.after_play(data, mem, _state(), sense, "強気", "強気", 1) == ("強気", 1)  # レッスン内5回 用完
-    assert st["log"][-1]["what"] == "次数用完"
+    assert _fired(st)[PARKA_WARM] == 5 and st["insts"][PARKA_WARM]["left"] == 0
 
 
 def test_veil_parka_fires_without_changing_ledger():
     data, st = _engine(PARKA_VEIL)
     mem = ExamMemory("r1", turn=2)
     assert E.after_play(data, mem, _state(), _view("ひと呼吸+"), "強気", "強気", 1) == ("強気", 1)
-    assert st["fired"] == {f"{PARKA_VEIL}#0": 1} and st["log"][-1]["score"]
+    assert _fired(st) == {PARKA_VEIL: 1} and st["log"][-1]["score"]
 
 
 def test_card_play_after_adds_actions():
@@ -154,7 +173,7 @@ def test_card_play_condition_unsupported_is_unknown():
     mem = ExamMemory("r1", turn=2)
     mem.actions_left = 0
     E.after_play(data, mem, _state(), _view("オーバードライブ+"), "強気", "強気", 1)
-    assert mem.actions_left == 0 and st["fired"] == {} and st["log"][-1]["what"] == "条件判断不了"
+    assert mem.actions_left == 0 and _fired(st) == {} and st["log"][-1]["what"] == "判断不了"
 
 
 def test_turn_count_interval_and_timer_next_stance():
@@ -164,13 +183,13 @@ def test_turn_count_interval_and_timer_next_stance():
     card = _view("オーバードライブ+")
     for _ in range(2):
         E.after_play(data, mem, _state(), card, "全力", "全力", None)
-    assert st["fired"] == {}
+    assert _fired(st) == {}
     E.after_play(data, mem, _state(), card, "全力", "全力", None)
-    assert list(st["fired"].values()) == [1] and st["next_stance"] == "温存2段階目"
+    assert list(_fired(st).values()) == [1] and st["next_stance"] == "温存2段階目"
     mem.turn = 4
     assert E.start_turn(data, mem, _state(), "強気", 1) == ("温存2段階目", 2, True)
     E.after_play(data, mem, _state(), card, "全力", "全力", None)
-    assert st["turn_counters"][f"pitem_03-3-162-1#0"] == [4, 1]
+    assert st["insts"]["pitem_03-3-162-1"]["count"] == 1  # 换回合从 0 数
 
 
 # ---------------------------------------------------------------- 回合开始 / 结束 / 考试开始 / 每 N 回合
@@ -180,14 +199,14 @@ def test_start_turn_remaining_condition_and_count():
     data, st = _engine("pitem_00-0-004-0-003")  # 残り4ターン以内のターン開始時、スキルカード使用数追加+1（4回）
     mem = ExamMemory("r1", turn=1)
     E.start_turn(data, mem, _state(remaining=6), "強気", 1)
-    assert st["fired"] == {}
+    assert _fired(st) == {}
     for turn, rem in ((2, 4), (3, 3), (4, 2), (5, 1), (6, 1)):
         mem.turn = turn
         E.start_turn(data, mem, _state(remaining=rem), "強気", 1)
-    assert st["fired"] == {"pitem_00-0-004-0-003#0": 4}
+    assert _fired(st) == {"pitem_00-0-004-0-003": 4}
     mem.turn = 7
     E.start_turn(data, mem, _state(remaining=None), "強気", 1)
-    assert st["fired"]["pitem_00-0-004-0-003#0"] == 4
+    assert _fired(st)["pitem_00-0-004-0-003"] == 4
 
 
 def test_start_turn_idempotent_within_turn():
@@ -196,14 +215,14 @@ def test_start_turn_idempotent_within_turn():
     st["boundary"] = {"turn": 4}
     E.start_turn(data, mem, _state(remaining=2), "強気", 1)
     E.start_turn(data, mem, _state(remaining=2), "強気", 1)  # read_position 早退后重读：不重复发动
-    assert st["fired"] == {"pitem_00-0-004-0-003#0": 1}
+    assert _fired(st) == {"pitem_00-0-004-0-003": 1}
 
 
 def test_lesson_type_restricted_is_unknown():
     data, st = _engine("pitem_00-3-010-0")  # 【ボーカルレッスン・ボーカルターンのみ】
     mem = ExamMemory("r1", turn=2)
     E.start_turn(data, mem, _state(), "強気", 1)
-    assert st["fired"] == {}
+    assert _fired(st) == {}
 
 
 def test_end_turn_warm_unless_full_power():
@@ -212,27 +231,27 @@ def test_end_turn_warm_unless_full_power():
     assert E.end_turn(data, mem, _state(), 2, "強気", 2) == ("温存", 1)
     assert E.end_turn(data, mem, _state(), 3, "全力", None) == ("全力", None)
     assert E.end_turn(data, mem, _state(), 4, None, None) == (None, None)  # 姿态不明：不知道
-    assert st["fired"] == {"pitem_03-0-007-0-001#0": 1}
+    assert _fired(st) == {"pitem_03-0-007-0-001": 1}
     assert E.end_turn(data, mem, _state(), 5, "強気", 1) == ("温存", 1)
     assert E.end_turn(data, mem, _state(), 5, "強気", 1) == ("温存", 1)  # 重读同一回合结束：不重复发动
-    assert st["fired"] == {"pitem_03-0-007-0-001#0": 2}
+    assert _fired(st) == {"pitem_03-0-007-0-001": 2}
 
 
 def test_end_turn_interval_and_start_exam():
     data, st = _engine("pitem_02-3-302-0", "pitem_02-3-299-0")
     mem = ExamMemory("r1", turn=1)
     E.start_turn(data, mem, _state(), None, None)  # 第 1 回合：考试开始
-    assert st["fired"] == {"pitem_02-3-299-0#0": 1}
+    assert _fired(st) == {"pitem_02-3-299-0": 1}
     for t in (1, 2, 3, 4, 5, 6):
         E.end_turn(data, mem, _state(), t, "強気", 1)
-    assert st["fired"]["pitem_02-3-302-0#0"] == 2  # 3ターンごと：第 3、6 回合结束
+    assert _fired(st)["pitem_02-3-302-0"] == 2  # 3ターンごと：第 3、6 回合结束
 
 
 def test_start_exam_not_fired_when_installed_mid_exam():
     data, st = _engine("pitem_02-3-299-0")
     mem = ExamMemory("r1", turn=4)
     E.start_turn(data, mem, _state(), "強気", 1)
-    assert st["fired"] == {}
+    assert _fired(st) == {}
 
 
 def test_stance_change_trigger_condition_unknown_after_play():
@@ -240,23 +259,38 @@ def test_stance_change_trigger_condition_unknown_after_play():
     data, st = _engine("pitem_03-3-298-0")
     mem = ExamMemory("r1", turn=2)
     E.after_play(data, mem, _state(), _view("オーバードライブ+"), "温存", "強気", 1)
-    assert st["fired"] == {}
+    assert _fired(st) == {}
 
 
-def test_cond_holds_fields():
+def test_condition_fields():
+    eng = _eng()
     c = lambda f, v=None, neg=False: P.Condition(neg, "ProduceExamFieldStatusType_" + f, v, None)  # noqa: E731
-    ctx = E.Ctx("温存", 2, remaining=3, genki=5, hp=10, hp_max=40, fp=4)
-    assert E.cond_holds(c("RemainingTurn", 4), ctx) is True and E.cond_holds(c("RemainingTurn", 2), ctx) is False
-    assert E.cond_holds(c("PreservationUp", 2), ctx) is True and E.cond_holds(c("ConcentrationUp"), ctx) is False
-    assert E.cond_holds(c("BlockUp", 31, True), ctx) is True and E.cond_holds(c("NoBlock"), ctx) is False
-    assert E.cond_holds(c("StaminaLessMultiple", 500), ctx) is True and E.cond_holds(c("StaminaUpMultiple", 500), ctx) is False
-    assert E.cond_holds(c("FullPowerPointUp", 10, True), ctx) is True
-    assert E.cond_holds(c("NoStance", None, True), ctx) is True
-    unknown = E.Ctx(None)
+    ev = eng.Event(eng.START_TURN, stance="温存", level=2, remaining_turns=3,
+                   fields={"genki": 5, "hp": 10, "hp_max": 40, "fp": 4})
+    cond = lambda f, *a: eng.condition(c(f, *a), ev)  # noqa: E731
+    assert cond("RemainingTurn", 4) is True and cond("RemainingTurn", 2) is False
+    assert cond("PreservationUp", 2) is True and cond("ConcentrationUp") is False
+    assert cond("BlockUp", 31, True) is True and cond("NoBlock") is False
+    assert cond("StaminaLessMultiple", 500) is True and cond("StaminaUpMultiple", 500) is False
+    assert cond("FullPowerPointUp", 10, True) is True
+    assert cond("NoStance", None, True) is True
+    unknown = eng.Event(eng.START_TURN)
     for f in ("RemainingTurn", "BlockUp", "NoBlock", "StaminaUpMultiple", "FullPowerPointUp", "NoStance", "PreservationUp",
               "LessonBuffUp", "ReviewUp", "FullPowerPointGetSumUp", "StanceChangeCountUp"):
-        assert E.cond_holds(c(f, 1), unknown) is None, f
-    assert E.cond_holds(c("PreservationUp", 2), E.Ctx("のんびり")) is None
+        assert eng.condition(c(f, 1), unknown) is None, f
+    assert eng.condition(c("PreservationUp", 2), eng.Event(eng.START_TURN, stance="のんびり")) is None
+
+
+def test_played_card_enchant_installed_in_ledger():
+    """打出的牌装上的「以降…」附魔进账本（同推演）；一番星除外（veil_star 记）。"""
+    from hiro.brain.play.profile import STAR
+
+    data, st = _engine()
+    mem = ExamMemory("r1", turn=2)
+    E.after_play(data, mem, _state(), _view("頂点へ+"), "強気", "強気", 1)
+    assert [c["key"].split("@")[0] for c in st["cards"]] == ["頂点へ+"]
+    E.after_play(data, mem, _state(), _view(STAR), "強気", "強気", 1)
+    assert len(st["cards"]) == 1
 
 
 # ---------------------------------------------------------------- 接线：开关关着逐位不变；开着、VEIL 道具不改账本
@@ -285,7 +319,7 @@ def test_ledger_identical_with_veil_items(monkeypatch):
     names = ["眠気", TEACH, DRIVE, ENTERTAINER, REBOUND]
 
     def play(on):
-        monkeypatch.setenv("VEIL_PITEM_ENGINE", "1" if on else "0")
+        monkeypatch.setenv("VEIL_ENCHANT_RUNTIME", "1" if on else "0")
         state, memory = start(names)
         if on:
             E.observe(memory.strategy_data, [{"asset": PARKA}, {"asset": ROD}], VEIL, E.profile_hints())
@@ -318,7 +352,7 @@ def test_commit_applies_engine_stance_when_on(monkeypatch):
     from hiro.produce.veil_exam import VeilBrain
 
     def run(on):
-        monkeypatch.setenv("VEIL_PITEM_ENGINE", "1" if on else "0")
+        monkeypatch.setenv("VEIL_ENCHANT_RUNTIME", "1" if on else "0")
         sense = _view("ひと呼吸+")
         state = BattleState("r1", 2, 8, 30, 40, 0, [sense], statuses=[{"name": "強気", "value": 1}], pitem_charges=3)
         memory = ExamMemory("r1", turn=2)
@@ -343,7 +377,7 @@ def test_read_position_new_turn_runs_end_and_start_turn(monkeypatch):
     monkeypatch.setenv("HIRO_VEIL_FLOWER_SCREEN", "0")
 
     def run(on):
-        monkeypatch.setenv("VEIL_PITEM_ENGINE", "1" if on else "0")
+        monkeypatch.setenv("VEIL_ENCHANT_RUNTIME", "1" if on else "0")
         state = BattleState("r1", 2, 7, 30, 40, 0, [], statuses=[], pitem_charges=None)
         mem = ExamMemory("r1", turn=2)
         mem.strategy_data["veil_position"] = {"turn": 1, "stance": "強気", "stance_level": 1, "flower": 2, "next_stance": None}

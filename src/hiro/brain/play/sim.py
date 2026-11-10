@@ -341,10 +341,6 @@ def flower_counts(current, card):
 
     if current is None:
         return None  # 姿态不明（不是「指針なし」）：交给手写规则
-    if _flag("PITEM_ENGINE"):  # 通用 P 道具引擎：道具按偶像找（hiro.brain.pitem_engine.ring_item），不写死 FLOWER_ITEM
-        from hiro.brain.pitem_engine import ring_counts
-
-        return ring_counts(IDOL, card, current)
     return counts(card, current)
 
 
@@ -369,9 +365,13 @@ def _engine():
 
 @lru_cache(maxsize=None)
 def _counter_spec():
-    """profile 的计数器 P 道具（VEIL：夜空を従える花+）的附魔定义；没有主数据 None。"""
+    """计数器 P 道具（VEIL：夜空を従える花+）的附魔定义：按偶像卡找专属道具（pitem_engine.ring_item），
+    找不到再用档案写的 counter_item；没有主数据 None。"""
     try:
-        specs = [s for s in _engine().pitem_specs(VEIL.counter_item) if s.trigger.play_interval] if VEIL.counter_item else []
+        from hiro.brain.pitem_engine import ring_item
+
+        item = ring_item(IDOL) or VEIL.counter_item
+        specs = [s for s in _engine().pitem_specs(item) if s.trigger.play_interval] if item else []
     except Exception:  # noqa: BLE001
         return None
     return specs[0] if specs else None
@@ -435,14 +435,7 @@ def _after_play_counted(current, flower, card, counted):
         # 计数到了：效果按主数据执行（夜空を従える花：のんびりに変更、熱意、元気；全力 下切不了姿态）
         from hiro.brain.pitems import flower_trigger_outcome
 
-        out = None
-        if _flag("ENCHANT_ENGINE"):
-            if _flag("PITEM_ENGINE"):
-                from hiro.brain.pitem_engine import ring_outcome
-
-                out = ring_outcome(IDOL, current)
-            else:
-                out = flower_trigger_outcome(current)
+        out = flower_trigger_outcome(current) if _flag("ENCHANT_ENGINE") else None
         if out is not None:
             return (out.stance or new), 3
         return (current if current == "全力" else "のんびり"), 3

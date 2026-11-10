@@ -1,7 +1,7 @@
 """用 hiro.brain.pitems 的通用计数器回放 VEIL trace（夜空を従える花+），每个决策帧和画面道具旁「N回」比对。
 
 用法：PYTHONPATH=src:vendor/kaa .venv/bin/python tools/audit/pitem_replay.py [--all | traces/batch-…-exam1 …] [--jobs N] [--no-cache | --cache-only]
-VEIL_PITEM_ENGINE=1：按通用 P 道具引擎的路径回放（道具按偶像找、牌搜索按引擎规则），应与默认逐帧相同。
+VEIL_ENCHANT_RUNTIME=1：按通用附魔引擎的路径回放（道具按偶像找、条件和牌搜索按 hiro.brain.play.enchants），应与默认逐帧相同。
 多份 trace 按进程并行；画面「N回」读数缓存在 cache/replay/pitem_flower.json，第二次起不读图（改了 flower_count / digits 自动重读）。
 不给参数只跑账本核对全部对上的批次（ledger_check）；--all 连早期批次一起跑。
 客制化取批次账本里的 customs；账本记错客制化（例如漏了 インフルエンサー+ 強気追加）时会整段对不上。"""
@@ -31,7 +31,7 @@ def _read_flower(frame):
     return flower_count(cv2.imread(str(frame)))
 
 ITEM = P.load_pitem("pitem_03-3-303-1")
-ENGINE = os.environ.get("VEIL_PITEM_ENGINE") == "1"  # 通用 P 道具引擎：道具按偶像找（ring_item）、牌搜索按引擎的 Common 规则
+ENGINE = os.environ.get("VEIL_ENCHANT_RUNTIME") == "1"  # 通用附魔引擎：道具按偶像找（ring_item）、条件 / 牌搜索按 enchants
 
 
 def _engine_item():
@@ -41,13 +41,22 @@ def _engine_item():
     return P.load_pitem(E.ring_item(IDOL))
 
 
+def _eng():
+    from hiro.brain.play import anomaly  # noqa: F401
+    from hiro.brain.play import enchants
+
+    return enchants
+
+
 class EngineCounter(P.PlayCounter):
-    """同 PlayCounter，判「算不算」走 pitem_engine.search_play（VEIL_PITEM_ENGINE=1 时实机用的那条路）。"""
+    """同 PlayCounter，判「算不算」走通用附魔引擎的条件和牌搜索（VEIL_ENCHANT_RUNTIME=1 时实机用的那条路）。"""
 
     def play(self, card, stance):
-        from hiro.brain import pitem_engine as E
-
-        hit = E.search_play(self.trigger, card, stance)
+        eng = _eng()
+        stance = stance or "指針なし"  # 这份回放里 None = 没有指针（同 pitems.NO_STANCE_NAMES），引擎里 None = 姿态不明
+        hit = eng.conditions(self.trigger, eng.Event(eng.CARD_PLAY_AFTER, stance=stance, current=stance))
+        if hit:
+            hit = eng.search_matches(self.trigger.search, card)
         self.log.append((card.name if card else None, stance, hit))
         if hit is None:
             self.unknown = True
@@ -69,10 +78,8 @@ def _counter():
 def _trigger_outcome(stance):
     if not ENGINE:
         return P.flower_trigger_outcome(stance)
-    from hiro.brain import pitem_engine as E
-    from hiro.brain.veil import IDOL
-
-    return E.ring_outcome(IDOL, stance)
+    eng = _eng()
+    return eng.apply(_engine_item().play_counters[0].effects, eng.Event(eng.CARD_PLAY_AFTER, stance=stance, current=stance))
 
 
 def customs_for(trace):

@@ -680,7 +680,7 @@ def read_position(state, memory, hand, read_flower, *, calibrate=False):
         else:
             engine = pitem_engine_on()
             if engine and position:
-                # 通用 P 道具引擎（VEIL_PITEM_ENGINE）：上回合结束时的道具附魔，按上回合结束时的姿态判
+                # 通用附魔引擎（VEIL_ENCHANT_RUNTIME）：上回合结束时的附魔，按上回合结束时的姿态判
                 from hiro.brain import pitem_engine
 
                 current, level = pitem_engine.end_turn(data, memory, state, position.get("turn"), current, level)
@@ -1940,8 +1940,9 @@ def pitem_engine_summary(data):
 
 
 def pitem_engine_on() -> bool:
-    """VEIL_PITEM_ENGINE（默认关）：按持有的 P 道具装附魔、在账本推演里执行（hiro.brain.pitem_engine）。"""
-    return _flag("PITEM_ENGINE")
+    """VEIL_ENCHANT_RUNTIME（默认关）：持有的 P 道具、打出的牌装上的附魔在账本里按通用附魔引擎结算
+    （hiro.brain.pitem_engine 驱动 hiro.brain.play.enchants，和推演同一套）。"""
+    return _flag("ENCHANT_RUNTIME")
 
 
 def commit_ledger(state, memory, decision, base):
@@ -1992,7 +1993,7 @@ def _commit_ledger(state, memory, decision, base):
         before = NEUTRAL  # 第 1 回合还没切过姿态：切強気不推夜空（原来记成 None、夜空不明）
     current, level, flower = resolve(before, stance_level(state, before), state.pitem_charges, card)
     if pitem_engine_on():
-        # 通用 P 道具引擎（VEIL_PITEM_ENGINE）：持有道具的出牌时 / 出牌后 / 每 N 张 / 姿态变化附魔；判断不了时不动
+        # 通用附魔引擎（VEIL_ENCHANT_RUNTIME）：持有道具和已打出的牌的出牌时 / 出牌后 / 每 N 张 / 姿态变化附魔；判断不了时不动
         from hiro.brain import pitem_engine
 
         current, level = pitem_engine.after_play(data, memory, state, card, before, current, level, card_dest=destination(card))

@@ -113,7 +113,11 @@
   判条件、执行效果。条件和效果按字段 / 效果类型登记；没登记的条件判「不知道」，没登记的效果记进 `unknown`，不猜。
 - `anomaly`：アノマリー资源模块，登记姿态条件、姿态切换（全力下切不了）、全力値。センス / ロジック 以后各加一个模块。
 - `sim.TurnState`：VEIL_ENCHANT_RUNTIME=1 时夜空、一番星和打出的牌装上的附魔都走引擎（夜空 / 一番星的剩余次数仍是
-  `flower` / `star` 两个整数，因为画面读的就是它们）。
+  `flower` / `star` 两个整数，因为画面读的就是它们）。夜空道具按偶像卡找（`pitem_engine.ring_item`）。
+- 账本（`hiro.brain.pitem_engine`，同一个开关）：持有的 P 道具（画面道具列 + 偶像档案 `pitem_assets`）和打出的牌装上的附魔
+  在 `veil_exam` 的记账时点（出牌、回合结束、回合开始）发事件给同一个引擎；实例存在 `veil_pitems.insts`（JSON，随记忆快照撤回）。
+  2026-11-09 之前账本另有一套（`VEIL_PITEM_ENGINE`），已并进来：它更细的条件（段階、元気、体力比例、全力値）、
+  「次のターン、…に変更」计时器效果、Common 牌规则、道具 fireLimit / fireInterval 现在都在 `enchants` / `anomaly` 里。
 
 TODO：
 

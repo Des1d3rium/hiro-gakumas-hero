@@ -1,4 +1,4 @@
-"""通用 P 道具引擎（VEIL_PITEM_ENGINE）对姿态账本的影响：按 trace 逐手回放，比较「原账本 / 引擎改过的账本」和画面姿态。
+"""通用附魔引擎的账本驱动（hiro.brain.pitem_engine，VEIL_ENCHANT_RUNTIME）对姿态账本的影响：按 trace 逐手回放，比较「原账本 / 引擎改过的账本」和画面姿态。
 
 每个出牌决策帧：打出前姿态 = 本帧 context.stance（账本），原账本出牌后姿态 = 同一回合下一个决策帧的 context.stance；
 引擎姿态 = pitem_engine.after_play(…) 在原账本上再结算持有道具的附魔。换回合时再走 end_turn / start_turn。
@@ -112,10 +112,10 @@ def replay(trace, hints, stats):
             card = _card(h)
             after_old = destination(card) or override[1]
         mem.actions_left = 1
-        fired_before = sum(st["fired"].values())
+        fired_before = sum(v.get("fired", 0) for v in st["insts"].values())
         new, _ = E.after_play(data, mem, state, _card(h), before, after_old, cb.get("stance_level"))
         stats["plays"] += 1
-        stats["fired_on_play"] += sum(st["fired"].values()) - fired_before
+        stats["fired_on_play"] += sum(v.get("fired", 0) for v in st["insts"].values()) - fired_before
         if new != after_old:
             stats["play_changed"] += 1
             override = (ca["turn"], new)
